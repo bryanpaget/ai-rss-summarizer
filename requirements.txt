@@ -1,0 +1,17 @@
+feedparser==6.0.10
+beautifulsoup4==4.12.2
+requests==2.31.0
+scrapy==2.9.0  # Optional if you use Scrapy
+transformers==4.34.0
+torch==2.0.1
+prophet==1.2.4
+pandas==2.1.1
+matplotlib==3.8.1  # For visualizing trends (optional)
+sqlite3  # Included in Python standard library
+SQLAlchemy==2.0.22  # Optional if ORM is needed
+kubernetes==26.1.0
+prometheus_client==0.17.0  # For exposing metrics
+fastapi==0.100.0
+uvicorn==0.23.0
+transformers==4.34.0
+torch==2.0.1

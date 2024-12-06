@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rss-reader
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rss-reader
+  template:
+    metadata:
+      labels:
+        app: rss-reader
+    spec:
+      containers:
+      - name: rss-reader
+        image: python:3.9
+        command: ["python"]
+        args: ["rss_reader.py"]
+        volumeMounts:
+        - mountPath: /app
+          name: app-volume
+      volumes:
+        - name: app-volume
+          hostPath:
+            path: /path/to/your/code
+      restartPolicy: Always
