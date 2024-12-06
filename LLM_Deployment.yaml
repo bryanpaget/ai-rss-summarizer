@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llm-prediction-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: llm-prediction
+  template:
+    metadata:
+      labels:
+        app: llm-prediction
+    spec:
+      containers:
+      - name: llm-prediction
+        image: your-dockerhub-username/llm-prediction:latest
+        ports:
+        - containerPort: 8000
+        resources:
+          limits:
+            memory: "4Gi"
+            cpu: "2"
+          requests:
+            memory: "2Gi"
+            cpu: "1"
+        env:
+        - name: TRANSFORMERS_CACHE
+          value: "/cache"
+        volumeMounts:
+        - name: transformers-cache
+          mountPath: /cache
+      volumes:
+      - name: transformers-cache
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm-prediction-service
+spec:
+  selector:
+    app: llm-prediction
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8000
+
