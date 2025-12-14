@@ -118,7 +118,7 @@ def update(
             article.trend_tags = tags
 
     # Step 5: Present the digest
-    _display_digest(articles, topic_filter)
+    _display_digest(articles, topic_filter, provider)
     stats["displayed"] = len(articles)
 
     return stats
@@ -158,7 +158,7 @@ def _matches_topic_keywords(article, topic: str) -> bool:
     return topic in text
 
 
-def _display_digest(articles: list, topic_filter: Optional[str] = None) -> None:
+def _display_digest(articles: list, topic_filter: Optional[str] = None, provider=None) -> None:
     """Display a formatted digest of articles."""
     title = "What's New"
     if topic_filter:
@@ -187,6 +187,22 @@ def _display_digest(articles: list, topic_filter: Optional[str] = None) -> None:
         # Link
         console.print(f"   [dim underline]{article.link}[/dim underline]")
         console.print()
+
+    # Provider transparency footer
+    if provider and hasattr(provider, 'session_usage'):
+        usage = provider.session_usage
+        model = provider.model_name if hasattr(provider, 'model_name') else "unknown"
+
+        footer_parts = [f"[dim]Summarized by: {provider.name}[/dim]"]
+        if model and model != "unknown":
+            footer_parts.append(f"[dim]({model})[/dim]")
+        if usage.get("calls", 0) > 0:
+            footer_parts.append(f"[dim]| {usage['calls']} articles[/dim]")
+        if usage.get("total_tokens", 0) > 0:
+            footer_parts.append(f"[dim]| ~{usage['total_tokens']:,} tokens[/dim]")
+
+        console.print("-" * 60)
+        console.print(" ".join(footer_parts))
 
 
 def setup_wizard() -> None:

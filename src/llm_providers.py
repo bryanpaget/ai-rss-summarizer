@@ -82,8 +82,29 @@ class LLMConfig:
             json.dump(data, f, indent=2)
 
 
+@dataclass
+class UsageStats:
+    """Statistics from a summarization call."""
+
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
+    model: str = ""
+    provider: str = ""
+
+    def __post_init__(self):
+        if self.total_tokens == 0:
+            self.total_tokens = self.input_tokens + self.output_tokens
+
+
 class LLMProvider(ABC):
     """Abstract base class for LLM providers."""
+
+    def __init__(self):
+        # Track usage from last summarization call
+        self.last_usage: Optional[UsageStats] = None
+        # Track cumulative usage for session
+        self.session_usage = {"calls": 0, "total_tokens": 0}
 
     @abstractmethod
     def summarize(self, text: str, max_length: int = 150) -> str:
@@ -101,13 +122,42 @@ class LLMProvider(ABC):
         """Provider display name."""
         pass
 
+    @property
+    def model_name(self) -> str:
+        """Return the model name being used."""
+        return "unknown"
+
+    def _estimate_tokens(self, text: str) -> int:
+        """Estimate token count from text (rough: ~4 chars per token)."""
+        return len(text) // 4
+
+    def _record_usage(self, input_text: str, output_text: str, model: str = ""):
+        """Record usage stats from a summarization call."""
+        input_tokens = self._estimate_tokens(input_text)
+        output_tokens = self._estimate_tokens(output_text)
+        self.last_usage = UsageStats(
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            model=model or self.model_name,
+            provider=self.name,
+        )
+        self.session_usage["calls"] += 1
+        self.session_usage["total_tokens"] += self.last_usage.total_tokens
+
 
 class SimpleSummarizerProvider(LLMProvider):
     """Simple extractive summarizer (no LLM)."""
 
+    def __init__(self):
+        super().__init__()
+
     @property
     def name(self) -> str:
         return "Simple (extractive)"
+
+    @property
+    def model_name(self) -> str:
+        return "extractive"
 
     def is_available(self) -> bool:
         return True
@@ -117,9 +167,11 @@ class SimpleSummarizerProvider(LLMProvider):
         if not text:
             return ""
 
+        original_text = text
         text = " ".join(text.split())
 
         if len(text) <= max_length:
+            self._record_usage(original_text, text)
             return text
 
         sentences = []
@@ -140,6 +192,7 @@ class SimpleSummarizerProvider(LLMProvider):
         if not summary:
             summary = text[: max_length - 3].rsplit(" ", 1)[0] + "..."
 
+        self._record_usage(original_text, summary)
         return summary
 
 
@@ -156,15 +209,24 @@ class OpenAICompatibleProvider(LLMProvider):
         model: Optional[str] = None,
         provider_name: str = "OpenAI-compatible",
     ):
+        super().__init__()
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key or "not-needed"  # Many local providers don't need a key
         self.model = model
         self._provider_name = provider_name
         self._fallback = SimpleSummarizerProvider()
+        self._discovered_model: Optional[str] = None
 
     @property
     def name(self) -> str:
         return self._provider_name
+
+    @property
+    def model_name(self) -> str:
+        """Return the model name being used."""
+        if self._discovered_model:
+            return self._discovered_model
+        return self.model or "auto"
 
     def is_available(self) -> bool:
         """Check if the endpoint is reachable."""
@@ -197,6 +259,7 @@ class OpenAICompatibleProvider(LLMProvider):
         if not text:
             return ""
 
+        original_text = text
         # Truncate very long text to avoid token limits
         if len(text) > 4000:
             text = text[:4000]
@@ -215,8 +278,11 @@ Summary:"""
                 "Authorization": f"Bearer {self.api_key}",
             }
 
+            model = self._get_model()
+            self._discovered_model = model
+
             payload = {
-                "model": self._get_model(),
+                "model": model,
                 "messages": [{"role": "user", "content": prompt}],
                 "temperature": 0.3,
             }
@@ -234,6 +300,22 @@ Summary:"""
                 # Ensure it's not too long
                 if len(summary) > max_length * 2:
                     summary = summary[:max_length]
+
+                # Record usage - try to get actual tokens from API response
+                usage = data.get("usage", {})
+                if usage:
+                    self.last_usage = UsageStats(
+                        input_tokens=usage.get("prompt_tokens", 0),
+                        output_tokens=usage.get("completion_tokens", 0),
+                        total_tokens=usage.get("total_tokens", 0),
+                        model=model,
+                        provider=self.name,
+                    )
+                    self.session_usage["calls"] += 1
+                    self.session_usage["total_tokens"] += self.last_usage.total_tokens
+                else:
+                    self._record_usage(original_text, summary, model)
+
                 return summary
 
         except Exception as e:
