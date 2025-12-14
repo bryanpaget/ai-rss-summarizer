@@ -1,0 +1,15 @@
+# Core dependencies
+feedparser>=6.0.0
+typer>=0.9.0
+rich>=13.0.0
+httpx>=0.25.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+
+# LLM support (optional - install with: pip install -r requirements.txt -r requirements-llm.txt)
+# See requirements-llm.txt for ML dependencies
+
+# Development
+pytest>=7.0.0
+pytest-cov>=4.0.0
+ruff>=0.1.0

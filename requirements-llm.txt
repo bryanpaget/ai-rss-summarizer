@@ -1,0 +1,4 @@
+# LLM/ML dependencies (optional)
+# These can be large downloads - only install if you want local summarization
+transformers>=4.35.0
+torch>=2.0.0
