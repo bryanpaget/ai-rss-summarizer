@@ -309,20 +309,209 @@ def add_feed(
     console.print(f"[green]Added feed: {url}[/green]")
 
 
+# =============================================================================
+# USER-FRIENDLY COMMANDS
+# =============================================================================
+
+
+@app.command()
+def update(
+    topic: Optional[str] = typer.Argument(
+        None,
+        help="Filter by topic (e.g., 'tech', 'politics', 'health')",
+    ),
+    limit: int = typer.Option(
+        10,
+        "--limit", "-n",
+        help="Number of articles to show",
+    ),
+    all_articles: bool = typer.Option(
+        False,
+        "--all", "-a",
+        help="Show all articles, not just new ones",
+    ),
+):
+    """
+    Check what's new in your feeds.
+
+    Fetches latest articles, generates summaries, and shows you what's new.
+    Optionally filter by topic like 'tech', 'politics', 'health', etc.
+
+    Examples:
+        rss update              # Show all new articles
+        rss update tech         # Show only tech-related articles
+        rss update --all        # Show recent articles even if not new
+    """
+    from .commands import update as do_update
+
+    do_update(
+        topic_filter=topic,
+        limit=limit,
+        show_all=all_articles,
+    )
+
+
+@app.command()
+def setup():
+    """
+    Set up the RSS summarizer with an LLM provider.
+
+    Detects available LLM providers and helps you configure one for
+    AI-powered summaries. Supports:
+    - LM Studio (local, free)
+    - Ollama (local, free)
+    - Claude (for Claude Code users)
+    - OpenAI (requires API key)
+    """
+    from .commands import setup_wizard
+
+    setup_wizard()
+
+
+@app.command()
+def discover(
+    query: str = typer.Argument(
+        ...,
+        help="What topics or sources are you interested in?",
+    ),
+):
+    """
+    Discover new RSS feeds based on your interests.
+
+    Uses AI to find relevant RSS feeds for topics you're interested in.
+
+    Examples:
+        rss discover "AI and machine learning news"
+        rss discover "Python programming"
+        rss discover "climate change and environment"
+    """
+    from .llm_providers import get_best_provider, get_setup_instructions
+
+    provider, is_llm = get_best_provider()
+
+    if not is_llm:
+        console.print("[yellow]LLM required for feed discovery.[/yellow]")
+        console.print(get_setup_instructions())
+        raise typer.Exit(1)
+
+    console.print(f"[bold]Searching for feeds about: {query}[/bold]")
+    console.print(f"[dim]Using {provider.name}...[/dim]\n")
+
+    # Use the LLM to suggest feeds
+    prompt = f"""Find RSS feeds for someone interested in: {query}
+
+Return a list of 5-10 real, working RSS feed URLs with their descriptions.
+Focus on well-known, reliable sources.
+
+Format each as:
+- [Source Name]: [URL]
+  Description of what this feed covers.
+
+Only include feeds you're confident are real and active."""
+
+    try:
+        # Use the provider's underlying API for this
+        if hasattr(provider, '_get_client'):
+            # Claude provider
+            client = provider._get_client()
+            message = client.messages.create(
+                model=provider.model_name,
+                max_tokens=1024,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            response = message.content[0].text
+        elif hasattr(provider, 'base_url'):
+            # OpenAI-compatible provider
+            import httpx
+
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {provider.api_key}",
+            }
+            payload = {
+                "model": provider._get_model(),
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.7,
+            }
+            resp = httpx.post(
+                f"{provider.base_url}/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=60.0,
+            )
+            data = resp.json()
+            response = data["choices"][0]["message"]["content"]
+        else:
+            console.print("[yellow]Feed discovery not supported with this provider.[/yellow]")
+            raise typer.Exit(1)
+
+        # Display results
+        console.print(Panel("[bold]Suggested Feeds[/bold]", style="green"))
+        console.print(response)
+        console.print()
+        console.print("[dim]To add a feed, use: rss add-feed <URL>[/dim]")
+
+    except Exception as e:
+        console.print(f"[red]Error discovering feeds: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@app.command()
+def providers():
+    """
+    Show available LLM providers and their status.
+
+    Lists all supported providers and whether they're currently available.
+    """
+    from .llm_providers import list_providers, ClaudeProvider, ProviderType
+
+    all_providers = list_providers()
+
+    # Add Claude
+    claude = ClaudeProvider()
+    all_providers.append({
+        "type": ProviderType.CLAUDE,
+        "name": "Claude",
+        "available": claude.is_available(),
+        "description": "Claude API (for Claude Code users)",
+    })
+
+    table = Table(title="LLM Providers")
+    table.add_column("Provider", style="cyan")
+    table.add_column("Status")
+    table.add_column("Description")
+
+    for p in all_providers:
+        status = "[green]Available[/green]" if p["available"] else "[dim]Not Available[/dim]"
+        table.add_row(p["name"], status, p["description"])
+
+    console.print(table)
+    console.print()
+    console.print("[dim]Run 'rss setup' to configure a provider.[/dim]")
+
+
 @app.callback()
 def main():
     """
-    AI RSS Summarizer - Fetch, summarize, and analyze RSS feeds.
+    AI RSS Summarizer - Stay updated with AI-powered RSS summaries.
 
-    Get started:
+    Quick start:
 
-        rss fetch      # Fetch articles from configured feeds
+        rss update              # See what's new across all feeds
+        rss update tech         # See only tech news
+        rss discover "topic"    # Find new feeds to follow
 
-        rss summarize  # Generate summaries for articles
+    Setup:
 
-        rss trends     # Analyze trending topics
+        rss setup               # Configure an LLM provider
+        rss add-feed URL        # Add a new RSS feed
 
-        rss list       # List recent articles
+    Advanced:
+
+        rss fetch               # Fetch articles (runs automatically)
+        rss summarize           # Generate summaries (runs automatically)
+        rss trends              # See trending topics
+        rss list                # List all articles
     """
     pass
 
