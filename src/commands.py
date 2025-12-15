@@ -226,54 +226,269 @@ def setup_wizard() -> None:
     """
     Interactive setup wizard to help users configure an LLM provider.
     """
+    import os
+
     console.print(Panel("[bold]RSS Summarizer Setup[/bold]", style="blue"))
     console.print()
 
+    from .llm_providers import (
+        list_providers, LLMConfig, ProviderType, get_provider,
+        auto_detect_provider
+    )
+
     # Check what's available
     console.print("[bold]Checking available providers...[/bold]\n")
-
-    from .llm_providers import list_providers, LLMConfig, ProviderType, ClaudeProvider
-
-    # Extended provider list including Claude
     providers = list_providers()
 
-    # Add Claude check
-    claude = ClaudeProvider()
-    providers.append({
-        "type": ProviderType.CLAUDE,
-        "name": "Claude",
-        "available": claude.is_available(),
-        "description": "Claude API (for Claude Code users)",
-    })
-
+    # Build table
     table = Table(title="Provider Status")
+    table.add_column("#", style="dim")
     table.add_column("Provider", style="cyan")
     table.add_column("Status")
     table.add_column("Description")
 
     available_providers = []
-    for p in providers:
-        status = "[green]Available[/green]" if p["available"] else "[red]Not Available[/red]"
-        table.add_row(p["name"], status, p["description"])
+    setup_providers = []  # Providers that could be set up with API key
+
+    for i, p in enumerate(providers, 1):
         if p["available"] and p["type"] != ProviderType.SIMPLE:
-            available_providers.append(p)
+            status = "[green]Ready[/green]"
+            available_providers.append((i, p))
+        elif p["type"] in [ProviderType.GEMINI, ProviderType.CLAUDE, ProviderType.GROK, ProviderType.OPENAI]:
+            status = "[yellow]Needs API Key[/yellow]"
+            setup_providers.append((i, p))
+        elif p["type"] == ProviderType.CLAUDE_AGENT:
+            status = "[yellow]Needs SDK[/yellow]"
+            setup_providers.append((i, p))
+        elif p["type"] in [ProviderType.LM_STUDIO, ProviderType.OLLAMA]:
+            status = "[yellow]Not Running[/yellow]"
+            setup_providers.append((i, p))
+        else:
+            status = "[red]Not Available[/red]"
+
+        table.add_row(str(i), p["name"], status, p["description"])
 
     console.print(table)
     console.print()
 
+    # Show recommendations
     if available_providers:
-        best = available_providers[0]
-        console.print(f"[green]Recommended:[/green] {best['name']} is ready to use!")
+        console.print("[green]Ready to use:[/green]")
+        for num, p in available_providers:
+            console.print(f"  {num}. {p['name']}")
         console.print()
 
-        # Save config
-        config = LLMConfig(provider=best["type"])
-        config.save()
-        console.print(f"[dim]Saved configuration to config/llm.json[/dim]")
+        # Auto-detect best
+        auto_provider = auto_detect_provider()
+        if auto_provider:
+            console.print(f"[bold green]Recommended:[/bold green] {auto_provider.name}")
+            console.print()
+            console.print("Options:")
+            console.print("  [bold]1[/bold] - Use recommended provider")
+            console.print("  [bold]2[/bold] - Choose a different provider")
+            console.print("  [bold]3[/bold] - Set up a new provider (API key)")
+            console.print("  [bold]q[/bold] - Quit setup")
+            console.print()
+
+            choice = console.input("[bold]Choice [1]: [/bold]").strip() or "1"
+
+            if choice == "q":
+                console.print("[dim]Setup cancelled[/dim]")
+                return
+            elif choice == "1":
+                _save_provider_config(auto_provider, providers)
+                return
+            elif choice == "3":
+                _setup_new_provider(providers)
+                return
+            # else fall through to provider selection
+
     else:
-        console.print("[yellow]No LLM providers detected.[/yellow]")
+        console.print("[yellow]No LLM providers are currently ready.[/yellow]")
         console.print()
-        console.print(get_setup_instructions())
+        console.print("Options:")
+        console.print("  [bold]1[/bold] - Set up a cloud provider (API key)")
+        console.print("  [bold]2[/bold] - Set up a local provider (LM Studio/Ollama)")
+        console.print("  [bold]3[/bold] - Use basic summarizer (no AI)")
+        console.print("  [bold]q[/bold] - Quit setup")
+        console.print()
+
+        choice = console.input("[bold]Choice [1]: [/bold]").strip() or "1"
+
+        if choice == "q":
+            console.print("[dim]Setup cancelled[/dim]")
+            return
+        elif choice == "3":
+            config = LLMConfig(provider=ProviderType.SIMPLE)
+            config.save()
+            console.print("[green]Configured to use basic (extractive) summarizer.[/green]")
+            return
+        elif choice == "2":
+            _show_local_setup_instructions()
+            return
+        else:
+            _setup_new_provider(providers)
+            return
+
+    # Provider selection
+    _select_provider(providers, available_providers + setup_providers)
+
+
+def _save_provider_config(provider, providers_list) -> None:
+    """Save provider configuration."""
+    from .llm_providers import LLMConfig, ProviderType
+
+    # Find the provider type
+    provider_type = ProviderType.SIMPLE
+    for p in providers_list:
+        if p["name"] == provider.name or provider.name.startswith(p["name"]):
+            provider_type = p["type"]
+            break
+
+    config = LLMConfig(provider=provider_type)
+    config.save()
+    console.print(f"[green]Saved {provider.name} as default provider.[/green]")
+    console.print(f"[dim]Configuration saved to config/llm.json[/dim]")
+
+
+def _setup_new_provider(providers) -> None:
+    """Guide user through setting up a new provider with API key."""
+    import os
+    from .llm_providers import LLMConfig, ProviderType
+
+    console.print()
+    console.print("[bold]Cloud Provider Setup[/bold]")
+    console.print()
+    console.print("Available cloud providers:")
+    console.print("  [bold]1[/bold] - Gemini (FREE tier - recommended)")
+    console.print("  [bold]2[/bold] - Claude Agent SDK (uses Claude Code auth)")
+    console.print("  [bold]3[/bold] - Claude API (separate API key)")
+    console.print("  [bold]4[/bold] - Grok (xAI)")
+    console.print("  [bold]5[/bold] - OpenAI")
+    console.print("  [bold]q[/bold] - Cancel")
+    console.print()
+
+    choice = console.input("[bold]Choice: [/bold]").strip()
+
+    if choice == "q":
+        return
+
+    if choice == "1":
+        console.print()
+        console.print("[bold]Gemini Setup[/bold]")
+        console.print("1. Get a free API key at: [link]https://aistudio.google.com/apikey[/link]")
+        console.print("2. Install SDK: [bold]pip install google-generativeai[/bold]")
+        console.print()
+        api_key = console.input("Enter your Gemini API key (or 'skip' to set later): ").strip()
+        if api_key and api_key != "skip":
+            os.environ["GOOGLE_API_KEY"] = api_key
+            console.print("[yellow]Note: Set GOOGLE_API_KEY in your environment for persistence[/yellow]")
+            config = LLMConfig(provider=ProviderType.GEMINI, api_key=api_key)
+            config.save()
+            console.print("[green]Gemini configured![/green]")
+
+    elif choice == "2":
+        console.print()
+        console.print("[bold]Claude Agent SDK Setup[/bold]")
+        console.print("This uses your Claude Code authentication - no separate API key needed!")
+        console.print()
+        console.print("1. Install SDK: [bold]pip install claude-agent-sdk[/bold]")
+        console.print("2. Make sure Claude Code is authenticated (run 'claude' in terminal)")
+        console.print()
+        confirm = console.input("Have you installed claude-agent-sdk? [y/N]: ").strip().lower()
+        if confirm == "y":
+            config = LLMConfig(provider=ProviderType.CLAUDE_AGENT)
+            config.save()
+            console.print("[green]Claude Agent SDK configured![/green]")
+
+    elif choice == "3":
+        console.print()
+        console.print("[bold]Claude API Setup[/bold]")
+        console.print("[yellow]Note: A Claude subscription is NOT an API key![/yellow]")
+        console.print("Get an API key at: [link]https://console.anthropic.com/[/link]")
+        console.print()
+        api_key = console.input("Enter your Anthropic API key (or 'skip'): ").strip()
+        if api_key and api_key != "skip":
+            os.environ["ANTHROPIC_API_KEY"] = api_key
+            console.print("[yellow]Note: Set ANTHROPIC_API_KEY in your environment for persistence[/yellow]")
+            config = LLMConfig(provider=ProviderType.CLAUDE, api_key=api_key)
+            config.save()
+            console.print("[green]Claude API configured![/green]")
+
+    elif choice == "4":
+        console.print()
+        console.print("[bold]Grok Setup[/bold]")
+        console.print("Get an API key at: [link]https://console.x.ai/[/link]")
+        console.print()
+        api_key = console.input("Enter your xAI API key (or 'skip'): ").strip()
+        if api_key and api_key != "skip":
+            os.environ["XAI_API_KEY"] = api_key
+            console.print("[yellow]Note: Set XAI_API_KEY in your environment for persistence[/yellow]")
+            config = LLMConfig(provider=ProviderType.GROK, api_key=api_key)
+            config.save()
+            console.print("[green]Grok configured![/green]")
+
+    elif choice == "5":
+        console.print()
+        console.print("[bold]OpenAI Setup[/bold]")
+        console.print("Get an API key at: [link]https://platform.openai.com/api-keys[/link]")
+        console.print()
+        api_key = console.input("Enter your OpenAI API key (or 'skip'): ").strip()
+        if api_key and api_key != "skip":
+            os.environ["OPENAI_API_KEY"] = api_key
+            console.print("[yellow]Note: Set OPENAI_API_KEY in your environment for persistence[/yellow]")
+            config = LLMConfig(provider=ProviderType.OPENAI, api_key=api_key)
+            config.save()
+            console.print("[green]OpenAI configured![/green]")
+
+
+def _show_local_setup_instructions() -> None:
+    """Show instructions for setting up local LLM providers."""
+    console.print()
+    console.print("[bold]Local LLM Setup[/bold]")
+    console.print()
+    console.print("[cyan]LM Studio (recommended for GPU users):[/cyan]")
+    console.print("  1. Download from https://lmstudio.ai")
+    console.print("  2. Load any model (e.g., Llama 2, Mistral)")
+    console.print("  3. Click 'Start Server' in the Local Server tab")
+    console.print("  4. Run 'rss setup' again - it will auto-detect")
+    console.print()
+    console.print("[cyan]Ollama (simpler setup):[/cyan]")
+    console.print("  1. Install from https://ollama.ai")
+    console.print("  2. Run: ollama pull llama2")
+    console.print("  3. Run: ollama serve")
+    console.print("  4. Run 'rss setup' again - it will auto-detect")
+
+
+def _select_provider(all_providers, selectable) -> None:
+    """Let user select from available providers."""
+    from .llm_providers import LLMConfig
+
+    console.print()
+    console.print("[bold]Select a provider:[/bold]")
+    for num, p in selectable:
+        status = "[green]Ready[/green]" if p["available"] else "[yellow]Needs Setup[/yellow]"
+        console.print(f"  {num}. {p['name']} - {status}")
+    console.print()
+
+    choice = console.input("Enter number (or 'q' to quit): ").strip()
+    if choice == "q":
+        return
+
+    try:
+        idx = int(choice)
+        for num, p in selectable:
+            if num == idx:
+                if p["available"]:
+                    config = LLMConfig(provider=p["type"])
+                    config.save()
+                    console.print(f"[green]Configured {p['name']} as default provider.[/green]")
+                else:
+                    console.print(f"[yellow]{p['name']} needs to be set up first.[/yellow]")
+                    _setup_new_provider(all_providers)
+                return
+    except ValueError:
+        console.print("[red]Invalid selection[/red]")
 
 
 def get_digest_summary(
