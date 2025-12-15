@@ -26,9 +26,28 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -e .
 ```
 
+### Setup
+
+```bash
+# Run the interactive setup wizard
+rss setup
+```
+
+The setup wizard will:
+- Detect available LLM providers
+- Guide you through API key configuration
+- Save your preferences
+
 ### Basic Usage
 
 ```bash
+# Main command: fetch, summarize, and show what's new
+rss update
+
+# Filter by topic
+rss update --topic tech
+rss update --topic politics
+
 # Fetch articles from configured feeds
 rss fetch
 
@@ -40,6 +59,9 @@ rss trends
 
 # List recent articles
 rss list
+
+# Check provider status
+rss providers
 
 # Show database statistics
 rss stats
@@ -57,6 +79,9 @@ Or edit `config/feeds.txt` directly.
 
 | Command | Description |
 |---------|-------------|
+| `rss update` | Main command: fetch, summarize, and display digest |
+| `rss setup` | Interactive setup wizard for LLM providers |
+| `rss providers` | List available LLM providers and their status |
 | `rss fetch` | Fetch articles from all configured RSS feeds |
 | `rss summarize` | Generate summaries for unsummarized articles |
 | `rss trends` | Analyze and display trending topics |
@@ -70,21 +95,48 @@ Most commands support these options:
 
 - `--db`, `-d`: Path to database file (default: `articles.db`)
 - `--limit`, `-n`: Limit number of items to process
+- `--topic`, `-t`: Filter by topic (for `update` command)
 - `--help`: Show command help
 
-### LLM Summarization
+## LLM Providers
 
-For better summaries using AI models:
+The summarizer supports multiple LLM providers. Run `rss setup` for guided configuration.
+
+### Local Providers (Free, No API Key)
+
+| Provider | Description |
+|----------|-------------|
+| **LM Studio** | Local LLM server (auto-detected at localhost:1234) |
+| **Ollama** | Local LLM runner (auto-detected at localhost:11434) |
+| **Transformers** | HuggingFace models (requires `pip install transformers torch`) |
+
+### Cloud Providers (API-based)
+
+| Provider | Setup |
+|----------|-------|
+| **Gemini** | Free tier available. `pip install google-generativeai`, set `GOOGLE_API_KEY` |
+| **Claude Agent SDK** | Uses Claude Code auth (no API key!). `pip install claude-agent-sdk` |
+| **Claude API** | Requires separate API key. `pip install anthropic`, set `ANTHROPIC_API_KEY` |
+| **Grok** | xAI API. Set `XAI_API_KEY` |
+| **OpenAI** | Set `OPENAI_API_KEY` |
+
+### Quick Setup Examples
 
 ```bash
-# Install LLM dependencies
-pip install transformers torch
+# Gemini (free tier - recommended for new users)
+pip install google-generativeai
+export GOOGLE_API_KEY="your-api-key"
+rss setup
 
-# Use LLM for summarization
-rss summarize --llm
+# Claude Agent SDK (for Claude Code users - no API key needed!)
+pip install claude-agent-sdk
+rss setup
+
+# Local with LM Studio
+# 1. Download LM Studio from https://lmstudio.ai
+# 2. Load a model and start the server
+# 3. Run: rss setup (it auto-detects)
 ```
-
-Note: First run will download the model (~1.5GB).
 
 ## Project Structure
 
@@ -93,12 +145,15 @@ ai-rss-summarizer/
 ├── src/
 │   ├── __init__.py
 │   ├── cli.py           # CLI entry point (Typer)
+│   ├── commands.py      # User-facing commands (update, setup)
+│   ├── llm_providers.py # LLM provider abstraction layer
 │   ├── rss.py           # RSS feed fetching
 │   ├── storage.py       # SQLite storage layer
-│   ├── summarizer.py    # Summarization backends
+│   ├── summarizer.py    # Legacy summarization (use llm_providers)
 │   └── trends.py        # Trend detection
 ├── config/
-│   └── feeds.txt        # RSS feed URLs
+│   ├── feeds.txt        # RSS feed URLs
+│   └── llm.json         # LLM provider configuration (generated)
 ├── tests/
 │   ├── test_storage.py
 │   ├── test_rss.py
@@ -106,6 +161,7 @@ ai-rss-summarizer/
 │   └── test_trends.py
 ├── pyproject.toml
 ├── requirements.txt
+├── requirements-llm.txt # Optional LLM dependencies
 └── README.md
 ```
 
@@ -148,18 +204,23 @@ Trend categories are defined in `src/trends.py`. Edit `TREND_CATEGORIES` to cust
 
 See [Issue #7](https://github.com/bryanpaget/ai-rss-summarizer/issues/7) for the full project roadmap.
 
-### MVP (Current)
+### MVP (Complete)
 - [x] RSS feed fetching
 - [x] SQLite storage
 - [x] Simple summarization
 - [x] Trend detection
 - [x] CLI interface
+- [x] Multiple LLM providers (Gemini, Claude, Grok, OpenAI, local)
+- [x] Interactive setup wizard
+- [x] Provider transparency footer
+- [x] Claude Agent SDK integration
 
 ### Future
 - [ ] FastAPI web interface
-- [ ] Advanced LLM integration
+- [ ] Advanced trend analysis with LLM
 - [ ] Docker containerization
 - [ ] Kubernetes deployment
+- [ ] Email digest notifications
 
 ## Contributing
 
