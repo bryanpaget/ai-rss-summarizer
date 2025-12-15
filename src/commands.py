@@ -12,6 +12,7 @@ from .storage import Storage
 from .rss import fetch_all_feeds, load_feeds
 from .trends import analyze_article, TREND_CATEGORIES
 from .llm_providers import get_best_provider, get_setup_instructions
+from .user_context import UserContextStore, RelevanceEngine, sort_by_relevance
 
 console = Console(force_terminal=True, legacy_windows=True)
 
@@ -22,6 +23,9 @@ def update(
     topic_filter: Optional[str] = None,
     limit: int = 10,
     show_all: bool = False,
+    use_context: bool = True,
+    show_scores: bool = False,
+    min_relevance: float = 0.0,
 ) -> dict:
     """
     Fetch new articles, summarize them, and present what's new.
@@ -44,6 +48,17 @@ def update(
     """
     storage = Storage(db_path)
     stats = {"fetched": 0, "new": 0, "summarized": 0, "displayed": 0}
+
+    # Load user context if enabled
+    context_store = None
+    user_profile = None
+    if use_context:
+        try:
+            context_store = UserContextStore(db_path=db_path)
+            user_profile = context_store.load_profile()
+        except Exception as e:
+            console.print(f"[yellow]Warning: Could not load user context: {e}[/yellow]")
+            use_context = False
 
     # Step 1: Fetch new articles
     console.print("[dim]Checking for new articles...[/dim]")
@@ -78,6 +93,13 @@ def update(
 
     # Step 3: Get articles to display
     articles = storage.get_articles(limit=limit * 2)  # Get more to filter
+
+    # Apply personalized relevance scoring if context enabled
+    if use_context and user_profile and context_store:
+        articles = sort_by_relevance(articles, user_profile, context_store)
+        # Filter by minimum relevance if specified
+        if min_relevance > 0:
+            articles = [a for a in articles if getattr(a, 'relevance_score', 0) >= min_relevance]
 
     # Filter by topic if specified
     if topic_filter:
@@ -121,7 +143,7 @@ def update(
             article.trend_tags = tags
 
     # Step 5: Present the digest
-    _display_digest(articles, topic_filter, provider, cached_count)
+    _display_digest(articles, topic_filter, provider, cached_count, show_scores=show_scores)
     stats["displayed"] = len(articles)
 
     return stats
@@ -161,7 +183,7 @@ def _matches_topic_keywords(article, topic: str) -> bool:
     return topic in text
 
 
-def _display_digest(articles: list, topic_filter: Optional[str] = None, provider=None, cached_count: int = 0) -> None:
+def _display_digest(articles: list, topic_filter: Optional[str] = None, provider=None, cached_count: int = 0, show_scores: bool = False) -> None:
     """Display a formatted digest of articles."""
     title = "What's New"
     if topic_filter:
@@ -176,8 +198,13 @@ def _display_digest(articles: list, topic_filter: Optional[str] = None, provider
         if article.published:
             pub_date = f" [dim]({str(article.published)[:10]})[/dim]"
 
-        # Title
-        console.print(f"[bold cyan]{i}. {article.title}[/bold cyan]{pub_date}")
+        # Title with relevance score if requested
+        title_line = f"[bold cyan]{i}. {article.title}[/bold cyan]{pub_date}"
+        if show_scores and hasattr(article, 'relevance_score'):
+            score = article.relevance_score
+            score_color = "green" if score >= 0.7 else "yellow" if score >= 0.4 else "dim"
+            title_line += f" [{score_color}][{score:.2f}][/{score_color}]"
+        console.print(title_line)
 
         # Summary
         summary = article.summary or "[dim]No summary available[/dim]"
@@ -257,7 +284,7 @@ def setup_wizard() -> None:
         elif p["type"] in [ProviderType.GEMINI, ProviderType.CLAUDE, ProviderType.GROK, ProviderType.OPENAI]:
             status = "[yellow]Needs API Key[/yellow]"
             setup_providers.append((i, p))
-        elif p["type"] == ProviderType.CLAUDE_AGENT:
+        elif p["type"] == ProviderType.CLAUDE_CODE:
             status = "[yellow]Needs SDK[/yellow]"
             setup_providers.append((i, p))
         elif p["type"] in [ProviderType.LM_STUDIO, ProviderType.OLLAMA]:
@@ -349,6 +376,479 @@ def _save_provider_config(provider, providers_list) -> None:
     config.save()
     console.print(f"[green]Saved {provider.name} as default provider.[/green]")
     console.print(f"[dim]Configuration saved to config/llm.json[/dim]")
+    console.print()
+    _onboard_feeds()
+
+
+def _onboard_feeds() -> None:
+    """Guide user through adding initial feeds."""
+    from pathlib import Path
+    from .rss import load_feeds
+
+    feeds_file = "config/feeds.txt"
+    existing_feeds = load_feeds(feeds_file)
+
+    console.print("[bold]Step 2: Set up your feeds[/bold]")
+    console.print()
+
+    if existing_feeds:
+        console.print(f"[dim]You have {len(existing_feeds)} feeds configured.[/dim]")
+        console.print()
+        console.print("  [bold]1[/bold] - Keep existing and add more")
+        console.print("  [bold]2[/bold] - Start fresh")
+        console.print("  [bold]3[/bold] - Done (keep existing)")
+        console.print()
+        choice = console.input("[bold]Choice [3]: [/bold]").strip() or "3"
+
+        if choice == "3":
+            _finish_onboarding()
+            return
+        elif choice == "2":
+            Path(feeds_file).parent.mkdir(parents=True, exist_ok=True)
+            Path(feeds_file).write_text("# RSS Feeds\n")
+
+    _setup_feeds()
+    _finish_onboarding()
+
+
+def _setup_feeds() -> None:
+    """Guide user through adding RSS feeds."""
+    console.print()
+    console.print("[bold]Add RSS Feeds[/bold]")
+    console.print()
+    console.print("  [bold]1[/bold] - Import from OPML file (from Feedly, Inoreader, etc.)")
+    console.print("  [bold]2[/bold] - Add feed URL or website")
+    console.print("  [bold]3[/bold] - Paste multiple URLs")
+    console.print("  [bold]4[/bold] - Browse curated feeds by category")
+    console.print("  [bold]s[/bold] - Skip for now")
+    console.print()
+
+    choice = console.input("[bold]Choice [2]: [/bold]").strip() or "2"
+
+    if choice == "1":
+        _import_opml()
+    elif choice == "2":
+        _add_feed_smart()
+    elif choice == "3":
+        _paste_multiple_urls()
+    elif choice == "4":
+        _browse_curated_feeds()
+
+
+def _import_opml() -> None:
+    """Import feeds from OPML file."""
+    from pathlib import Path
+    from .feed_discovery import parse_opml, validate_feed
+
+    console.print()
+    console.print("[dim]OPML files can be exported from most RSS readers.[/dim]")
+    file_path = console.input("[bold]OPML file path: [/bold]").strip()
+
+    if not file_path:
+        return
+
+    file_path = file_path.strip('"').strip("'")
+    file_path = str(Path(file_path).expanduser())
+
+    feeds, error = parse_opml(file_path)
+
+    if error:
+        console.print(f"[red]Error: {error}[/red]")
+        return
+
+    if not feeds:
+        console.print("[yellow]No feeds found in OPML file.[/yellow]")
+        return
+
+    categories = {}
+    for feed in feeds:
+        cat = feed.get('category') or 'Uncategorized'
+        if cat not in categories:
+            categories[cat] = []
+        categories[cat].append(feed)
+
+    console.print()
+    console.print(f"[green]Found {len(feeds)} feeds in {len(categories)} categories:[/green]")
+    for cat, cat_feeds in categories.items():
+        console.print(f"  - {cat}: {len(cat_feeds)} feeds")
+
+    console.print()
+    choice = console.input("[bold]Import all? (y/n) [y]: [/bold]").strip().lower() or "y"
+
+    if choice != "y":
+        return
+
+    feeds_path = Path("config/feeds.txt")
+    feeds_path.parent.mkdir(parents=True, exist_ok=True)
+
+    console.print()
+    console.print("[dim]Validating feeds...[/dim]")
+
+    added = 0
+    failed = 0
+
+    with open(feeds_path, "a") as f:
+        for feed in feeds:
+            url = feed['url']
+            title = feed['title']
+            success, info, err = validate_feed(url, timeout=5.0)
+            status = "[green]OK[/green]" if success else "[red]FAIL[/red]"
+            console.print(f"  {status} {title[:40]}")
+            if success:
+                f.write(f"\n# {info.title}\n{info.url}\n")
+                added += 1
+            else:
+                failed += 1
+
+    console.print()
+    if failed:
+        console.print(f"[green]Added {added} feeds.[/green] [yellow]({failed} failed)[/yellow]")
+    else:
+        console.print(f"[green]Added {added} feeds.[/green]")
+
+
+def _add_feed_smart() -> None:
+    """Smart feed addition - handles URLs, domains, platform URLs."""
+    from pathlib import Path
+    from .feed_discovery import validate_feed, discover_feed, transform_url, detect_input_type
+
+    console.print()
+    console.print("[dim]Enter a feed URL, website URL, or domain.[/dim]")
+    console.print("[dim]Examples: https://example.com/feed.xml, example.com, youtube.com/@channel[/dim]")
+    console.print()
+
+    while True:
+        user_input = console.input("[bold]URL: [/bold]").strip()
+        if not user_input:
+            break
+
+        input_type = detect_input_type(user_input)
+        feed_info = None
+        error = ""
+
+        if input_type == 'platform_url':
+            feed_url = transform_url(user_input)
+            if feed_url:
+                console.print(f"[dim]Transformed to: {feed_url}[/dim]")
+                success, feed_info, error = validate_feed(feed_url)
+            else:
+                console.print("[yellow]Could not transform this URL.[/yellow]")
+                continue
+
+        elif input_type == 'single_url':
+            console.print("[dim]Validating...[/dim]")
+            success, feed_info, error = validate_feed(user_input)
+            if not success:
+                console.print("[dim]Not a feed, searching site...[/dim]")
+                success, feed_info, error = discover_feed(user_input)
+
+        elif input_type == 'domain':
+            console.print(f"[dim]Searching for feeds on {user_input}...[/dim]")
+            success, feed_info, error = discover_feed(user_input)
+
+        else:
+            console.print("[yellow]Could not understand input.[/yellow]")
+            continue
+
+        if feed_info:
+            console.print()
+            console.print(f"[green]Found feed:[/green]")
+            console.print(feed_info.preview())
+            console.print()
+            add = console.input("[bold]Add this feed? (y/n) [y]: [/bold]").strip().lower() or "y"
+            if add == "y":
+                feeds_path = Path("config/feeds.txt")
+                feeds_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(feeds_path, "a") as f:
+                    f.write(f"\n# {feed_info.title}\n{feed_info.url}\n")
+                console.print("[green]Added![/green]")
+        else:
+            console.print(f"[red]Not found: {error}[/red]")
+
+        console.print()
+        cont = console.input("[dim]Add another? (y/n) [y]: [/dim]").strip().lower() or "y"
+        if cont != "y":
+            break
+
+
+def _paste_multiple_urls() -> None:
+    """Paste multiple URLs at once."""
+    from pathlib import Path
+    from .feed_discovery import validate_feed
+
+    console.print()
+    console.print("[dim]Paste URLs (one per line), blank line when done:[/dim]")
+    console.print()
+
+    urls = []
+    while True:
+        line = console.input("").strip()
+        if not line:
+            break
+        if line.startswith("http"):
+            urls.append(line)
+
+    if not urls:
+        return
+
+    console.print()
+    console.print(f"[dim]Validating {len(urls)} URLs...[/dim]")
+
+    feeds_path = Path("config/feeds.txt")
+    feeds_path.parent.mkdir(parents=True, exist_ok=True)
+
+    added = 0
+    failed = 0
+
+    with open(feeds_path, "a") as f:
+        for url in urls:
+            success, info, error = validate_feed(url, timeout=5.0)
+            if success:
+                console.print(f"  [green]OK[/green] {info.title[:50]}")
+                f.write(f"\n# {info.title}\n{info.url}\n")
+                added += 1
+            else:
+                console.print(f"  [red]FAIL[/red] {url[:50]}")
+                failed += 1
+
+    console.print()
+    if failed:
+        console.print(f"[green]Added {added} feeds.[/green] [yellow]({failed} failed)[/yellow]")
+    else:
+        console.print(f"[green]Added {added} feeds.[/green]")
+
+
+def _browse_curated_feeds() -> None:
+    """Browse curated feeds by category or search for feeds."""
+    console.print()
+    console.print("[bold]Feed Discovery[/bold]")
+    console.print()
+    console.print("  [bold]1[/bold] - Browse popular feeds by category")
+    console.print("  [bold]2[/bold] - Search for feeds on a topic or website")
+    console.print("  [bold]b[/bold] - Back")
+    console.print()
+
+    choice = console.input("[bold]Choice [1]: [/bold]").strip() or "1"
+
+    if choice == "1":
+        _show_curated_categories()
+    elif choice == "2":
+        _search_feeds()
+
+
+def _show_curated_categories() -> None:
+    """Show curated feed categories and let user browse."""
+    from .feed_catalog import CURATED_CATEGORIES, get_feeds_by_category
+    from pathlib import Path
+
+    console.print()
+    console.print("[bold]Popular Feed Categories[/bold]")
+    console.print("[dim]Curated from awesome-rss-feeds[/dim]")
+    console.print()
+
+    table = Table(show_header=False)
+    table.add_column("#", style="dim", width=3)
+    table.add_column("Category", style="cyan")
+    table.add_column("Count", justify="right")
+
+    categories = list(CURATED_CATEGORIES.keys())
+    for i, category in enumerate(categories, 1):
+        count = len(CURATED_CATEGORIES[category])
+        table.add_row(str(i), category, str(count))
+
+    console.print(table)
+    console.print()
+
+    choice = console.input("[bold]Select category (number or 'b' to go back): [/bold]").strip()
+
+    if choice == "b" or not choice:
+        return
+
+    try:
+        idx = int(choice) - 1
+        if 0 <= idx < len(categories):
+            category = categories[idx]
+            feeds = get_feeds_by_category(category)
+            _show_category_feeds(category, feeds)
+        else:
+            console.print("[red]Invalid selection[/red]")
+    except ValueError:
+        console.print("[red]Invalid selection[/red]")
+
+
+def _show_category_feeds(category: str, feeds: list[dict]) -> None:
+    """Show feeds in a category and let user add them."""
+    from pathlib import Path
+    from .feed_discovery import validate_feed
+
+    console.print()
+    console.print(f"[bold]{category}[/bold]")
+    console.print()
+
+    table = Table(show_header=True)
+    table.add_column("#", style="dim", width=3)
+    table.add_column("Feed", style="cyan")
+    table.add_column("Description")
+
+    for i, feed in enumerate(feeds, 1):
+        desc = feed.get("description", "")[:60]
+        table.add_row(str(i), feed["title"], desc)
+
+    console.print(table)
+    console.print()
+    console.print("[dim]Enter numbers to add (e.g., '1,3,5' or '1-5' or 'all'), or 'b' to go back[/dim]")
+    console.print()
+
+    choice = console.input("[bold]Selection: [/bold]").strip()
+
+    if choice == "b" or not choice:
+        return
+
+    selected_indices = _parse_selection(choice, len(feeds))
+    if not selected_indices:
+        console.print("[red]Invalid selection[/red]")
+        return
+
+    console.print()
+    console.print(f"[dim]Validating {len(selected_indices)} feeds...[/dim]")
+
+    feeds_path = Path("config/feeds.txt")
+    feeds_path.parent.mkdir(parents=True, exist_ok=True)
+
+    added = 0
+    failed = 0
+
+    with open(feeds_path, "a") as f:
+        for idx in selected_indices:
+            feed = feeds[idx]
+            url = feed["url"]
+            title = feed["title"]
+            success, info, error = validate_feed(url, timeout=5.0)
+            if success:
+                console.print(f"  [green]OK[/green] {title[:50]}")
+                f.write(f"\n# {info.title}\n{info.url}\n")
+                added += 1
+            else:
+                console.print(f"  [red]FAIL[/red] {title[:50]} ({error})")
+                failed += 1
+
+    console.print()
+    if failed:
+        console.print(f"[green]Added {added} feeds.[/green] [yellow]({failed} failed)[/yellow]")
+    else:
+        console.print(f"[green]Added {added} feeds.[/green]")
+
+
+def _parse_selection(selection: str, max_items: int) -> list[int]:
+    """Parse user selection string into list of indices."""
+    if selection.lower() == "all":
+        return list(range(max_items))
+
+    indices = set()
+    parts = selection.split(",")
+
+    for part in parts:
+        part = part.strip()
+        if "-" in part:
+            # Range like "1-5"
+            try:
+                start, end = part.split("-")
+                start_idx = int(start.strip()) - 1
+                end_idx = int(end.strip()) - 1
+                if 0 <= start_idx < max_items and 0 <= end_idx < max_items:
+                    indices.update(range(start_idx, end_idx + 1))
+            except ValueError:
+                pass
+        else:
+            # Single number
+            try:
+                idx = int(part) - 1
+                if 0 <= idx < max_items:
+                    indices.add(idx)
+            except ValueError:
+                pass
+
+    return sorted(list(indices))
+
+
+def _search_feeds() -> None:
+    """Search for feeds using Feedsearch.dev API."""
+    from .feed_discovery import validate_feed, search_feeds_online
+    from pathlib import Path
+
+    console.print()
+    console.print("[dim]Enter a topic, website, or domain to search for feeds.[/dim]")
+    console.print("[dim]Examples: 'python programming', 'nytimes.com', 'machine learning'[/dim]")
+    console.print()
+
+    query = console.input("[bold]Search: [/bold]").strip()
+
+    if not query:
+        return
+
+    console.print()
+    console.print(f"[dim]Searching for feeds about '{query}'...[/dim]")
+
+    feeds = search_feeds_online(query)
+
+    if not feeds:
+        console.print("[yellow]No feeds found. Try a different search term or website.[/yellow]")
+        return
+
+    console.print()
+    console.print(f"[green]Found {len(feeds)} feeds:[/green]")
+    console.print()
+
+    table = Table(show_header=True)
+    table.add_column("#", style="dim", width=3)
+    table.add_column("Feed", style="cyan")
+    table.add_column("URL")
+
+    for i, feed in enumerate(feeds, 1):
+        table.add_row(str(i), feed["title"][:40], feed["url"][:50])
+
+    console.print(table)
+    console.print()
+    console.print("[dim]Enter numbers to add (e.g., '1,3' or '1-3'), or 'b' to cancel[/dim]")
+    console.print()
+
+    choice = console.input("[bold]Selection: [/bold]").strip()
+
+    if choice == "b" or not choice:
+        return
+
+    selected_indices = _parse_selection(choice, len(feeds))
+    if not selected_indices:
+        console.print("[red]Invalid selection[/red]")
+        return
+
+    console.print()
+    feeds_path = Path("config/feeds.txt")
+    feeds_path.parent.mkdir(parents=True, exist_ok=True)
+
+    added = 0
+    with open(feeds_path, "a") as f:
+        for idx in selected_indices:
+            feed = feeds[idx]
+            console.print(f"[green]Adding[/green] {feed['title']}")
+            f.write(f"\n# {feed['title']}\n{feed['url']}\n")
+            added += 1
+
+    console.print()
+    console.print(f"[green]Added {added} feeds.[/green]")
+
+
+
+
+
+
+def _finish_onboarding() -> None:
+    """Show completion message."""
+    console.print()
+    console.print("[bold green]Setup complete![/bold green]")
+    console.print()
+    console.print("Next: [bold]rss update[/bold] to fetch and summarize articles")
+    console.print()
 
 
 def _setup_new_provider(providers) -> None:
@@ -361,7 +861,7 @@ def _setup_new_provider(providers) -> None:
     console.print()
     console.print("Available cloud providers:")
     console.print("  [bold]1[/bold] - Gemini (FREE tier - recommended)")
-    console.print("  [bold]2[/bold] - Claude Agent SDK (uses Claude Code auth)")
+    console.print("  [bold]2[/bold] - Claude Code (uses Claude Code auth)")
     console.print("  [bold]3[/bold] - Claude API (separate API key)")
     console.print("  [bold]4[/bold] - Grok (xAI)")
     console.print("  [bold]5[/bold] - OpenAI")
@@ -389,7 +889,7 @@ def _setup_new_provider(providers) -> None:
 
     elif choice == "2":
         console.print()
-        console.print("[bold]Claude Agent SDK Setup[/bold]")
+        console.print("[bold]Claude Code Setup[/bold]")
         console.print("This uses your Claude Code authentication - no separate API key needed!")
         console.print()
         console.print("1. Install SDK: [bold]pip install claude-agent-sdk[/bold]")
@@ -397,9 +897,9 @@ def _setup_new_provider(providers) -> None:
         console.print()
         confirm = console.input("Have you installed claude-agent-sdk? [y/N]: ").strip().lower()
         if confirm == "y":
-            config = LLMConfig(provider=ProviderType.CLAUDE_AGENT)
+            config = LLMConfig(provider=ProviderType.CLAUDE_CODE)
             config.save()
-            console.print("[green]Claude Agent SDK configured![/green]")
+            console.print("[green]Claude Code configured![/green]")
 
     elif choice == "3":
         console.print()
@@ -483,6 +983,7 @@ def _select_provider(all_providers, selectable) -> None:
                     config = LLMConfig(provider=p["type"])
                     config.save()
                     console.print(f"[green]Configured {p['name']} as default provider.[/green]")
+                    _onboard_feeds()
                 else:
                     console.print(f"[yellow]{p['name']} needs to be set up first.[/yellow]")
                     _setup_new_provider(all_providers)

@@ -13,6 +13,15 @@ from .storage import Storage
 from .rss import fetch_all_feeds, load_feeds
 from .summarizer import summarize_articles
 from .trends import analyze_trends, get_articles_by_trend
+from .emergence import detect_emerging_trends, format_emerging_trend
+from .knowledge import (
+    KnowledgeBase,
+    extract_insights_from_article,
+    detect_connections,
+    query_knowledge_base,
+)
+from .cli_perspectives import add_perspective_commands
+from .cli_signal_tags import app as signal_tags_app
 
 app = typer.Typer(
     name="rss",
@@ -21,6 +30,24 @@ app = typer.Typer(
 )
 # Use force_terminal to avoid Windows console encoding issues
 console = Console(force_terminal=True, legacy_windows=True)
+
+# Register perspective commands (perspectives, perspective-config, cluster-stories)
+add_perspective_commands(app)
+
+# Register signal tagging commands as subcommand group
+app.add_typer(signal_tags_app, name="tag", help="Signal tag management commands")
+
+
+def is_setup_complete() -> bool:
+    """Check if LLM provider has been configured."""
+    return Path("config/llm.json").exists()
+
+
+def require_setup():
+    """Exit with message if setup not complete."""
+    if not is_setup_complete():
+        console.print("[yellow]Setup required.[/yellow] Run [bold]rss setup[/bold] first.")
+        raise typer.Exit(1)
 
 
 def get_storage(db_path: str = "articles.db") -> Storage:
@@ -42,6 +69,7 @@ def fetch(
     ),
 ):
     """Fetch articles from all configured RSS feeds."""
+    require_setup()
     storage = get_storage(db_path)
     feeds = load_feeds(feeds_file)
 
@@ -95,6 +123,11 @@ def summarize(
         "--llm",
         help="Use LLM for summarization (requires transformers)",
     ),
+    tag: bool = typer.Option(
+        False,
+        "--tag",
+        help="Also assign signal tags to articles",
+    ),
     db_path: str = typer.Option(
         "articles.db",
         "--db", "-d",
@@ -102,17 +135,26 @@ def summarize(
     ),
 ):
     """Summarize articles that haven't been summarized yet."""
+    require_setup()
     storage = get_storage(db_path)
 
     console.print(f"[bold]Summarizing up to {limit} articles...[/bold]")
     if use_llm:
-        console.print("[dim]Using LLM backend (this may take a while)[/dim]\n")
+        console.print("[dim]Using LLM backend (this may take a while)[/dim]")
     else:
-        console.print("[dim]Using simple extractive summarizer[/dim]\n")
+        console.print("[dim]Using simple extractive summarizer[/dim]")
 
-    stats = summarize_articles(storage, limit=limit, use_llm=use_llm)
+    if tag:
+        console.print("[dim]Signal tagging enabled[/dim]\n")
+    else:
+        console.print()
+
+    stats = summarize_articles(storage, limit=limit, use_llm=use_llm, tag_articles=tag)
 
     console.print(f"[green]Summarized {stats['processed']} articles[/green]")
+
+    if tag and stats.get('tagged', 0) > 0:
+        console.print(f"[green]Tagged {stats['tagged']} articles[/green]")
 
     if stats["errors"]:
         console.print(f"[yellow]Errors: {len(stats['errors'])}[/yellow]")
@@ -134,6 +176,7 @@ def trends(
     ),
 ):
     """Analyze trends across fetched articles."""
+    require_setup()
     storage = get_storage(db_path)
 
     console.print(f"[bold]Analyzing trends across up to {limit} articles...[/bold]\n")
@@ -158,7 +201,25 @@ def trends(
         table.add_row(category, str(count), bar)
 
     console.print(table)
-    console.print(f"\n[dim]Analyzed {stats['processed']} articles[/dim]")
+
+    # Show emerging trends if any
+    if stats.get("emerging"):
+        console.print()
+        console.print("[bold green]Emerging Trends[/bold green] (gaining traction)")
+        for tag, velocity in stats["emerging"]:
+            if velocity == 100:
+                console.print(f"  [green]+[/green] {tag} [dim](new)[/dim]")
+            else:
+                console.print(f"  [green]+{velocity:.0f}%[/green] {tag}")
+
+    # Show declining trends if any
+    if stats.get("declining"):
+        console.print()
+        console.print("[bold red]Declining Trends[/bold red] (losing traction)")
+        for tag, velocity in stats["declining"]:
+            console.print(f"  [red]{velocity:.0f}%[/red] {tag}")
+
+    console.print(f"\n[dim]Analyzed {stats['processed']} articles (last {stats.get('hours', 24)}h window)[/dim]")
 
 
 @app.command("list")
@@ -316,9 +377,9 @@ def add_feed(
 
 @app.command()
 def update(
-    topic: Optional[str] = typer.Argument(
+    topic_words: Optional[list[str]] = typer.Argument(
         None,
-        help="Filter by topic (e.g., 'tech', 'politics', 'health')",
+        help="Filter by topic (e.g., 'tech', 'AI news', 'politics')",
     ),
     limit: int = typer.Option(
         10,
@@ -330,6 +391,21 @@ def update(
         "--all", "-a",
         help="Show all articles, not just new ones",
     ),
+    show_scores: bool = typer.Option(
+        False,
+        "--show-scores",
+        help="Show relevance scores for each article",
+    ),
+    min_relevance: float = typer.Option(
+        0.0,
+        "--min-relevance",
+        help="Filter articles below this relevance score (0-1)",
+    ),
+    no_context: bool = typer.Option(
+        False,
+        "--no-context",
+        help="Disable personalization",
+    ),
 ):
     """
     Check what's new in your feeds.
@@ -340,14 +416,24 @@ def update(
     Examples:
         rss update              # Show all new articles
         rss update tech         # Show only tech-related articles
+        rss update AI news      # Multiple words work without quotes
         rss update --all        # Show recent articles even if not new
+        rss update --show-scores        # Show relevance scores
+        rss update --min-relevance 0.7  # Only high-relevance articles
     """
+    require_setup()
     from .commands import update as do_update
+
+    # Concatenate topic words into single string
+    topic = " ".join(topic_words) if topic_words else None
 
     do_update(
         topic_filter=topic,
         limit=limit,
         show_all=all_articles,
+        use_context=not no_context,
+        show_scores=show_scores,
+        min_relevance=min_relevance,
     )
 
 
@@ -385,6 +471,7 @@ def discover(
         rss discover "Python programming"
         rss discover "climate change and environment"
     """
+    require_setup()
     from .llm_providers import get_best_provider, get_setup_instructions
 
     provider, is_llm = get_best_provider()
@@ -456,6 +543,70 @@ Only include feeds you're confident are real and active."""
         raise typer.Exit(1)
 
 
+@app.command(name="help")
+def help_cmd(
+    command: Optional[str] = typer.Argument(None, help="Command to get help for"),
+):
+    """
+    Show help information.
+
+    Examples:
+        rss help            # Show all commands
+        rss help update     # Show help for update command
+    """
+    import subprocess
+    import sys
+
+    if command:
+        # Show help for specific command
+        subprocess.run([sys.executable, "-m", "src.cli", command, "--help"])
+        return
+
+    # Custom help showing setup status
+    setup_done = is_setup_complete()
+    
+    console.print("[bold]RSS Summarizer[/bold] - AI-powered RSS feed summaries")
+    console.print()
+    
+    if not setup_done:
+        console.print("[yellow]Run 'rss setup' to get started[/yellow]")
+        console.print()
+    
+    # Commands that work without setup
+    console.print("[bold]Setup Commands:[/bold]")
+    console.print("  setup       Set up LLM provider (run this first!)")
+    console.print("  providers   Show available LLM providers")
+    console.print("  add-feed    Add a new RSS feed")
+    console.print()
+    
+    # Commands that require setup
+    style = "" if setup_done else "dim"
+    console.print("[bold]Main Commands:[/bold]" + ("" if setup_done else " [dim](requires setup)[/dim]"))
+    if setup_done:
+        console.print("  update      Check what's new in your feeds")
+        console.print("  discover    Find new feeds based on interests")
+        console.print("  trends      Analyze trending topics")
+    else:
+        console.print("  [dim]update      Check what's new in your feeds[/dim]")
+        console.print("  [dim]discover    Find new feeds based on interests[/dim]")
+        console.print("  [dim]trends      Analyze trending topics[/dim]")
+    console.print()
+    
+    console.print("[bold]Info Commands:[/bold]")
+    console.print("  list        List fetched articles")
+    console.print("  stats       Show database statistics")
+    console.print("  help        Show this help")
+    console.print()
+
+    console.print("[bold]Advanced Analysis:[/bold]")
+    console.print("  perspectives      View multi-source perspectives on stories")
+    console.print("  cluster-stories   Group articles into story clusters")
+    console.print("  emerging          Detect emerging trends early")
+    console.print("  tag articles      Assign signal tags to articles")
+    console.print("  tag filter        Filter articles by tags")
+    console.print("  tag stats         Show tag distribution")
+
+
 @app.command()
 def providers():
     """
@@ -463,18 +614,9 @@ def providers():
 
     Lists all supported providers and whether they're currently available.
     """
-    from .llm_providers import list_providers, ClaudeProvider, ProviderType
+    from .llm_providers import list_providers
 
     all_providers = list_providers()
-
-    # Add Claude
-    claude = ClaudeProvider()
-    all_providers.append({
-        "type": ProviderType.CLAUDE,
-        "name": "Claude",
-        "available": claude.is_available(),
-        "description": "Claude API (for Claude Code users)",
-    })
 
     table = Table(title="LLM Providers")
     table.add_column("Provider", style="cyan")
@@ -488,6 +630,225 @@ def providers():
     console.print(table)
     console.print()
     console.print("[dim]Run 'rss setup' to configure a provider.[/dim]")
+
+
+@app.command()
+def extract_knowledge(
+    limit: int = typer.Option(
+        10,
+        "--limit", "-n",
+        help="Number of articles to process",
+    ),
+    db_path: str = typer.Option(
+        "articles.db",
+        "--db", "-d",
+        help="Path to articles database",
+    ),
+    kb_path: str = typer.Option(
+        "knowledge.db",
+        "--kb", "-k",
+        help="Path to knowledge database",
+    ),
+):
+    """Extract knowledge insights from recent articles."""
+    require_setup()
+    from .llm_providers import get_best_provider, ensure_llm_or_exit
+
+    provider = ensure_llm_or_exit(require_llm=True)
+    storage = get_storage(db_path)
+    kb = KnowledgeBase(kb_path)
+
+    console.print(f"[bold]Extracting knowledge from up to {limit} articles...[/bold]\n")
+
+    # Get articles without insights extracted yet
+    articles = storage.get_articles(limit=limit)
+
+    if not articles:
+        console.print("[yellow]No articles found.[/yellow]")
+        console.print("Run 'rss fetch' first to fetch some articles.")
+        raise typer.Exit(1)
+
+    extracted_count = 0
+    total_insights = 0
+
+    for article in articles:
+        console.print(f"[dim]Processing: {article.title[:60]}...[/dim]")
+
+        try:
+            insights = extract_insights_from_article(article, provider, kb)
+
+            if insights:
+                extracted_count += 1
+                total_insights += len(insights)
+
+                # Detect connections
+                for insight in insights:
+                    relationships = detect_connections(insight, kb, provider)
+                    if relationships:
+                        console.print(
+                            f"  [green]Found {len(relationships)} connections[/green]"
+                        )
+
+        except Exception as e:
+            console.print(f"  [red]Error: {str(e)}[/red]")
+
+    console.print()
+    console.print(
+        f"[green]Extracted {total_insights} insights from {extracted_count} articles[/green]"
+    )
+
+    # Show stats
+    stats = kb.get_stats()
+    console.print(f"[dim]Knowledge base now contains {stats['total_insights']} insights[/dim]")
+
+    if stats["contradictions"] > 0:
+        console.print(
+            f"[yellow]Found {stats['contradictions']} contradictions[/yellow] - run 'rss contradictions' to view"
+        )
+
+
+@app.command()
+def query(
+    query_text: str = typer.Argument(..., help="Natural language query"),
+    kb_path: str = typer.Option(
+        "knowledge.db",
+        "--kb", "-k",
+        help="Path to knowledge database",
+    ),
+):
+    """Query the knowledge base using natural language."""
+    require_setup()
+    from .llm_providers import get_best_provider, ensure_llm_or_exit
+
+    provider = ensure_llm_or_exit(require_llm=True)
+    kb = KnowledgeBase(kb_path)
+
+    console.print(f"[bold]Query:[/bold] {query_text}\n")
+
+    result = query_knowledge_base(query_text, kb, provider)
+
+    console.print(Panel(result["summary"], title="Answer", border_style="blue"))
+    console.print()
+    console.print(f"[dim]Based on {result['total_insights']} insights in knowledge base[/dim]")
+
+
+@app.command()
+def contradictions(
+    kb_path: str = typer.Option(
+        "knowledge.db",
+        "--kb", "-k",
+        help="Path to knowledge database",
+    ),
+):
+    """Show contradictions found in the knowledge base."""
+    kb = KnowledgeBase(kb_path)
+
+    relationships = kb.get_relationships(relationship_type="contradicts")
+
+    if not relationships:
+        console.print("[green]No contradictions found in knowledge base.[/green]")
+        return
+
+    console.print(f"[bold]Found {len(relationships)} contradictions:[/bold]\n")
+
+    for rel in relationships:
+        source = kb.get_insight(rel.source_insight_id)
+        target = kb.get_insight(rel.target_insight_id)
+
+        if source and target:
+            console.print("[yellow]CONTRADICTION:[/yellow]")
+            console.print(f"  A: {source.content}")
+            console.print(f"     [dim]({source.confidence} confidence)[/dim]")
+            console.print(f"  B: {target.content}")
+            console.print(f"     [dim]({target.confidence} confidence)[/dim]")
+            console.print()
+
+
+@app.command(name="knowledge-stats")
+def knowledge_stats(
+    kb_path: str = typer.Option(
+        "knowledge.db",
+        "--kb", "-k",
+        help="Path to knowledge database",
+    ),
+):
+    """Show knowledge base statistics."""
+    kb = KnowledgeBase(kb_path)
+    stats = kb.get_stats()
+
+    console.print(Panel("[bold]Knowledge Base Statistics[/bold]", style="blue"))
+    console.print()
+
+    table = Table(show_header=False)
+    table.add_column("Metric", style="cyan")
+    table.add_column("Count", justify="right", style="green")
+
+    table.add_row("Total Insights", str(stats["total_insights"]))
+    table.add_row("High Confidence", str(stats["high_confidence_insights"]))
+    table.add_row("Entities Tracked", str(stats["total_entities"]))
+    table.add_row("Relationships", str(stats["total_relationships"]))
+    table.add_row("Contradictions", str(stats["contradictions"]))
+
+    console.print(table)
+
+
+@app.command()
+def context_add(
+    context_type: str = typer.Argument(..., help="Type: project/interest/watching"),
+    name: str = typer.Argument(..., help="Context name"),
+    description: str = typer.Option(None, "--desc", "-d", help="Description"),
+    kb_path: str = typer.Option(
+        "knowledge.db",
+        "--kb", "-k",
+        help="Path to knowledge database",
+    ),
+):
+    """Add user context (project, interest, watching)."""
+    import uuid
+    from .knowledge import UserContext
+
+    kb = KnowledgeBase(kb_path)
+
+    context = UserContext(
+        id=str(uuid.uuid4()),
+        context_type=context_type,
+        name=name,
+        description=description,
+    )
+
+    kb.save_context(context)
+    console.print(f"[green]Added {context_type}: {name}[/green]")
+
+
+@app.command()
+def context_list(
+    kb_path: str = typer.Option(
+        "knowledge.db",
+        "--kb", "-k",
+        help="Path to knowledge database",
+    ),
+):
+    """List user contexts."""
+    kb = KnowledgeBase(kb_path)
+    contexts = kb.get_contexts(active_only=False)
+
+    if not contexts:
+        console.print("[yellow]No contexts configured.[/yellow]")
+        console.print("Add one with: rss context-add project 'Project Name'")
+        return
+
+    table = Table(title="User Contexts")
+    table.add_column("Type", style="cyan")
+    table.add_column("Name", style="green")
+    table.add_column("Status")
+    table.add_column("Description")
+
+    for ctx in contexts:
+        status = "[green]Active[/green]" if ctx.active else "[dim]Inactive[/dim]"
+        desc = ctx.description or ""
+        table.add_row(ctx.context_type, ctx.name, status, desc[:50])
+
+    console.print(table)
 
 
 @app.callback()
@@ -512,9 +873,127 @@ def main():
         rss summarize           # Generate summaries (runs automatically)
         rss trends              # See trending topics
         rss list                # List all articles
+
+    Story Analysis:
+
+        rss perspectives        # View multi-source perspectives on stories
+        rss cluster-stories     # Group articles into story clusters
+        rss emerging            # Detect emerging trends early
+        rss tag articles        # Assign signal tags to articles
+        rss tag filter          # Filter articles by tags
+
+    Knowledge Base:
+
+        rss extract-knowledge   # Extract insights from articles
+        rss query "question"    # Query knowledge base
+        rss contradictions      # View contradictions
+        rss knowledge-stats     # Show KB statistics
+        rss context-add         # Add user context
+        rss context-list        # List contexts
     """
     pass
 
 
 if __name__ == "__main__":
     app()
+
+
+@app.command()
+def emerging(
+    confidence: str = typer.Option(
+        "all",
+        "--confidence", "-c",
+        help="Filter by confidence level: high, medium, low, watch, all",
+    ),
+    limit: int = typer.Option(
+        10,
+        "--limit", "-n",
+        help="Maximum number of trends to show",
+    ),
+    db_path: str = typer.Option(
+        "articles.db",
+        "--db", "-d",
+        help="Path to database file",
+    ),
+):
+    """
+    Show emerging trends before they go mainstream.
+
+    Detects weak signals and terminology that's gaining traction
+    before it becomes widespread. Useful for staying ahead of trends.
+
+    Examples:
+        rss emerging                    # Show all emerging trends
+        rss emerging --confidence high  # Only high-confidence trends
+        rss emerging --limit 5          # Show top 5
+    """
+    require_setup()
+    storage = get_storage(db_path)
+
+    console.print("[bold]Detecting emerging trends...[/bold]\n")
+
+    # Map confidence filter
+    confidence_map = {
+        "high": "High",
+        "medium": "Medium",
+        "low": "Low",
+        "watch": "Watch",
+        "all": "Watch",  # Show all, starting from "Watch" level
+    }
+
+    min_confidence = confidence_map.get(confidence.lower(), "Low")
+
+    try:
+        trends = detect_emerging_trends(
+            storage,
+            limit=1000,
+            min_confidence=min_confidence,
+        )
+    except Exception as e:
+        console.print(f"[red]Error detecting emerging trends: {e}[/red]")
+        console.print("[yellow]Note: Emergence detection requires at least 4 weeks of article history.[/yellow]")
+        raise typer.Exit(1)
+
+    if not trends:
+        console.print("[yellow]No emerging trends detected.[/yellow]")
+        console.print("\nPossible reasons:")
+        console.print("  - Not enough historical data (need 4+ weeks)")
+        console.print("  - No terms meeting emergence criteria")
+        console.print("  - Articles need trend tags (run 'rss trends' first)")
+        raise typer.Exit(0)
+
+    # Group by confidence
+    by_confidence = {"High": [], "Medium": [], "Low": [], "Watch": []}
+    for trend in trends[:limit]:
+        by_confidence[trend.confidence].append(trend)
+
+    # Display each confidence level
+    for conf_level in ["High", "Medium", "Low", "Watch"]:
+        level_trends = by_confidence[conf_level]
+        if not level_trends:
+            continue
+
+        # Styling by confidence
+        if conf_level == "High":
+            header = "[bold green]HIGH CONFIDENCE EMERGING[/bold green]"
+        elif conf_level == "Medium":
+            header = "[bold yellow]MEDIUM CONFIDENCE EMERGING[/bold yellow]"
+        elif conf_level == "Low":
+            header = "[bold blue]LOW CONFIDENCE EMERGING[/bold blue]"
+        else:
+            header = "[bold dim]WATCH LIST (Early Signals)[/bold dim]"
+
+        console.print(header)
+        console.print("=" * 60)
+        console.print()
+
+        for trend in level_trends:
+            formatted = format_emerging_trend(trend, storage)
+            console.print(formatted)
+            console.print()
+
+    total_shown = sum(len(by_confidence[c]) for c in by_confidence)
+    console.print(f"[dim]Showing {total_shown} of {len(trends)} emerging trends detected[/dim]")
+
+    if len(trends) > limit:
+        console.print(f"[dim]Use --limit {len(trends)} to see all trends[/dim]")

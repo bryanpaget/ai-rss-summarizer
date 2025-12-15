@@ -85,23 +85,16 @@ class TransformerSummarizer:
 
         pipeline = self._load_pipeline()
 
-        # Transformers has input length limits, truncate if needed
-        # BART has a 1024 token limit, roughly 4 chars per token
-        max_input = 4000
-        if len(text) > max_input:
-            text = text[:max_input]
-
-        try:
-            result = pipeline(
-                text,
-                max_length=max_length,
-                min_length=30,
-                do_sample=False,
-            )
-            return result[0]["summary_text"]
-        except Exception as e:
-            # Fall back to simple summarizer on error
-            return SimpleSummarizer().summarize(text, max_length)
+        # BART model has a 1024 token context limit
+        # The model will handle truncation internally if needed
+        result = pipeline(
+            text,
+            max_length=max_length,
+            min_length=30,
+            do_sample=False,
+            truncation=True,
+        )
+        return result[0]["summary_text"]
 
 
 def get_summarizer(use_llm: bool = False) -> SummarizerBackend:
@@ -120,22 +113,51 @@ def summarize_articles(
     storage,
     limit: int = 10,
     use_llm: bool = False,
+    tag_articles: bool = False,
 ) -> dict:
     """
     Summarize unsummarized articles in storage.
 
-    Returns statistics about the summarization.
+    Args:
+        storage: Storage instance
+        limit: Maximum number of articles to summarize
+        use_llm: If True, use LLM-based summarizer
+        tag_articles: If True, also assign signal tags to articles
+
+    Returns:
+        Statistics about the summarization including processed count and errors.
     """
     summarizer = get_summarizer(use_llm)
     articles = storage.get_articles(limit=limit, unsummarized_only=True)
 
-    stats = {"processed": 0, "errors": []}
+    # Initialize tagger if requested
+    tagger = None
+    if tag_articles:
+        try:
+            from .signal_tagger import SignalTagger
+            tagger = SignalTagger(use_llm=use_llm)
+        except Exception as e:
+            # If tagging fails to initialize, continue without it
+            pass
+
+    stats = {"processed": 0, "tagged": 0, "errors": []}
 
     for article in articles:
         try:
+            # Generate summary
             summary = summarizer.summarize(article.content)
             storage.update_summary(article.id, summary)
             stats["processed"] += 1
+
+            # Generate tags if enabled
+            if tagger:
+                try:
+                    tags = tagger.tag_article(article)
+                    storage.update_signal_tags(article.id, tags.to_json())
+                    stats["tagged"] += 1
+                except Exception as e:
+                    stats["errors"].append(f"Error tagging {article.id}: {str(e)}")
+
         except Exception as e:
             stats["errors"].append(f"Error summarizing {article.id}: {str(e)}")
 
