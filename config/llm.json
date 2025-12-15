@@ -1,0 +1,11 @@
+{
+  "provider": "lm-studio",
+  "base_url": null,
+  "model": "google/gemma-3n-e4b",
+  "defaults": {
+    "auto_load": {
+      "enabled": true,
+      "ttl_seconds": 300
+    }
+  }
+}

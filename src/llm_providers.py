@@ -341,37 +341,40 @@ class LMStudioProvider(OpenAICompatibleProvider):
         """
         Attempt to auto-load a model using lms CLI.
 
-        Uses universal config at ~/.claude/config/safe-auto-load.json when available.
-        Falls back to bundled defaults for standalone installation.
+        Uses project config from config/llm.json:
+        - Model name from main 'model' field
+        - Auto-load settings from 'defaults.auto_load' dict
 
-        Safety: Only loads models from approved list, checks resources first.
+        Safety: Checks resources before loading using --estimate-only.
         """
         import subprocess
         import shutil
 
-        # Check if lms is available
+        # Check if lms CLI is available
         if not shutil.which('lms'):
             return False
 
-        # Try to load universal config, fall back to bundled defaults
-        config = self._get_auto_load_config()
+        # Load project config
+        config = LLMConfig.from_file()
 
-        # Check if auto-load is enabled
-        if not config.get("enabled", True):
+        # Get auto-load settings from project config
+        auto_load_config = config.defaults.get("auto_load", {})
+
+        # Check if auto-load is enabled (disabled by default - user must opt in)
+        if not auto_load_config.get("enabled", False):
             return False
 
-        default_model = config.get("default_model", "google/gemma-3n-e4b")
-        ttl_seconds = config.get("ttl_seconds", 300)
-        approved_models = config.get("approved_models", ["google/gemma-3n-e4b"])
-
-        # Security: Only load models on approved list
-        if default_model not in approved_models:
+        # Model must be configured in project config
+        model_to_load = config.model
+        if not model_to_load:
             return False
+
+        ttl_seconds = auto_load_config.get("ttl_seconds", 300)
 
         try:
             # Check resources first using LM Studio's --estimate-only
             estimate_result = subprocess.run(
-                ["lms", "load", default_model, "--estimate-only", "--yes"],
+                ["lms", "load", model_to_load, "--estimate-only", "--yes"],
                 capture_output=True,
                 timeout=30,
             )
@@ -383,40 +386,21 @@ class LMStudioProvider(OpenAICompatibleProvider):
 
             # Load the model with TTL for auto-unload after idle
             result = subprocess.run(
-                ["lms", "load", default_model, "--ttl", str(ttl_seconds), "--yes"],
+                ["lms", "load", model_to_load, "--ttl", str(ttl_seconds), "--yes"],
                 capture_output=True,
                 timeout=120,
             )
-            return result.returncode == 0
+
+            if result.returncode != 0:
+                return False
+
+            # TODO: Post-load headroom check (Issue 2)
+            # After loading, verify system still has adequate resources
+            # If overloaded, unload and return False
+
+            return True
         except Exception:
             return False
-
-    def _get_auto_load_config(self) -> dict:
-        """
-        Get auto-load configuration.
-
-        Priority:
-        1. Universal config at ~/.claude/config/safe-auto-load.json
-        2. Bundled defaults (for standalone installation)
-        """
-        # Try universal config location
-        universal_config_path = Path.home() / ".claude" / "config" / "safe-auto-load.json"
-
-        if universal_config_path.exists():
-            try:
-                with open(universal_config_path) as f:
-                    return json.load(f)
-            except Exception:
-                pass
-
-        # Bundled defaults for standalone installation
-        # Security: Hardcoded model is intentional - only user-approved models can auto-load
-        return {
-            "enabled": True,
-            "default_model": "google/gemma-3n-e4b",
-            "ttl_seconds": 300,
-            "approved_models": ["google/gemma-3n-e4b"]
-        }
 
     def _make_request(self, prompt: str, max_tokens: int, is_summarize: bool = False) -> str:
         """Make a request with auto-load retry on 'No models loaded' error."""
