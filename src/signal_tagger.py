@@ -450,7 +450,10 @@ Return ONLY a JSON object in this exact format (no markdown, no explanation):
                 json=payload,
                 timeout=30.0,
             )
+            resp.raise_for_status()
             data = resp.json()
+            if "choices" not in data:
+                raise ValueError(f"Unexpected LLM response format: {list(data.keys())}")
             return data["choices"][0]["message"]["content"]
 
         else:

@@ -91,6 +91,13 @@ class Storage:
             except sqlite3.OperationalError:
                 # Column already exists
                 pass
+
+            # Add story_id column if it doesn't exist (migration support)
+            try:
+                conn.execute("ALTER TABLE articles ADD COLUMN story_id TEXT")
+            except sqlite3.OperationalError:
+                # Column already exists
+                pass
             conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_articles_feed_url ON articles(feed_url)
             """)

@@ -448,14 +448,14 @@ def setup_wizard() -> None:
     setup_providers = []  # Providers that could be set up with API key
 
     for i, p in enumerate(providers, 1):
-        if p["available"] and p["type"] != ProviderType.SIMPLE:
+        if p["available"]:
             status = "[green]Ready[/green]"
             available_providers.append((i, p))
         elif p["type"] in [ProviderType.GEMINI, ProviderType.CLAUDE, ProviderType.GROK, ProviderType.OPENAI]:
             status = "[yellow]Needs API Key[/yellow]"
             setup_providers.append((i, p))
         elif p["type"] == ProviderType.CLAUDE_CODE:
-            status = "[yellow]Needs SDK[/yellow]"
+            status = "[yellow]Needs CLI[/yellow]"
             setup_providers.append((i, p))
         elif p["type"] in [ProviderType.LM_STUDIO, ProviderType.OLLAMA]:
             status = "[yellow]Not Running[/yellow]"
@@ -506,7 +506,6 @@ def setup_wizard() -> None:
         console.print("Options:")
         console.print("  [bold]1[/bold] - Set up a cloud provider (API key)")
         console.print("  [bold]2[/bold] - Set up a local provider (LM Studio/Ollama)")
-        console.print("  [bold]3[/bold] - Use basic summarizer (no AI)")
         console.print("  [bold]q[/bold] - Quit setup")
         console.print()
 
@@ -514,11 +513,6 @@ def setup_wizard() -> None:
 
         if choice == "q":
             console.print("[dim]Setup cancelled[/dim]")
-            return
-        elif choice == "3":
-            config = LLMConfig(provider=ProviderType.SIMPLE)
-            config.save()
-            console.print("[green]Configured to use basic (extractive) summarizer.[/green]")
             return
         elif choice == "2":
             _show_local_setup_instructions()
@@ -536,11 +530,15 @@ def _save_provider_config(provider, providers_list) -> None:
     from .llm_providers import LLMConfig, ProviderType
 
     # Find the provider type
-    provider_type = ProviderType.SIMPLE
+    provider_type = None
     for p in providers_list:
         if p["name"] == provider.name or provider.name.startswith(p["name"]):
             provider_type = p["type"]
             break
+
+    if provider_type is None:
+        console.print("[red]Could not determine provider type[/red]")
+        return
 
     config = LLMConfig(provider=provider_type)
     config.save()
