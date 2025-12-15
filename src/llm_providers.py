@@ -20,7 +20,10 @@ class ProviderType(str, Enum):
     OPENAI = "openai"  # OpenAI API
     OPENAI_COMPATIBLE = "openai-compatible"  # Any OpenAI-compatible endpoint
     TRANSFORMERS = "transformers"  # HuggingFace transformers (local)
-    CLAUDE = "claude"  # Claude via SDK (for Claude Code users)
+    CLAUDE = "claude"  # Claude via basic SDK (requires API key)
+    CLAUDE_AGENT = "claude-agent"  # Claude via Agent SDK (uses Claude Code auth)
+    GEMINI = "gemini"  # Google Gemini API
+    GROK = "grok"  # xAI Grok API
 
 
 @dataclass
@@ -447,6 +450,15 @@ def get_provider(config: Optional[LLMConfig] = None) -> LLMProvider:
     elif config.provider == ProviderType.TRANSFORMERS:
         return TransformersProvider(model=config.model or "facebook/bart-large-cnn")
 
+    elif config.provider == ProviderType.CLAUDE_AGENT:
+        return ClaudeAgentProvider(model=config.model or "claude-sonnet-4-20250514")
+
+    elif config.provider == ProviderType.GEMINI:
+        return GeminiProvider(model=config.model or "gemini-1.5-flash")
+
+    elif config.provider == ProviderType.GROK:
+        return GrokProvider(model=config.model or "grok-beta")
+
     else:
         return SimpleSummarizerProvider()
 
@@ -484,36 +496,65 @@ def list_providers() -> list[dict]:
             "available": bool(os.getenv("OPENAI_API_KEY")),
             "description": "OpenAI API (requires API key)",
         },
+        {
+            "type": ProviderType.CLAUDE,
+            "name": "Claude (API)",
+            "available": ClaudeProvider().is_available(),
+            "description": "Claude API - requires ANTHROPIC_API_KEY (NOT same as Claude subscription)",
+        },
+        {
+            "type": ProviderType.CLAUDE_AGENT,
+            "name": "Claude (Agent SDK)",
+            "available": ClaudeAgentProvider().is_available(),
+            "description": "Claude via Agent SDK - uses Claude Code auth (no API key needed)",
+        },
+        {
+            "type": ProviderType.GEMINI,
+            "name": "Gemini",
+            "available": GeminiProvider().is_available(),
+            "description": "Google Gemini API (free tier available)",
+        },
+        {
+            "type": ProviderType.GROK,
+            "name": "Grok",
+            "available": GrokProvider().is_available(),
+            "description": "xAI Grok API (requires API key)",
+        },
     ]
     return providers
 
 
 class ClaudeProvider(LLMProvider):
     """
-    Claude provider using the Anthropic SDK.
-    Works for users who have Claude Code CLI authenticated.
+    Claude provider using the Anthropic Python SDK.
+    Requires ANTHROPIC_API_KEY environment variable.
+
+    Note: This uses the basic 'anthropic' SDK, NOT the Agent SDK.
+    The basic SDK requires an API key and cannot use Claude Code auth.
     """
 
     def __init__(self, model: str = "claude-sonnet-4-20250514"):
-        self.model_name = model
+        super().__init__()
+        self._model = model
         self._client = None
         self._fallback = SimpleSummarizerProvider()
 
     @property
     def name(self) -> str:
-        return f"Claude ({self.model_name})"
+        return "Claude"
+
+    @property
+    def model_name(self) -> str:
+        return self._model
 
     def is_available(self) -> bool:
-        """Check if Claude SDK is available and authenticated."""
+        """Check if Claude SDK is available and API key is set."""
         try:
             import anthropic  # noqa
 
-            # Check if API key is available
-            if os.getenv("ANTHROPIC_API_KEY"):
-                return True
-            # Check for Claude Code config
-            claude_config = Path.home() / ".claude" / ".credentials.json"
-            return claude_config.exists()
+            # The basic anthropic SDK requires an API key
+            # It CANNOT use Claude Code auth - that requires the Agent SDK
+            return bool(os.getenv("ANTHROPIC_API_KEY"))
         except ImportError:
             return False
 
@@ -528,6 +569,7 @@ class ClaudeProvider(LLMProvider):
         if not text:
             return ""
 
+        original_text = text
         if not self.is_available():
             return self._fallback.summarize(text, max_length)
 
@@ -543,13 +585,211 @@ Text:
         try:
             client = self._get_client()
             message = client.messages.create(
-                model=self.model_name,
+                model=self._model,
                 max_tokens=256,
                 messages=[{"role": "user", "content": prompt}],
             )
-            return message.content[0].text.strip()
+            summary = message.content[0].text.strip()
+
+            # Record usage from API response
+            usage = message.usage
+            if usage:
+                self.last_usage = UsageStats(
+                    input_tokens=usage.input_tokens,
+                    output_tokens=usage.output_tokens,
+                    model=self._model,
+                    provider=self.name,
+                )
+                self.session_usage["calls"] += 1
+                self.session_usage["total_tokens"] += self.last_usage.total_tokens
+            else:
+                self._record_usage(original_text, summary, self._model)
+
+            return summary
         except Exception:
             return self._fallback.summarize(text, max_length)
+
+
+class ClaudeAgentProvider(LLMProvider):
+    """
+    Claude provider using the Agent SDK.
+    Can use Claude Code authentication (no API key needed if authenticated).
+    Falls back to ANTHROPIC_API_KEY if Claude Code auth not available.
+
+    Requires: pip install claude-agent-sdk
+    """
+
+    def __init__(self, model: str = "claude-sonnet-4-20250514"):
+        super().__init__()
+        self._model = model
+        self._fallback = SimpleSummarizerProvider()
+
+    @property
+    def name(self) -> str:
+        return "Claude (Agent SDK)"
+
+    @property
+    def model_name(self) -> str:
+        return self._model
+
+    def is_available(self) -> bool:
+        """Check if Claude Agent SDK is available."""
+        try:
+            import claude_agent_sdk  # noqa
+            return True
+        except ImportError:
+            return False
+
+    def summarize(self, text: str, max_length: int = 150) -> str:
+        """Generate summary using Claude Agent SDK."""
+        import asyncio
+
+        if not text:
+            return ""
+
+        if not self.is_available():
+            return self._fallback.summarize(text, max_length)
+
+        original_text = text
+        if len(text) > 4000:
+            text = text[:4000]
+
+        try:
+            # Run async summarization
+            summary = asyncio.run(self._async_summarize(text, max_length))
+            self._record_usage(original_text, summary, self._model)
+            return summary
+        except Exception:
+            return self._fallback.summarize(text, max_length)
+
+    async def _async_summarize(self, text: str, max_length: int) -> str:
+        """Async implementation using Agent SDK."""
+        from claude_agent_sdk import query, ClaudeAgentOptions
+
+        prompt = f"""Summarize the following text in {max_length} characters or less.
+Be concise and capture the key points. Return only the summary, no preamble.
+
+Text:
+{text}"""
+
+        options = ClaudeAgentOptions(
+            max_turns=1,
+            allowed_tools=[],  # No tools needed for summarization
+        )
+
+        summary = ""
+        async for message in query(prompt=prompt, options=options):
+            # Extract text from assistant messages
+            if hasattr(message, 'content'):
+                for block in message.content:
+                    if hasattr(block, 'text'):
+                        summary += block.text
+
+        return summary.strip()
+
+
+class GeminiProvider(LLMProvider):
+    """
+    Google Gemini API provider.
+    Free tier available with generous limits.
+    """
+
+    def __init__(self, model: str = "gemini-1.5-flash"):
+        super().__init__()
+        self._model = model
+        self._client = None
+        self._fallback = SimpleSummarizerProvider()
+
+    @property
+    def name(self) -> str:
+        return "Gemini"
+
+    @property
+    def model_name(self) -> str:
+        return self._model
+
+    def is_available(self) -> bool:
+        """Check if Gemini SDK is available and API key is set."""
+        try:
+            import google.generativeai  # noqa
+
+            # Check for API key
+            api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+            return bool(api_key)
+        except ImportError:
+            return False
+
+    def _get_client(self):
+        if self._client is None:
+            import google.generativeai as genai
+
+            api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+            genai.configure(api_key=api_key)
+            self._client = genai.GenerativeModel(self._model)
+        return self._client
+
+    def summarize(self, text: str, max_length: int = 150) -> str:
+        if not text:
+            return ""
+
+        original_text = text
+        if not self.is_available():
+            return self._fallback.summarize(text, max_length)
+
+        if len(text) > 4000:
+            text = text[:4000]
+
+        prompt = f"""Summarize the following text in {max_length} characters or less.
+Be concise and capture the key points. Return only the summary, no preamble.
+
+Text:
+{text}"""
+
+        try:
+            model = self._get_client()
+            response = model.generate_content(prompt)
+            summary = response.text.strip()
+
+            # Record usage - Gemini provides usage metadata
+            if hasattr(response, 'usage_metadata') and response.usage_metadata:
+                usage = response.usage_metadata
+                self.last_usage = UsageStats(
+                    input_tokens=getattr(usage, 'prompt_token_count', 0),
+                    output_tokens=getattr(usage, 'candidates_token_count', 0),
+                    total_tokens=getattr(usage, 'total_token_count', 0),
+                    model=self._model,
+                    provider=self.name,
+                )
+                self.session_usage["calls"] += 1
+                self.session_usage["total_tokens"] += self.last_usage.total_tokens
+            else:
+                self._record_usage(original_text, summary, self._model)
+
+            return summary
+        except Exception:
+            return self._fallback.summarize(text, max_length)
+
+
+class GrokProvider(OpenAICompatibleProvider):
+    """
+    xAI Grok API provider.
+    Uses OpenAI-compatible API format.
+    Requires XAI_API_KEY environment variable.
+    """
+
+    def __init__(self, model: str = "grok-beta"):
+        api_key = os.getenv("XAI_API_KEY") or os.getenv("GROK_API_KEY")
+        super().__init__(
+            base_url="https://api.x.ai/v1",
+            api_key=api_key,
+            model=model,
+            provider_name="Grok",
+        )
+
+    def is_available(self) -> bool:
+        """Check if Grok API key is set."""
+        api_key = os.getenv("XAI_API_KEY") or os.getenv("GROK_API_KEY")
+        return bool(api_key)
 
 
 def auto_detect_provider() -> Optional[LLMProvider]:
@@ -559,10 +799,11 @@ def auto_detect_provider() -> Optional[LLMProvider]:
     Priority:
     1. LM Studio (if running locally - free, fast)
     2. Ollama (if running locally - free)
-    3. Claude (if SDK installed and authenticated)
-    4. OpenAI (if API key set)
-    5. Transformers (if installed - can be slow first run)
-    6. None (user needs to set up a provider)
+    3. Gemini (if API key set - has free tier)
+    4. Claude (if SDK installed and authenticated)
+    5. OpenAI (if API key set)
+    6. Transformers (if installed - can be slow first run)
+    7. None (user needs to set up a provider)
     """
     # Check local providers first (free, no API costs)
     lm_studio = LMStudioProvider()
@@ -573,7 +814,22 @@ def auto_detect_provider() -> Optional[LLMProvider]:
     if ollama.is_available():
         return ollama
 
-    # Check Claude (common for Claude Code users)
+    # Check Gemini (has free tier, good quality)
+    gemini = GeminiProvider()
+    if gemini.is_available():
+        return gemini
+
+    # Check Grok
+    grok = GrokProvider()
+    if grok.is_available():
+        return grok
+
+    # Check Claude Agent SDK first (can use Claude Code auth, no API key needed)
+    claude_agent = ClaudeAgentProvider()
+    if claude_agent.is_available():
+        return claude_agent
+
+    # Check Claude API (requires ANTHROPIC_API_KEY)
     claude = ClaudeProvider()
     if claude.is_available():
         return claude
@@ -614,6 +870,7 @@ def get_setup_instructions() -> str:
     return """
 No LLM provider detected. For AI-powered summaries, set up one of:
 
+[LOCAL OPTIONS - Free, no API costs]
 1. LM Studio (recommended for local/free):
    - Download from https://lmstudio.ai
    - Load a model and start the local server
@@ -624,11 +881,28 @@ No LLM provider detected. For AI-powered summaries, set up one of:
    - Run: ollama pull llama2
    - It will auto-detect at localhost:11434
 
-3. Claude (if you use Claude Code):
-   - Install: pip install anthropic
-   - Set ANTHROPIC_API_KEY or use Claude Code auth
+[CLOUD OPTIONS - API-based]
+3. Gemini (FREE tier available - recommended):
+   - Get free API key at https://aistudio.google.com/apikey
+   - pip install google-generativeai
+   - Set GOOGLE_API_KEY or GEMINI_API_KEY environment variable
 
-4. OpenAI:
+4. Claude Agent SDK (uses Claude Code auth - no API key needed!):
+   - pip install claude-agent-sdk
+   - If you have Claude Code authenticated, it works automatically
+   - Requires Claude Pro/Max subscription
+
+5. Claude API (separate API key required):
+   - pip install anthropic
+   - Set ANTHROPIC_API_KEY environment variable
+   - NOTE: A Claude subscription (claude.ai) is NOT an API key!
+     Get API key at: https://console.anthropic.com/
+
+6. Grok (xAI):
+   - Get API key at: https://console.x.ai/
+   - Set XAI_API_KEY environment variable
+
+7. OpenAI:
    - Set OPENAI_API_KEY environment variable
 
 Run 'rss setup' for guided configuration.
@@ -658,7 +932,7 @@ def validate_llm_ready(require_llm: bool = False) -> tuple[LLMProvider, bool, Op
 
 This feature requires an AI model to work properly. Please set up one of these:
 
-[QUICK OPTIONS]
+[LOCAL OPTIONS - Free, no API costs]
 1. LM Studio (recommended if you have a decent GPU):
    - Download: https://lmstudio.ai
    - Load any model and click "Start Server"
@@ -670,11 +944,27 @@ This feature requires an AI model to work properly. Please set up one of these:
    - We'll auto-detect it at localhost:11434
 
 [CLOUD OPTIONS]
-3. Claude (if you use Claude Code):
-   - pip install anthropic
-   - Set ANTHROPIC_API_KEY or use existing Claude Code auth
+3. Gemini (FREE tier available - easiest cloud option):
+   - Get free API key: https://aistudio.google.com/apikey
+   - pip install google-generativeai
+   - Set GOOGLE_API_KEY or GEMINI_API_KEY
 
-4. OpenAI:
+4. Claude Agent SDK (uses Claude Code auth - no API key needed!):
+   - pip install claude-agent-sdk
+   - If you have Claude Code authenticated, it works automatically
+   - Requires Claude Pro/Max subscription
+
+5. Claude API (separate API key required):
+   - pip install anthropic
+   - Set ANTHROPIC_API_KEY environment variable
+   - NOTE: A Claude subscription (claude.ai) is NOT an API key!
+     Get API key at: https://console.anthropic.com/
+
+6. Grok (xAI):
+   - Get API key at: https://console.x.ai/
+   - Set XAI_API_KEY environment variable
+
+7. OpenAI:
    - Set OPENAI_API_KEY environment variable
 
 Run 'rss setup' for interactive configuration."""

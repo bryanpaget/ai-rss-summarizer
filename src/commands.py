@@ -105,12 +105,15 @@ def update(
         return stats
 
     # Step 4: Summarize articles that need it
+    cached_count = 0
     for article in articles:
         if not article.summary:
             summary = provider.summarize(article.content)
             storage.update_summary(article.id, summary)
             article.summary = summary
             stats["summarized"] += 1
+        else:
+            cached_count += 1
 
         if not article.trend_tags:
             tags = analyze_article(article)
@@ -118,7 +121,7 @@ def update(
             article.trend_tags = tags
 
     # Step 5: Present the digest
-    _display_digest(articles, topic_filter, provider)
+    _display_digest(articles, topic_filter, provider, cached_count)
     stats["displayed"] = len(articles)
 
     return stats
@@ -158,7 +161,7 @@ def _matches_topic_keywords(article, topic: str) -> bool:
     return topic in text
 
 
-def _display_digest(articles: list, topic_filter: Optional[str] = None, provider=None) -> None:
+def _display_digest(articles: list, topic_filter: Optional[str] = None, provider=None, cached_count: int = 0) -> None:
     """Display a formatted digest of articles."""
     title = "What's New"
     if topic_filter:
@@ -188,21 +191,35 @@ def _display_digest(articles: list, topic_filter: Optional[str] = None, provider
         console.print(f"   [dim underline]{article.link}[/dim underline]")
         console.print()
 
-    # Provider transparency footer
-    if provider and hasattr(provider, 'session_usage'):
-        usage = provider.session_usage
-        model = provider.model_name if hasattr(provider, 'model_name') else "unknown"
+    # Provider transparency footer - always show full info
+    console.print("-" * 60)
 
-        footer_parts = [f"[dim]Summarized by: {provider.name}[/dim]"]
-        if model and model != "unknown":
-            footer_parts.append(f"[dim]({model})[/dim]")
-        if usage.get("calls", 0) > 0:
-            footer_parts.append(f"[dim]| {usage['calls']} articles[/dim]")
-        if usage.get("total_tokens", 0) > 0:
-            footer_parts.append(f"[dim]| ~{usage['total_tokens']:,} tokens[/dim]")
+    if provider:
+        # Get model name - try to get the actual discovered model
+        model = "unknown"
+        if hasattr(provider, '_discovered_model') and provider._discovered_model:
+            model = provider._discovered_model
+        elif hasattr(provider, 'model_name'):
+            model = provider.model_name
 
-        console.print("-" * 60)
+        # Get usage stats
+        usage = getattr(provider, 'session_usage', {"calls": 0, "total_tokens": 0})
+        summarized_count = usage.get("calls", 0)
+        total_tokens = usage.get("total_tokens", 0)
+
+        # Build transparent footer
+        footer_parts = [f"[dim]Provider: {provider.name}[/dim]"]
+        footer_parts.append(f"[dim]| Model: {model}[/dim]")
+        footer_parts.append(f"[dim]| Articles: {len(articles)} ({summarized_count} summarized, {cached_count} cached)[/dim]")
+
+        if total_tokens > 0:
+            footer_parts.append(f"[dim]| Tokens: ~{total_tokens:,}[/dim]")
+        elif cached_count > 0 and summarized_count == 0:
+            footer_parts.append(f"[dim]| Tokens: 0 (all cached)[/dim]")
+
         console.print(" ".join(footer_parts))
+    else:
+        console.print("[dim]Provider: None[/dim]")
 
 
 def setup_wizard() -> None:

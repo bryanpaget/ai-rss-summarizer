@@ -2,3 +2,8 @@
 # These can be large downloads - only install if you want local summarization
 transformers>=4.35.0
 torch>=2.0.0
+
+# API-based LLM providers (lighter weight alternatives)
+anthropic>=0.20.0  # Claude API
+google-generativeai>=0.5.0  # Gemini API
+claude-agent-sdk>=0.1.0  # Claude Agent SDK (uses Claude Code auth)
