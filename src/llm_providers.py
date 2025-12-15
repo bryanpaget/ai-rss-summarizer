@@ -338,7 +338,14 @@ class LMStudioProvider(OpenAICompatibleProvider):
         self._auto_load_attempted = False
 
     def _auto_load_model(self) -> bool:
-        """Attempt to auto-load a model using lms CLI."""
+        """
+        Attempt to auto-load a model using lms CLI.
+
+        Uses universal config at ~/.claude/config/safe-auto-load.json when available.
+        Falls back to bundled defaults for standalone installation.
+
+        Safety: Only loads models from approved list, checks resources first.
+        """
         import subprocess
         import shutil
 
@@ -346,20 +353,70 @@ class LMStudioProvider(OpenAICompatibleProvider):
         if not shutil.which('lms'):
             return False
 
-        # Default model to load (can be configured later)
-        default_model = "google/gemma-3n-e4b"
+        # Try to load universal config, fall back to bundled defaults
+        config = self._get_auto_load_config()
+
+        # Check if auto-load is enabled
+        if not config.get("enabled", True):
+            return False
+
+        default_model = config.get("default_model", "google/gemma-3n-e4b")
+        ttl_seconds = config.get("ttl_seconds", 300)
+        approved_models = config.get("approved_models", ["google/gemma-3n-e4b"])
+
+        # Security: Only load models on approved list
+        if default_model not in approved_models:
+            return False
 
         try:
-            # Use lms load with TTL for auto-unload after idle
+            # Check resources first using LM Studio's --estimate-only
+            estimate_result = subprocess.run(
+                ["lms", "load", default_model, "--estimate-only", "--yes"],
+                capture_output=True,
+                timeout=30,
+            )
+
+            # Check if resources are sufficient
+            estimate_output = estimate_result.stdout.decode('utf-8', errors='ignore')
+            if "cannot be loaded" in estimate_output.lower():
+                return False
+
+            # Load the model with TTL for auto-unload after idle
             result = subprocess.run(
-                ["lms", "load", default_model, "--ttl", "300"],  # 5 min TTL
+                ["lms", "load", default_model, "--ttl", str(ttl_seconds), "--yes"],
                 capture_output=True,
                 timeout=120,
-                # Don't use text=True to avoid encoding issues on Windows
             )
             return result.returncode == 0
         except Exception:
             return False
+
+    def _get_auto_load_config(self) -> dict:
+        """
+        Get auto-load configuration.
+
+        Priority:
+        1. Universal config at ~/.claude/config/safe-auto-load.json
+        2. Bundled defaults (for standalone installation)
+        """
+        # Try universal config location
+        universal_config_path = Path.home() / ".claude" / "config" / "safe-auto-load.json"
+
+        if universal_config_path.exists():
+            try:
+                with open(universal_config_path) as f:
+                    return json.load(f)
+            except Exception:
+                pass
+
+        # Bundled defaults for standalone installation
+        # Security: Hardcoded model is intentional - only user-approved models can auto-load
+        return {
+            "enabled": True,
+            "default_model": "google/gemma-3n-e4b",
+            "ttl_seconds": 300,
+            "approved_models": ["google/gemma-3n-e4b"]
+        }
 
     def _make_request(self, prompt: str, max_tokens: int, is_summarize: bool = False) -> str:
         """Make a request with auto-load retry on 'No models loaded' error."""
