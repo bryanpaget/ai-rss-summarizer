@@ -13,6 +13,12 @@ from .rss import fetch_all_feeds, load_feeds
 from .trends import analyze_article, TREND_CATEGORIES
 from .llm_providers import get_best_provider, get_setup_instructions
 from .user_context import UserContextStore, RelevanceEngine, sort_by_relevance
+from .signal_tagger import SignalTagger
+from .clustering import batch_process_articles
+from .storage_perspectives import add_perspective_methods
+from .perspectives import synthesize_perspectives
+from .emergence import detect_emerging_trends
+from .knowledge import KnowledgeBase, extract_insights_from_article, detect_connections
 
 console = Console(force_terminal=True, legacy_windows=True)
 
@@ -20,6 +26,7 @@ console = Console(force_terminal=True, legacy_windows=True)
 def update(
     feeds_file: str = "config/feeds.txt",
     db_path: str = "articles.db",
+    kb_path: str = "knowledge.db",
     topic_filter: Optional[str] = None,
     limit: int = 10,
     show_all: bool = False,
@@ -28,40 +35,59 @@ def update(
     min_relevance: float = 0.0,
 ) -> dict:
     """
-    Fetch new articles, summarize them, and present what's new.
+    The one-stop-shop command that does everything automatically.
 
     This is the main user-facing command that:
     1. Fetches latest articles from all feeds
     2. Generates summaries using the best available LLM
-    3. Analyzes trends
-    4. Presents a digest of what's new, optionally filtered by topic
+    3. Tags articles with signals (breaking, opinion, etc.)
+    4. Clusters articles into stories
+    5. Synthesizes perspectives across sources
+    6. Detects emerging trends
+    7. Extracts knowledge to the knowledge base
+    8. Applies personalized relevance scoring
+    9. Presents a comprehensive digest
 
     Args:
         feeds_file: Path to feeds configuration
-        db_path: Path to database
+        db_path: Path to articles database
+        kb_path: Path to knowledge database
         topic_filter: Optional topic to filter by (e.g., "tech", "politics")
-        limit: Max articles to show
+        limit: Max stories to show
         show_all: Show all articles, not just new ones
 
     Returns:
         Dict with update statistics
     """
     storage = Storage(db_path)
-    stats = {"fetched": 0, "new": 0, "summarized": 0, "displayed": 0}
+    add_perspective_methods(storage)  # Add clustering/perspective methods
+    kb = KnowledgeBase(kb_path)
 
-    # Load user context if enabled
+    stats = {
+        "fetched": 0, "new": 0, "summarized": 0, "tagged": 0,
+        "clustered": 0, "stories": 0, "insights": 0, "displayed": 0
+    }
+
+    # Get the best LLM provider first
+    provider, is_llm = get_best_provider()
+    if not is_llm:
+        console.print("[yellow]No LLM available. Run 'rss setup' for full features.[/yellow]")
+        return stats
+
+    # Load user context
     context_store = None
     user_profile = None
     if use_context:
         try:
             context_store = UserContextStore(db_path=db_path)
             user_profile = context_store.load_profile()
-        except Exception as e:
-            console.print(f"[yellow]Warning: Could not load user context: {e}[/yellow]")
+        except Exception:
             use_context = False
 
-    # Step 1: Fetch new articles
-    console.print("[dim]Checking for new articles...[/dim]")
+    # =========================================================================
+    # STEP 1: Fetch new articles
+    # =========================================================================
+    console.print("[bold]Checking feeds...[/bold]")
     feeds = load_feeds(feeds_file)
 
     if not feeds:
@@ -69,84 +95,228 @@ def update(
         return stats
 
     fetch_results = fetch_all_feeds(feeds_file, storage)
-
     for result in fetch_results:
         stats["fetched"] += result["fetched"]
         stats["new"] += result["new"]
 
     if stats["new"] == 0 and not show_all:
-        console.print("[dim]No new articles since last check.[/dim]")
-        # Still show recent if user wants
-        articles = storage.get_articles(limit=limit)
-        if articles:
-            console.print(f"[dim]Showing {len(articles)} recent articles instead.[/dim]\n")
+        console.print(f"[dim]No new articles. Analyzing {limit} recent instead.[/dim]")
     else:
-        console.print(f"[green]Found {stats['new']} new articles![/green]\n")
+        console.print(f"[green]Found {stats['new']} new articles[/green]")
 
-    # Step 2: Get the best LLM provider
-    provider, is_llm = get_best_provider()
+    # =========================================================================
+    # STEP 2: Process articles (summarize, tag, extract knowledge)
+    # =========================================================================
+    console.print(f"[dim]Processing with {provider.name}...[/dim]")
 
-    if is_llm:
-        console.print(f"[dim]Using {provider.name} for summaries[/dim]")
-    else:
-        console.print("[dim]Using basic summaries (set up an LLM for better results)[/dim]")
+    # Get articles to process
+    articles = storage.get_articles(limit=limit * 3)
+    tagger = SignalTagger(use_llm=True, provider=provider)
 
-    # Step 3: Get articles to display
-    articles = storage.get_articles(limit=limit * 2)  # Get more to filter
-
-    # Apply personalized relevance scoring if context enabled
-    if use_context and user_profile and context_store:
-        articles = sort_by_relevance(articles, user_profile, context_store)
-        # Filter by minimum relevance if specified
-        if min_relevance > 0:
-            articles = [a for a in articles if getattr(a, 'relevance_score', 0) >= min_relevance]
-
-    # Filter by topic if specified
-    if topic_filter:
-        topic_filter_lower = topic_filter.lower()
-        filtered = []
-        for article in articles:
-            # Check if article matches the topic filter
-            if not article.trend_tags:
-                tags = analyze_article(article)
-                storage.update_trends(article.id, tags)
-                article.trend_tags = tags
-
-            if topic_filter_lower in article.trend_tags.lower():
-                filtered.append(article)
-            elif _matches_topic_keywords(article, topic_filter_lower):
-                filtered.append(article)
-
-        articles = filtered[:limit]
-        console.print(f"[dim]Filtered to {len(articles)} articles matching '{topic_filter}'[/dim]\n")
-    else:
-        articles = articles[:limit]
-
-    if not articles:
-        console.print("[yellow]No articles found matching your criteria.[/yellow]")
-        return stats
-
-    # Step 4: Summarize articles that need it
-    cached_count = 0
     for article in articles:
+        # Summarize if needed
         if not article.summary:
-            summary = provider.summarize(article.content)
-            storage.update_summary(article.id, summary)
-            article.summary = summary
-            stats["summarized"] += 1
-        else:
-            cached_count += 1
+            try:
+                article.summary = provider.summarize(article.content)
+                storage.update_summary(article.id, article.summary)
+                stats["summarized"] += 1
+            except Exception:
+                pass
 
+        # Tag with signals if needed
+        if not article.signal_tags:
+            try:
+                tags = tagger.tag_article(article)
+                storage.update_signal_tags(article.id, tags.to_json())
+                article.signal_tags = tags.to_json()
+                stats["tagged"] += 1
+            except Exception:
+                pass
+
+        # Analyze trends if needed
         if not article.trend_tags:
             tags = analyze_article(article)
             storage.update_trends(article.id, tags)
             article.trend_tags = tags
 
-    # Step 5: Present the digest
-    _display_digest(articles, topic_filter, provider, cached_count, show_scores=show_scores)
-    stats["displayed"] = len(articles)
+        # Extract knowledge
+        try:
+            insights = extract_insights_from_article(article, provider, kb)
+            if insights:
+                stats["insights"] += len(insights)
+                for insight in insights:
+                    detect_connections(insight, kb, provider)
+        except Exception:
+            pass
 
+    # =========================================================================
+    # STEP 3: Cluster into stories
+    # =========================================================================
+    console.print("[dim]Clustering into stories...[/dim]")
+    try:
+        cluster_stats = batch_process_articles(articles, provider, storage)
+        stats["clustered"] = cluster_stats.get("processed", 0)
+        stats["stories"] = cluster_stats.get("stories_created", 0)
+    except Exception:
+        pass
+
+    # =========================================================================
+    # STEP 4: Get stories to display
+    # =========================================================================
+    stories = storage.get_story_clusters()
+
+    # Apply topic filter if specified
+    if topic_filter:
+        topic_lower = topic_filter.lower()
+        filtered_stories = []
+        for story in stories:
+            story_articles = storage.get_articles_by_cluster(story['id'])
+            if any(_matches_topic_keywords(a, topic_lower) for a in story_articles):
+                filtered_stories.append(story)
+        stories = filtered_stories
+        console.print(f"[dim]Filtered to stories matching '{topic_filter}'[/dim]")
+
+    stories = stories[:limit]
+
+    # =========================================================================
+    # STEP 5: Synthesize perspectives for each story
+    # =========================================================================
+    console.print("[dim]Synthesizing perspectives...[/dim]")
+    story_data = []
+
+    for story in stories:
+        story_articles = storage.get_articles_by_cluster(story['id'])
+        if not story_articles:
+            continue
+
+        # Apply relevance scoring to articles within story
+        if use_context and user_profile and context_store:
+            story_articles = sort_by_relevance(story_articles, user_profile, context_store)
+
+        # Get perspectives (consensus + contested by default)
+        perspectives = {}
+        try:
+            perspectives = synthesize_perspectives(
+                story['id'],
+                ['consensus', 'contested'],
+                storage,
+                provider
+            )
+        except Exception:
+            pass
+
+        story_data.append({
+            'story': story,
+            'articles': story_articles,
+            'perspectives': perspectives,
+        })
+
+    # =========================================================================
+    # STEP 6: Detect emerging trends
+    # =========================================================================
+    emerging = []
+    try:
+        emerging = detect_emerging_trends(storage, limit=100, min_confidence="Medium")[:5]
+    except Exception:
+        pass
+
+    # =========================================================================
+    # STEP 7: Display everything
+    # =========================================================================
+    _display_full_digest(
+        story_data,
+        emerging,
+        provider,
+        stats,
+        kb,
+        show_scores=show_scores
+    )
+
+    stats["displayed"] = len(story_data)
     return stats
+
+
+def _display_full_digest(
+    story_data: list,
+    emerging: list,
+    provider,
+    stats: dict,
+    kb,
+    show_scores: bool = False,
+) -> None:
+    """Display the comprehensive digest with stories, perspectives, and emerging trends."""
+
+    console.print()
+    console.print(Panel("[bold]What's New[/bold]", style="blue"))
+    console.print()
+
+    if not story_data:
+        console.print("[yellow]No stories to display.[/yellow]")
+        return
+
+    # Display each story with perspectives
+    for i, data in enumerate(story_data, 1):
+        story = data['story']
+        articles = data['articles']
+        perspectives = data['perspectives']
+
+        # Story header
+        console.print(f"[bold cyan]{i}. {story['title']}[/bold cyan]")
+        console.print(f"   [dim]{len(articles)} sources[/dim]")
+
+        # Show top article summary
+        if articles and articles[0].summary:
+            console.print(f"   {articles[0].summary}")
+
+        # Show signal tags from first article
+        if articles and articles[0].signal_tags:
+            try:
+                import json
+                tags_data = json.loads(articles[0].signal_tags)
+                all_tags = []
+                for tag_list in tags_data.values():
+                    all_tags.extend(tag_list)
+                if all_tags:
+                    console.print(f"   [dim]Signals: {', '.join(all_tags[:4])}[/dim]")
+            except Exception:
+                pass
+
+        # Show perspectives
+        if perspectives:
+            if 'consensus' in perspectives:
+                p = perspectives['consensus']
+                console.print(f"   [green]Consensus:[/green] {p.content[:150]}...")
+            if 'contested' in perspectives:
+                p = perspectives['contested']
+                console.print(f"   [yellow]Contested:[/yellow] {p.content[:150]}...")
+
+        # Show relevance score if requested
+        if show_scores and articles and hasattr(articles[0], 'relevance_score'):
+            score = articles[0].relevance_score
+            color = "green" if score >= 0.7 else "yellow" if score >= 0.4 else "dim"
+            console.print(f"   [{color}]Relevance: {score:.2f}[/{color}]")
+
+        console.print()
+
+    # Show emerging trends
+    if emerging:
+        console.print("[bold magenta]Emerging Trends[/bold magenta]")
+        console.print("[dim]Terms gaining traction before mainstream[/dim]")
+        for trend in emerging[:3]:
+            console.print(f"  • {trend.term} [dim]({trend.confidence} confidence)[/dim]")
+        console.print()
+
+    # Show knowledge stats
+    kb_stats = kb.get_stats()
+    if kb_stats['total_insights'] > 0:
+        console.print(f"[dim]Knowledge base: {kb_stats['total_insights']} insights, {kb_stats['total_entities']} entities[/dim]")
+
+    # Footer with provider info
+    console.print("-" * 60)
+    footer = f"[dim]Provider: {provider.name} | "
+    footer += f"Processed: {stats.get('summarized', 0)} summaries, {stats.get('tagged', 0)} tagged, "
+    footer += f"{stats.get('stories', 0)} new stories, {stats.get('insights', 0)} insights[/dim]"
+    console.print(footer)
 
 
 def _matches_topic_keywords(article, topic: str) -> bool:
