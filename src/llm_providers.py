@@ -360,8 +360,10 @@ class LMStudioProvider(OpenAICompatibleProvider):
         # Get auto-load settings from project config
         auto_load_config = config.defaults.get("auto_load", {})
 
-        # Check if auto-load is enabled (disabled by default - user must opt in)
-        if not auto_load_config.get("enabled", False):
+        # Auto-load is ENABLED by default for LM Studio
+        # Unlike cloud providers which are always available, local LLMs must be loaded
+        # Without auto-load, the app breaks when using LM Studio with no model loaded
+        if not auto_load_config.get("enabled", True):
             return False
 
         # Model must be configured in project config
