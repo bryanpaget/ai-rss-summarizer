@@ -14,15 +14,16 @@ import httpx
 class ProviderType(str, Enum):
     """Supported LLM provider types."""
 
-    SIMPLE = "simple"  # No LLM, just extractive
     LM_STUDIO = "lm-studio"  # Local LM Studio (OpenAI-compatible)
     OLLAMA = "ollama"  # Local Ollama
     OPENAI = "openai"  # OpenAI API
     OPENAI_COMPATIBLE = "openai-compatible"  # Any OpenAI-compatible endpoint
     TRANSFORMERS = "transformers"  # HuggingFace transformers (local)
     CLAUDE = "claude"  # Claude via basic SDK (requires API key)
-    CLAUDE_AGENT = "claude-agent"  # Claude via Agent SDK (uses Claude Code auth)
+    CLAUDE_CODE = "claude-code"  # Claude via Claude Code CLI (uses Claude Code auth)
     GEMINI = "gemini"  # Google Gemini API
+    GEMINI_CLI = "gemini-cli"  # Gemini via CLI (uses stored OAuth)
+    CODEX_CLI = "codex-cli"  # OpenAI Codex CLI (uses ChatGPT subscription auth)
     GROK = "grok"  # xAI Grok API
 
 
@@ -30,7 +31,7 @@ class ProviderType(str, Enum):
 class LLMConfig:
     """Configuration for LLM provider."""
 
-    provider: ProviderType = ProviderType.SIMPLE
+    provider: Optional[ProviderType] = None
     base_url: Optional[str] = None
     api_key: Optional[str] = None
     model: Optional[str] = None
@@ -40,7 +41,8 @@ class LLMConfig:
     @classmethod
     def from_env(cls) -> "LLMConfig":
         """Load config from environment variables."""
-        provider = ProviderType(os.getenv("RSS_LLM_PROVIDER", "simple"))
+        provider_str = os.getenv("RSS_LLM_PROVIDER")
+        provider = ProviderType(provider_str) if provider_str else None
         return cls(
             provider=provider,
             base_url=os.getenv("RSS_LLM_BASE_URL"),
@@ -58,8 +60,10 @@ class LLMConfig:
         with open(config_path) as f:
             data = json.load(f)
 
+        provider_str = data.get("provider")
+        provider = ProviderType(provider_str) if provider_str else None
         return cls(
-            provider=ProviderType(data.get("provider", "simple")),
+            provider=provider,
             base_url=data.get("base_url"),
             api_key=data.get("api_key"),
             model=data.get("model"),
@@ -114,6 +118,14 @@ class LLMProvider(ABC):
         """Generate a summary of the given text."""
         pass
 
+    def generate(self, prompt: str, max_tokens: int = 500) -> str:
+        """
+        Generate a response to a prompt without any wrapping.
+        Use this for classification, comparison, or custom prompts.
+        Default implementation uses summarize() - subclasses should override.
+        """
+        return self.summarize(prompt, max_length=max_tokens)
+
     @abstractmethod
     def is_available(self) -> bool:
         """Check if the provider is available."""
@@ -148,57 +160,6 @@ class LLMProvider(ABC):
         self.session_usage["total_tokens"] += self.last_usage.total_tokens
 
 
-class SimpleSummarizerProvider(LLMProvider):
-    """Simple extractive summarizer (no LLM)."""
-
-    def __init__(self):
-        super().__init__()
-
-    @property
-    def name(self) -> str:
-        return "Simple (extractive)"
-
-    @property
-    def model_name(self) -> str:
-        return "extractive"
-
-    def is_available(self) -> bool:
-        return True
-
-    def summarize(self, text: str, max_length: int = 150) -> str:
-        """Extract first sentences up to max_length characters."""
-        if not text:
-            return ""
-
-        original_text = text
-        text = " ".join(text.split())
-
-        if len(text) <= max_length:
-            self._record_usage(original_text, text)
-            return text
-
-        sentences = []
-        current = ""
-        for char in text:
-            current += char
-            if char in ".!?" and len(current) > 20:
-                sentences.append(current.strip())
-                current = ""
-
-        summary = ""
-        for sentence in sentences:
-            if len(summary) + len(sentence) + 1 <= max_length:
-                summary = (summary + " " + sentence).strip()
-            else:
-                break
-
-        if not summary:
-            summary = text[: max_length - 3].rsplit(" ", 1)[0] + "..."
-
-        self._record_usage(original_text, summary)
-        return summary
-
-
 class OpenAICompatibleProvider(LLMProvider):
     """
     Provider for OpenAI-compatible APIs.
@@ -217,7 +178,6 @@ class OpenAICompatibleProvider(LLMProvider):
         self.api_key = api_key or "not-needed"  # Many local providers don't need a key
         self.model = model
         self._provider_name = provider_name
-        self._fallback = SimpleSummarizerProvider()
         self._discovered_model: Optional[str] = None
 
     @property
@@ -263,9 +223,6 @@ class OpenAICompatibleProvider(LLMProvider):
             return ""
 
         original_text = text
-        # Truncate very long text to avoid token limits
-        if len(text) > 4000:
-            text = text[:4000]
 
         prompt = f"""Summarize the following text in {max_length} characters or less.
 Be concise and capture the key points.
@@ -275,62 +232,102 @@ Text:
 
 Summary:"""
 
-        try:
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.api_key}",
-            }
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}",
+        }
 
-            model = self._get_model()
-            self._discovered_model = model
+        model = self._get_model()
+        self._discovered_model = model
 
-            payload = {
-                "model": model,
-                "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0.3,
-            }
+        payload = {
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.3,
+        }
 
-            response = httpx.post(
-                f"{self.base_url}/chat/completions",
-                headers=headers,
-                json=payload,
-                timeout=60.0,
+        response = httpx.post(
+            f"{self.base_url}/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=60.0,
+        )
+        response.raise_for_status()
+
+        data = response.json()
+        summary = data["choices"][0]["message"]["content"].strip()
+        # Ensure it's not too long
+        if len(summary) > max_length * 2:
+            summary = summary[:max_length]
+
+        # Record usage - try to get actual tokens from API response
+        usage = data.get("usage", {})
+        if usage:
+            self.last_usage = UsageStats(
+                input_tokens=usage.get("prompt_tokens", 0),
+                output_tokens=usage.get("completion_tokens", 0),
+                total_tokens=usage.get("total_tokens", 0),
+                model=model,
+                provider=self.name,
             )
+            self.session_usage["calls"] += 1
+            self.session_usage["total_tokens"] += self.last_usage.total_tokens
+        else:
+            self._record_usage(original_text, summary, model)
 
-            if response.status_code == 200:
-                data = response.json()
-                summary = data["choices"][0]["message"]["content"].strip()
-                # Ensure it's not too long
-                if len(summary) > max_length * 2:
-                    summary = summary[:max_length]
+        return summary
 
-                # Record usage - try to get actual tokens from API response
-                usage = data.get("usage", {})
-                if usage:
-                    self.last_usage = UsageStats(
-                        input_tokens=usage.get("prompt_tokens", 0),
-                        output_tokens=usage.get("completion_tokens", 0),
-                        total_tokens=usage.get("total_tokens", 0),
-                        model=model,
-                        provider=self.name,
-                    )
-                    self.session_usage["calls"] += 1
-                    self.session_usage["total_tokens"] += self.last_usage.total_tokens
-                else:
-                    self._record_usage(original_text, summary, model)
+    def generate(self, prompt: str, max_tokens: int = 500) -> str:
+        """Generate a response to a prompt without any wrapping."""
+        if not prompt:
+            return ""
 
-                return summary
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}",
+        }
 
-        except Exception as e:
-            # Log error but don't crash - fall back to simple
-            pass
+        model = self._get_model()
+        self._discovered_model = model
 
-        # Fall back to simple summarizer
-        return self._fallback.summarize(text, max_length)
+        payload = {
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.3,
+            "max_tokens": max_tokens,
+        }
+
+        response = httpx.post(
+            f"{self.base_url}/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=60.0,
+        )
+        response.raise_for_status()
+
+        data = response.json()
+        result = data["choices"][0]["message"]["content"].strip()
+
+        # Record usage
+        usage = data.get("usage", {})
+        if usage:
+            self.last_usage = UsageStats(
+                input_tokens=usage.get("prompt_tokens", 0),
+                output_tokens=usage.get("completion_tokens", 0),
+                total_tokens=usage.get("total_tokens", 0),
+                model=model,
+                provider=self.name,
+            )
+            self.session_usage["calls"] += 1
+            self.session_usage["total_tokens"] += self.last_usage.total_tokens
+        else:
+            self._record_usage(prompt, result, model)
+
+        return result
 
 
 class LMStudioProvider(OpenAICompatibleProvider):
-    """LM Studio local LLM provider."""
+    """LM Studio local LLM provider with auto-loading support."""
 
     def __init__(self, model: Optional[str] = None):
         super().__init__(
@@ -338,6 +335,117 @@ class LMStudioProvider(OpenAICompatibleProvider):
             model=model,
             provider_name="LM Studio",
         )
+        self._auto_load_attempted = False
+
+    def _auto_load_model(self) -> bool:
+        """Attempt to auto-load a model using lms CLI."""
+        import subprocess
+        import shutil
+
+        # Check if lms is available
+        if not shutil.which('lms'):
+            return False
+
+        # Default model to load (can be configured later)
+        default_model = "google/gemma-3n-e4b"
+
+        try:
+            # Use lms load with TTL for auto-unload after idle
+            result = subprocess.run(
+                ["lms", "load", default_model, "--ttl", "300"],  # 5 min TTL
+                capture_output=True,
+                timeout=120,
+                # Don't use text=True to avoid encoding issues on Windows
+            )
+            return result.returncode == 0
+        except Exception:
+            return False
+
+    def _make_request(self, prompt: str, max_tokens: int, is_summarize: bool = False) -> str:
+        """Make a request with auto-load retry on 'No models loaded' error."""
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}",
+        }
+
+        model = self._get_model()
+        self._discovered_model = model
+
+        payload = {
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.3,
+            "max_tokens": max_tokens,
+        }
+
+        response = httpx.post(
+            f"{self.base_url}/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=60.0,
+        )
+
+        # Check for "No models loaded" error
+        if response.status_code == 400:
+            try:
+                error_data = response.json()
+                if "No models loaded" in error_data.get("error", {}).get("message", ""):
+                    if not self._auto_load_attempted:
+                        self._auto_load_attempted = True
+                        if self._auto_load_model():
+                            # Retry the request
+                            return self._make_request(prompt, max_tokens, is_summarize)
+            except Exception:
+                pass
+
+        response.raise_for_status()
+
+        data = response.json()
+        result = data["choices"][0]["message"]["content"].strip()
+
+        # Record usage
+        usage = data.get("usage", {})
+        if usage:
+            self.last_usage = UsageStats(
+                input_tokens=usage.get("prompt_tokens", 0),
+                output_tokens=usage.get("completion_tokens", 0),
+                total_tokens=usage.get("total_tokens", 0),
+                model=model,
+                provider=self.name,
+            )
+            self.session_usage["calls"] += 1
+            self.session_usage["total_tokens"] += self.last_usage.total_tokens
+        else:
+            self._record_usage(prompt, result, model)
+
+        return result
+
+    def summarize(self, text: str, max_length: int = 150) -> str:
+        """Generate summary using LM Studio with auto-load support."""
+        if not text:
+            return ""
+
+        prompt = f"""Summarize the following text in {max_length} characters or less.
+Be concise and capture the key points.
+
+Text:
+{text}
+
+Summary:"""
+
+        result = self._make_request(prompt, max_tokens=max_length * 2, is_summarize=True)
+
+        # Ensure it's not too long
+        if len(result) > max_length * 2:
+            result = result[:max_length]
+
+        return result
+
+    def generate(self, prompt: str, max_tokens: int = 500) -> str:
+        """Generate response using LM Studio with auto-load support."""
+        if not prompt:
+            return ""
+        return self._make_request(prompt, max_tokens=max_tokens)
 
 
 class OllamaProvider(OpenAICompatibleProvider):
@@ -355,13 +463,17 @@ class TransformersProvider(LLMProvider):
     """HuggingFace transformers provider (requires local model download)."""
 
     def __init__(self, model: str = "facebook/bart-large-cnn"):
-        self.model_name = model
+        super().__init__()
+        self._model = model
         self._pipeline = None
-        self._fallback = SimpleSummarizerProvider()
 
     @property
     def name(self) -> str:
-        return f"Transformers ({self.model_name})"
+        return f"Transformers ({self._model})"
+
+    @property
+    def model_name(self) -> str:
+        return self._model
 
     def is_available(self) -> bool:
         try:
@@ -376,7 +488,7 @@ class TransformersProvider(LLMProvider):
         if self._pipeline is None:
             from transformers import pipeline
 
-            self._pipeline = pipeline("summarization", model=self.model_name)
+            self._pipeline = pipeline("summarization", model=self._model)
         return self._pipeline
 
     def summarize(self, text: str, max_length: int = 150) -> str:
@@ -384,22 +496,16 @@ class TransformersProvider(LLMProvider):
             return ""
 
         if not self.is_available():
-            return self._fallback.summarize(text, max_length)
+            raise RuntimeError("Transformers library not available")
 
-        if len(text) > 4000:
-            text = text[:4000]
-
-        try:
-            pipeline = self._load_pipeline()
-            result = pipeline(
-                text,
-                max_length=max_length,
-                min_length=30,
-                do_sample=False,
-            )
-            return result[0]["summary_text"]
-        except Exception:
-            return self._fallback.summarize(text, max_length)
+        pipeline = self._load_pipeline()
+        result = pipeline(
+            text,
+            max_length=max_length,
+            min_length=30,
+            do_sample=False,
+        )
+        return result[0]["summary_text"]
 
 
 def get_provider(config: Optional[LLMConfig] = None) -> LLMProvider:
@@ -410,32 +516,33 @@ def get_provider(config: Optional[LLMConfig] = None) -> LLMProvider:
     1. Explicit config passed in
     2. Environment variables
     3. Config file
-    4. Default (simple)
+    4. Auto-detect available provider
+
+    Raises ValueError if no provider is available.
     """
     if config is None:
         # Try environment first, then file
         config = LLMConfig.from_env()
-        if config.provider == ProviderType.SIMPLE:
+        if config.provider is None:
             file_config = LLMConfig.from_file()
-            if file_config.provider != ProviderType.SIMPLE:
+            if file_config.provider is not None:
                 config = file_config
 
-    if config.provider == ProviderType.SIMPLE:
-        return SimpleSummarizerProvider()
+    # If no explicit provider, auto-detect
+    if config.provider is None:
+        provider = auto_detect_provider()
+        if provider is None:
+            raise ValueError("No LLM provider configured or available. Run 'rss setup' to configure.")
+        return provider
 
-    elif config.provider == ProviderType.LM_STUDIO:
+    if config.provider == ProviderType.LM_STUDIO:
         return LMStudioProvider(model=config.model)
 
     elif config.provider == ProviderType.OLLAMA:
         return OllamaProvider(model=config.model)
 
     elif config.provider == ProviderType.OPENAI:
-        return OpenAICompatibleProvider(
-            base_url="https://api.openai.com/v1",
-            api_key=config.api_key or os.getenv("OPENAI_API_KEY"),
-            model=config.model or "gpt-3.5-turbo",
-            provider_name="OpenAI",
-        )
+        return OpenAIAgentsProvider(model=config.model or "gpt-4o-mini")
 
     elif config.provider == ProviderType.OPENAI_COMPATIBLE:
         if not config.base_url:
@@ -450,28 +557,29 @@ def get_provider(config: Optional[LLMConfig] = None) -> LLMProvider:
     elif config.provider == ProviderType.TRANSFORMERS:
         return TransformersProvider(model=config.model or "facebook/bart-large-cnn")
 
-    elif config.provider == ProviderType.CLAUDE_AGENT:
-        return ClaudeAgentProvider(model=config.model or "claude-sonnet-4-20250514")
+    elif config.provider == ProviderType.CLAUDE_CODE:
+        return ClaudeCodeProvider(model=config.model or "sonnet")
 
     elif config.provider == ProviderType.GEMINI:
         return GeminiProvider(model=config.model or "gemini-1.5-flash")
+
+    elif config.provider == ProviderType.GEMINI_CLI:
+        return GeminiCLIProvider(model=config.model or "gemini-2.0-flash")
+
+    elif config.provider == ProviderType.CODEX_CLI:
+        return CodexCLIProvider(model=config.model or "gpt-4.1")
 
     elif config.provider == ProviderType.GROK:
         return GrokProvider(model=config.model or "grok-beta")
 
     else:
-        return SimpleSummarizerProvider()
+        raise ValueError(f"Unknown provider type: {config.provider}")
 
 
 def list_providers() -> list[dict]:
     """List available providers with their status."""
     providers = [
-        {
-            "type": ProviderType.SIMPLE,
-            "name": "Simple (extractive)",
-            "available": True,
-            "description": "Fast, no external dependencies",
-        },
+
         {
             "type": ProviderType.LM_STUDIO,
             "name": "LM Studio",
@@ -484,17 +592,18 @@ def list_providers() -> list[dict]:
             "available": OllamaProvider().is_available(),
             "description": "Local LLM via Ollama (localhost:11434)",
         },
-        {
-            "type": ProviderType.TRANSFORMERS,
-            "name": "Transformers",
-            "available": TransformersProvider().is_available(),
-            "description": "HuggingFace transformers (local model)",
-        },
+
         {
             "type": ProviderType.OPENAI,
-            "name": "OpenAI",
-            "available": bool(os.getenv("OPENAI_API_KEY")),
-            "description": "OpenAI API (requires API key)",
+            "name": "OpenAI Agents",
+            "available": OpenAIAgentsProvider(model="gpt-4o-mini").is_available(),
+            "description": "OpenAI Agents SDK (requires API key)",
+        },
+        {
+            "type": ProviderType.CODEX_CLI,
+            "name": "Codex CLI",
+            "available": CodexCLIProvider().is_available(),
+            "description": "OpenAI via ChatGPT subscription (no API key needed)",
         },
         {
             "type": ProviderType.CLAUDE,
@@ -503,16 +612,22 @@ def list_providers() -> list[dict]:
             "description": "Claude API - requires ANTHROPIC_API_KEY (NOT same as Claude subscription)",
         },
         {
-            "type": ProviderType.CLAUDE_AGENT,
-            "name": "Claude (Agent SDK)",
-            "available": ClaudeAgentProvider().is_available(),
-            "description": "Claude via Agent SDK - uses Claude Code auth (no API key needed)",
+            "type": ProviderType.CLAUDE_CODE,
+            "name": "Claude Code",
+            "available": ClaudeCodeProvider().is_available(),
+            "description": "Uses Claude Code CLI auth (no API key needed)",
         },
         {
             "type": ProviderType.GEMINI,
-            "name": "Gemini",
+            "name": "Gemini (API)",
             "available": GeminiProvider().is_available(),
-            "description": "Google Gemini API (free tier available)",
+            "description": "Google Gemini API (requires API key)",
+        },
+        {
+            "type": ProviderType.GEMINI_CLI,
+            "name": "Gemini CLI",
+            "available": GeminiCLIProvider().is_available(),
+            "description": "Uses Gemini CLI auth (no API key needed)",
         },
         {
             "type": ProviderType.GROK,
@@ -537,7 +652,6 @@ class ClaudeProvider(LLMProvider):
         super().__init__()
         self._model = model
         self._client = None
-        self._fallback = SimpleSummarizerProvider()
 
     @property
     def name(self) -> str:
@@ -571,10 +685,7 @@ class ClaudeProvider(LLMProvider):
 
         original_text = text
         if not self.is_available():
-            return self._fallback.summarize(text, max_length)
-
-        if len(text) > 4000:
-            text = text[:4000]
+            raise RuntimeError("Claude provider not available")
 
         prompt = f"""Summarize the following text in {max_length} characters or less.
 Be concise and capture the key points. Return only the summary, no preamble.
@@ -582,110 +693,100 @@ Be concise and capture the key points. Return only the summary, no preamble.
 Text:
 {text}"""
 
-        try:
-            client = self._get_client()
-            message = client.messages.create(
+        client = self._get_client()
+        message = client.messages.create(
+            model=self._model,
+            max_tokens=256,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        summary = message.content[0].text.strip()
+
+        # Record usage from API response
+        usage = message.usage
+        if usage:
+            self.last_usage = UsageStats(
+                input_tokens=usage.input_tokens,
+                output_tokens=usage.output_tokens,
                 model=self._model,
-                max_tokens=256,
-                messages=[{"role": "user", "content": prompt}],
+                provider=self.name,
             )
-            summary = message.content[0].text.strip()
+            self.session_usage["calls"] += 1
+            self.session_usage["total_tokens"] += self.last_usage.total_tokens
+        else:
+            self._record_usage(original_text, summary, self._model)
 
-            # Record usage from API response
-            usage = message.usage
-            if usage:
-                self.last_usage = UsageStats(
-                    input_tokens=usage.input_tokens,
-                    output_tokens=usage.output_tokens,
-                    model=self._model,
-                    provider=self.name,
-                )
-                self.session_usage["calls"] += 1
-                self.session_usage["total_tokens"] += self.last_usage.total_tokens
-            else:
-                self._record_usage(original_text, summary, self._model)
-
-            return summary
-        except Exception:
-            return self._fallback.summarize(text, max_length)
+        return summary
 
 
-class ClaudeAgentProvider(LLMProvider):
+class ClaudeCodeProvider(LLMProvider):
     """
-    Claude provider using the Agent SDK.
-    Can use Claude Code authentication (no API key needed if authenticated).
-    Falls back to ANTHROPIC_API_KEY if Claude Code auth not available.
-
-    Requires: pip install claude-agent-sdk
+    Claude provider using Claude Code CLI.
+    Uses your existing Claude Code authentication (no API key needed).
+    Calls 'claude --print' via subprocess.
     """
 
-    def __init__(self, model: str = "claude-sonnet-4-20250514"):
+    def __init__(self, model: str = "sonnet"):
         super().__init__()
         self._model = model
-        self._fallback = SimpleSummarizerProvider()
 
     @property
     def name(self) -> str:
-        return "Claude (Agent SDK)"
+        return "Claude Code"
 
     @property
     def model_name(self) -> str:
         return self._model
 
     def is_available(self) -> bool:
-        """Check if Claude Agent SDK is available."""
-        try:
-            import claude_agent_sdk  # noqa
-            return True
-        except ImportError:
-            return False
+        """Check if Claude Code CLI is available."""
+        import shutil
+        return shutil.which("claude") is not None
 
     def summarize(self, text: str, max_length: int = 150) -> str:
-        """Generate summary using Claude Agent SDK."""
-        import asyncio
+        """Generate summary using Claude Code CLI."""
+        import subprocess
+        import json
 
         if not text:
             return ""
 
         if not self.is_available():
-            return self._fallback.summarize(text, max_length)
+            raise RuntimeError("Claude Code CLI not available")
 
         original_text = text
-        if len(text) > 4000:
-            text = text[:4000]
 
-        try:
-            # Run async summarization
-            summary = asyncio.run(self._async_summarize(text, max_length))
-            self._record_usage(original_text, summary, self._model)
-            return summary
-        except Exception:
-            return self._fallback.summarize(text, max_length)
+        prompt = f"Summarize this in {max_length} characters or less. Return only the summary:\n\n{text}"
 
-    async def _async_summarize(self, text: str, max_length: int) -> str:
-        """Async implementation using Agent SDK."""
-        from claude_agent_sdk import query, ClaudeAgentOptions
+        cmd = [
+            "claude",
+            "--print",
+            "--output-format", "json",
+            "--model", self._model,
+            "--tools", "",
+            "--no-session-persistence",
+            prompt
+        ]
 
-        prompt = f"""Summarize the following text in {max_length} characters or less.
-Be concise and capture the key points. Return only the summary, no preamble.
-
-Text:
-{text}"""
-
-        options = ClaudeAgentOptions(
-            max_turns=1,
-            allowed_tools=[],  # No tools needed for summarization
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=60
         )
 
-        summary = ""
-        async for message in query(prompt=prompt, options=options):
-            # Extract text from assistant messages
-            if hasattr(message, 'content'):
-                for block in message.content:
-                    if hasattr(block, 'text'):
-                        summary += block.text
+        if result.returncode != 0:
+            raise RuntimeError(f"Claude Code CLI failed: {result.stderr}")
 
-        return summary.strip()
+        response = json.loads(result.stdout)
+        summary = response.get("result", "").strip()
+
+        # Record usage if available
+        usage = response.get("usage", {})
+        if usage:
+            self._record_usage(original_text, summary, self._model)
+
+        return summary
 
 
 class GeminiProvider(LLMProvider):
@@ -698,7 +799,6 @@ class GeminiProvider(LLMProvider):
         super().__init__()
         self._model = model
         self._client = None
-        self._fallback = SimpleSummarizerProvider()
 
     @property
     def name(self) -> str:
@@ -734,10 +834,7 @@ class GeminiProvider(LLMProvider):
 
         original_text = text
         if not self.is_available():
-            return self._fallback.summarize(text, max_length)
-
-        if len(text) > 4000:
-            text = text[:4000]
+            raise RuntimeError("Gemini provider not available")
 
         prompt = f"""Summarize the following text in {max_length} characters or less.
 Be concise and capture the key points. Return only the summary, no preamble.
@@ -745,29 +842,163 @@ Be concise and capture the key points. Return only the summary, no preamble.
 Text:
 {text}"""
 
-        try:
-            model = self._get_client()
-            response = model.generate_content(prompt)
-            summary = response.text.strip()
+        model = self._get_client()
+        response = model.generate_content(prompt)
+        summary = response.text.strip()
 
-            # Record usage - Gemini provides usage metadata
-            if hasattr(response, 'usage_metadata') and response.usage_metadata:
-                usage = response.usage_metadata
-                self.last_usage = UsageStats(
-                    input_tokens=getattr(usage, 'prompt_token_count', 0),
-                    output_tokens=getattr(usage, 'candidates_token_count', 0),
-                    total_tokens=getattr(usage, 'total_token_count', 0),
-                    model=self._model,
-                    provider=self.name,
-                )
-                self.session_usage["calls"] += 1
-                self.session_usage["total_tokens"] += self.last_usage.total_tokens
-            else:
-                self._record_usage(original_text, summary, self._model)
+        # Record usage - Gemini provides usage metadata
+        if hasattr(response, 'usage_metadata') and response.usage_metadata:
+            usage = response.usage_metadata
+            self.last_usage = UsageStats(
+                input_tokens=getattr(usage, 'prompt_token_count', 0),
+                output_tokens=getattr(usage, 'candidates_token_count', 0),
+                total_tokens=getattr(usage, 'total_token_count', 0),
+                model=self._model,
+                provider=self.name,
+            )
+            self.session_usage["calls"] += 1
+            self.session_usage["total_tokens"] += self.last_usage.total_tokens
+        else:
+            self._record_usage(original_text, summary, self._model)
 
-            return summary
-        except Exception:
-            return self._fallback.summarize(text, max_length)
+        return summary
+
+
+
+
+class GeminiCLIProvider(LLMProvider):
+    """
+    Gemini provider using Gemini CLI.
+    Uses stored OAuth credentials (no API key needed).
+    Install: npm install -g @google/gemini-cli
+    Auth: gemini auth
+    """
+
+    def __init__(self, model: str = "gemini-2.0-flash"):
+        super().__init__()
+        self._model = model
+
+    @property
+    def name(self) -> str:
+        return "Gemini CLI"
+
+    @property
+    def model_name(self) -> str:
+        return self._model
+
+    def is_available(self) -> bool:
+        """Check if Gemini CLI is available and authenticated."""
+        import shutil
+        return shutil.which("gemini") is not None
+
+    def summarize(self, text: str, max_length: int = 150) -> str:
+        """Generate summary using Gemini CLI."""
+        import subprocess
+
+        if not text:
+            return ""
+
+        if not self.is_available():
+            raise RuntimeError("Gemini CLI not available")
+
+        original_text = text
+
+        prompt = f"Summarize this in {max_length} characters or less. Return only the summary:\n\n{text}"
+
+        cmd = [
+            "gemini",
+            "ask",
+            "-o", "text",
+            prompt
+        ]
+
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=60
+        )
+
+        if result.returncode != 0:
+            raise RuntimeError(f"Gemini CLI failed: {result.stderr}")
+
+        summary = result.stdout.strip()
+        self._record_usage(original_text, summary, self._model)
+        return summary
+
+
+class CodexCLIProvider(LLMProvider):
+    """
+    OpenAI Codex CLI provider.
+    Uses ChatGPT subscription auth (Plus/Pro/Team/Enterprise) - no API key needed.
+    Install: npm install -g @openai/codex
+    """
+
+    def __init__(self, model: str = "gpt-4.1"):
+        super().__init__()
+        self._model = model
+
+    @property
+    def name(self) -> str:
+        return "Codex CLI"
+
+    @property
+    def model_name(self) -> str:
+        return self._model
+
+    def is_available(self) -> bool:
+        """Check if Codex CLI is installed."""
+        import shutil
+        return shutil.which("codex") is not None
+
+    def summarize(self, text: str, max_length: int = 150) -> str:
+        """Generate summary using Codex CLI."""
+        import subprocess
+        import json
+
+        if not text:
+            return ""
+
+        if not self.is_available():
+            raise RuntimeError("Codex CLI not available")
+
+        original_text = text
+
+        prompt = f"Summarize this in {max_length} characters or less. Return only the summary:\n\n{text}"
+
+        cmd = [
+            "codex",
+            "exec",
+            prompt,
+            "--json",
+            "--model", self._model,
+        ]
+
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=60
+        )
+
+        if result.returncode != 0:
+            raise RuntimeError(f"Codex CLI failed: {result.stderr}")
+
+        # Parse JSON Lines output, get final message
+        lines = result.stdout.strip().split("\n")
+        for line in reversed(lines):
+            try:
+                event = json.loads(line)
+                if event.get("type") == "message" and event.get("content"):
+                    summary = event["content"].strip()
+                    self._record_usage(original_text, summary, self._model)
+                    return summary
+            except json.JSONDecodeError:
+                continue
+
+        raise RuntimeError("No valid response from Codex CLI")
 
 
 class GrokProvider(OpenAICompatibleProvider):
@@ -791,6 +1022,79 @@ class GrokProvider(OpenAICompatibleProvider):
         api_key = os.getenv("XAI_API_KEY") or os.getenv("GROK_API_KEY")
         return bool(api_key)
 
+
+
+
+class OpenAIAgentsProvider(LLMProvider):
+    """
+    OpenAI provider using the Agents SDK.
+    Provides advanced features: tool orchestration, state management, guardrails.
+    Requires OPENAI_API_KEY environment variable.
+    """
+
+    def __init__(self, model: str):
+        super().__init__()
+        self._model = model
+
+    @property
+    def name(self) -> str:
+        return "OpenAI Agents"
+
+    @property
+    def model_name(self) -> str:
+        return self._model
+
+    def is_available(self) -> bool:
+        try:
+            from agents import Agent, Runner  # noqa
+            return bool(os.getenv("OPENAI_API_KEY"))
+        except ImportError:
+            return False
+
+    def summarize(self, text: str, max_length: int = 150) -> str:
+        from agents import Agent, Runner
+        import asyncio
+
+        if not text:
+            return ""
+
+        original_text = text
+
+        agent = Agent(
+            name="Summarizer",
+            model=self._model,
+            instructions=f"Summarize the following text in {max_length} characters or less. Return only the summary, nothing else."
+        )
+
+        # Detect async context and handle appropriately
+        try:
+            asyncio.get_running_loop()
+            # Inside async context - use nest_asyncio to allow nested loop
+            import nest_asyncio
+            nest_asyncio.apply()
+        except RuntimeError:
+            # No running loop, sync context - proceed normally
+            pass
+
+        result = Runner.run_sync(agent, text)
+        summary = str(result.final_output).strip()
+
+        # Track usage
+        if hasattr(result, 'usage') and result.usage:
+            usage = result.usage
+            self.last_usage = UsageStats(
+                input_tokens=getattr(usage, 'input_tokens', 0),
+                output_tokens=getattr(usage, 'output_tokens', 0),
+                total_tokens=getattr(usage, 'total_tokens', 0),
+                model=self._model,
+                provider=self.name,
+            )
+            self.session_usage["calls"] += 1
+            self.session_usage["total_tokens"] += self.last_usage.total_tokens
+        else:
+            self._record_usage(original_text, summary, self._model)
+
+        return summary
 
 def auto_detect_provider() -> Optional[LLMProvider]:
     """
@@ -825,23 +1129,19 @@ def auto_detect_provider() -> Optional[LLMProvider]:
         return grok
 
     # Check Claude Agent SDK first (can use Claude Code auth, no API key needed)
-    claude_agent = ClaudeAgentProvider()
-    if claude_agent.is_available():
-        return claude_agent
+    claude_code = ClaudeCodeProvider()
+    if claude_code.is_available():
+        return claude_code
 
     # Check Claude API (requires ANTHROPIC_API_KEY)
     claude = ClaudeProvider()
     if claude.is_available():
         return claude
 
-    # Check OpenAI
-    if os.getenv("OPENAI_API_KEY"):
-        return OpenAICompatibleProvider(
-            base_url="https://api.openai.com/v1",
-            api_key=os.getenv("OPENAI_API_KEY"),
-            model="gpt-3.5-turbo",
-            provider_name="OpenAI",
-        )
+    # Check OpenAI Agents SDK
+    openai_agents = OpenAIAgentsProvider(model="gpt-4o-mini")
+    if openai_agents.is_available():
+        return openai_agents
 
     # Check transformers (last because can be slow)
     transformers = TransformersProvider()
@@ -851,18 +1151,18 @@ def auto_detect_provider() -> Optional[LLMProvider]:
     return None
 
 
-def get_best_provider() -> tuple[LLMProvider, bool]:
+def get_best_provider() -> tuple[Optional[LLMProvider], bool]:
     """
-    Get the best available provider, with fallback to simple.
+    Get the best available provider.
 
     Returns:
-        Tuple of (provider, is_llm) where is_llm indicates if it's a real LLM
-        or just the simple fallback.
+        Tuple of (provider, is_llm) where is_llm indicates if a real LLM was found.
+        If no provider is available, returns (None, False).
     """
     provider = auto_detect_provider()
     if provider:
         return provider, True
-    return SimpleSummarizerProvider(), False
+    return None, False
 
 
 def get_setup_instructions() -> str:

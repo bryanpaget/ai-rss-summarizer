@@ -61,8 +61,8 @@ class StoryClusterer:
         prompt = self._generate_comparison_prompt(article, story)
 
         try:
-            # Get LLM response
-            response = self.llm.summarize(prompt, max_length=200)
+            # Get LLM response - use generate() for raw prompt, not summarize()
+            response = self.llm.generate(prompt, max_tokens=200)
 
             # Try to parse JSON response
             result = self._parse_similarity_response(response)
@@ -200,7 +200,7 @@ Article Title: {article.title}
 Story Title:"""
 
         try:
-            title = self.llm.summarize(prompt, max_length=100).strip()
+            title = self.llm.generate(prompt, max_tokens=50).strip()
             # Clean up the title
             title = title.replace('"', '').replace('\n', ' ')
             return title[:100]
@@ -218,7 +218,7 @@ Content: {article.content[:300]}
 Description:"""
 
         try:
-            desc = self.llm.summarize(prompt, max_length=200).strip()
+            desc = self.llm.generate(prompt, max_tokens=150).strip()
             return desc[:500]
         except Exception:
             # Fallback: use article summary or beginning of content
@@ -235,7 +235,7 @@ Content: {article.content[:400]}
 Return as comma-separated list:"""
 
         try:
-            response = self.llm.summarize(prompt, max_length=150).strip()
+            response = self.llm.generate(prompt, max_tokens=100).strip()
             # Split and clean keywords
             keywords = [kw.strip() for kw in response.split(',')]
             return [kw for kw in keywords if kw and len(kw) > 2][:10]
@@ -261,8 +261,8 @@ class NewsItemExtractor:
         prompt = self._generate_extraction_prompt(article, existing_items)
 
         try:
-            # Get LLM response
-            response = self.llm.summarize(prompt, max_length=500)
+            # Get LLM response - use generate() for extraction prompt
+            response = self.llm.generate(prompt, max_tokens=500)
 
             # Parse news items from response
             items = self._parse_news_items(response, article, story)
