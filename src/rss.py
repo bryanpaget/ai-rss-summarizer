@@ -1,14 +1,13 @@
 """RSS feed fetching and parsing."""
 
 import hashlib
-import html
-import re
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 from time import mktime
 
 import feedparser
+from bs4 import BeautifulSoup
 
 from .storage import Article, Storage
 
@@ -67,12 +66,12 @@ def get_entry_content(entry: dict) -> str:
     return content.strip()
 
 def strip_html_tags(text: str) -> str:
-    """Remove HTML tags and decode HTML entities from text."""
-    # Remove HTML tags
-    clean_text = re.sub(r'<[^>]+>', '', text)
+    """Remove HTML tags and decode HTML entities from text using BeautifulSoup."""
+    # Parse HTML with BeautifulSoup
+    soup = BeautifulSoup(text, 'html.parser')
 
-    # Decode HTML entities
-    clean_text = html.unescape(clean_text)
+    # Get text content, which automatically handles entity decoding
+    clean_text = soup.get_text()
 
     # Clean up extra whitespace
     clean_text = ' '.join(clean_text.split())

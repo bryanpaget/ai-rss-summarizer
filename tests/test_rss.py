@@ -115,3 +115,27 @@ class TestGetEntryContent:
         entry = MockEntry()
         content = get_entry_content(entry)
         assert content == "This is a paragraph with emphasis. Link More text."
+
+    def test_removes_script_tags(self):
+        """Test that potentially dangerous script tags are properly removed."""
+
+        class MockEntry:
+            content = [{"value": "Text with <script>alert('bad');</script> and other content."}]
+
+        entry = MockEntry()
+        content = get_entry_content(entry)
+        assert content == "Text with and other content."
+
+    def test_handles_nested_html(self):
+        """Test that nested HTML tags are properly handled."""
+
+        class MockEntry:
+            summary = "<div>Outer <p>Inner <strong>content</strong> here</p> text</div>"
+
+        entry = MockEntry()
+        content = get_entry_content(entry)
+        assert "Outer" in content
+        assert "Inner" in content
+        assert "content" in content
+        assert "text" in content
+        assert content == "Outer Inner content here text"  # Exact match
