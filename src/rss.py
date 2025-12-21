@@ -1,6 +1,8 @@
 """RSS feed fetching and parsing."""
 
 import hashlib
+import html
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -52,14 +54,30 @@ def get_entry_content(entry: dict) -> str:
     """Extract the best available content from a feed entry."""
     # Try content field first (often has full article)
     if hasattr(entry, "content") and entry.content:
-        return entry.content[0].get("value", "")
-
+        content = entry.content[0].get("value", "")
     # Fall back to summary
-    if hasattr(entry, "summary") and entry.summary:
-        return entry.summary
-
+    elif hasattr(entry, "summary") and entry.summary:
+        content = entry.summary
     # Last resort: title
-    return entry.get("title", "")
+    else:
+        content = entry.get("title", "")
+
+    # Remove HTML tags and decode HTML entities
+    content = strip_html_tags(content)
+    return content.strip()
+
+def strip_html_tags(text: str) -> str:
+    """Remove HTML tags and decode HTML entities from text."""
+    # Remove HTML tags
+    clean_text = re.sub(r'<[^>]+>', '', text)
+
+    # Decode HTML entities
+    clean_text = html.unescape(clean_text)
+
+    # Clean up extra whitespace
+    clean_text = ' '.join(clean_text.split())
+
+    return clean_text
 
 
 def fetch_feed(feed_url: str, storage: Storage) -> dict:

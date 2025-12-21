@@ -13,6 +13,7 @@ from .storage import Storage
 from .rss import fetch_all_feeds, load_feeds
 from .summarizer import summarize_articles
 from .trends import analyze_trends, get_articles_by_trend
+from .llm_providers import get_best_provider
 
 app = typer.Typer(
     name="rss",
@@ -93,7 +94,7 @@ def summarize(
     use_llm: bool = typer.Option(
         False,
         "--llm",
-        help="Use LLM for summarization (requires transformers)",
+        help="Use LLM for summarization (requires transformers or configured provider)",
     ),
     db_path: str = typer.Option(
         "articles.db",
@@ -105,12 +106,31 @@ def summarize(
     storage = get_storage(db_path)
 
     console.print(f"[bold]Summarizing up to {limit} articles...[/bold]")
+
     if use_llm:
-        console.print("[dim]Using LLM backend (this may take a while)[/dim]\n")
+        # Use the configured LLM provider
+        provider, is_llm_available = get_best_provider()
+        if is_llm_available:
+            console.print(f"[dim]Using {provider.name} for summaries[/dim]\n")
+
+            # Get unsummarized articles
+            articles = storage.get_articles(limit=limit, unsummarized_only=True)
+
+            stats = {"processed": 0, "errors": []}
+
+            for article in articles:
+                try:
+                    summary = provider.summarize(article.content)
+                    storage.update_summary(article.id, summary)
+                    stats["processed"] += 1
+                except Exception as e:
+                    stats["errors"].append(f"Error summarizing {article.id}: {str(e)}")
+        else:
+            console.print("[yellow]No LLM provider available. Using simple summarizer.[/yellow]")
+            stats = summarize_articles(storage, limit=limit, use_llm=False)
     else:
         console.print("[dim]Using simple extractive summarizer[/dim]\n")
-
-    stats = summarize_articles(storage, limit=limit, use_llm=use_llm)
+        stats = summarize_articles(storage, limit=limit, use_llm=False)
 
     console.print(f"[green]Summarized {stats['processed']} articles[/green]")
 

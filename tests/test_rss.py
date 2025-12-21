@@ -94,3 +94,24 @@ class TestGetEntryContent:
         entry = MockEntry()
         content = get_entry_content(entry)
         assert content == "Article Title"
+
+    def test_removes_html_tags(self):
+        """Test that HTML tags are properly removed from content."""
+
+        class MockEntry:
+            content = [{"value": "Text with <a href='link'>HTML</a> tags and &amp; entities."}]
+
+        entry = MockEntry()
+        content = get_entry_content(entry)
+        # Should remove HTML tags and decode entities
+        assert content == "Text with HTML tags and & entities."
+
+    def test_removes_complex_html(self):
+        """Test that complex HTML is properly stripped."""
+
+        class MockEntry:
+            summary = "<p>This is a <strong>paragraph</strong> with <em>emphasis</em>.</p> <a href='#'>Link</a> More text."
+
+        entry = MockEntry()
+        content = get_entry_content(entry)
+        assert content == "This is a paragraph with emphasis. Link More text."
