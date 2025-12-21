@@ -1,0 +1,6 @@
+{
+  "provider": "ollama",
+  "base_url": null,
+  "model": null,
+  "defaults": {}
+}
