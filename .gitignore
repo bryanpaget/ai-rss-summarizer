@@ -39,3 +39,6 @@ Thumbs.db
 # Model cache (can be large)
 .cache/
 models/
+
+# Auto Claude data directory
+.auto-claude/

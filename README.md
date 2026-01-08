@@ -13,16 +13,40 @@ An AI-powered RSS feed summarizer with trend prediction. Fetch articles from mul
 
 ### Installation
 
+**Easiest (Auto-installer):**
 ```bash
-# Clone the repository
+# Clone and run the installer
 git clone https://github.com/bryanpaget/ai-rss-summarizer.git
 cd ai-rss-summarizer
 
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+# Windows:
+install.bat
 
-# Install dependencies
+# Mac/Linux:
+chmod +x install.sh && ./install.sh
+```
+
+**Manual (using pipx - recommended):**
+```bash
+# Install pipx if you don't have it
+pip install pipx
+pipx ensurepath
+# Restart your terminal
+
+# Install RSS Summarizer globally
+pipx install git+https://github.com/bryanpaget/ai-rss-summarizer.git
+
+# Now 'rss' works from anywhere
+rss --help
+```
+
+**For Development:**
+```bash
+git clone https://github.com/bryanpaget/ai-rss-summarizer.git
+cd ai-rss-summarizer
+python -m venv venv
+venv\Scripts\activate  # Windows
+source venv/bin/activate  # Mac/Linux
 pip install -e .
 ```
 
@@ -216,10 +240,17 @@ See [Issue #7](https://github.com/bryanpaget/ai-rss-summarizer/issues/7) for the
 - [x] Claude Agent SDK integration
 
 ### Future
+- [ ] Advanced trend analysis (see [docs/TREND_ANALYSIS_FEATURES.md](docs/TREND_ANALYSIS_FEATURES.md))
+  - Story clustering & evolution tracking
+  - Signal tagging system
+  - Perspective synthesis
+  - Personal context engine
+  - Emergence detection
+  - Knowledge extraction
+  - Intelligence briefs
+- [ ] Standalone executable (PyInstaller) - no Python required
 - [ ] FastAPI web interface
-- [ ] Advanced trend analysis with LLM
 - [ ] Docker containerization
-- [ ] Kubernetes deployment
 - [ ] Email digest notifications
 
 ## Contributing
