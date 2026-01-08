@@ -3460,3 +3460,1510 @@ class TestFindMatchingStoryIntegration:
             # Before any stories exist
             result = clusterer.find_matching_story(article)
             assert result is None  # No stories yet
+
+
+# =============================================================================
+# Tests for _calculate_similarity
+# =============================================================================
+
+
+class TestCalculateSimilarityBasic:
+    """Basic tests for _calculate_similarity method."""
+
+    def test_calculate_similarity_returns_float(
+        self, mock_llm_provider, mock_storage, sample_article, sample_story
+    ):
+        """Test that _calculate_similarity returns a float."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        result = clusterer._calculate_similarity(sample_article, sample_story)
+
+        assert isinstance(result, float)
+
+    def test_calculate_similarity_high_confidence_same_story(
+        self, sample_article, sample_story
+    ):
+        """Test _calculate_similarity with high confidence same story response."""
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.return_value = json.dumps({
+            "is_same_story": True,
+            "confidence": 0.95,
+            "reasoning": "Same topic"
+        })
+
+        mock_storage = MagicMock(spec=Storage)
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+        result = clusterer._calculate_similarity(sample_article, sample_story)
+
+        assert result == 0.95
+
+    def test_calculate_similarity_low_confidence_same_story(
+        self, sample_article, sample_story
+    ):
+        """Test _calculate_similarity with low confidence same story response."""
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.return_value = json.dumps({
+            "is_same_story": True,
+            "confidence": 0.5,
+            "reasoning": "Some overlap"
+        })
+
+        mock_storage = MagicMock(spec=Storage)
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+        result = clusterer._calculate_similarity(sample_article, sample_story)
+
+        assert result == 0.5
+
+    def test_calculate_similarity_not_same_story_returns_zero(
+        self, sample_article, sample_story
+    ):
+        """Test _calculate_similarity returns 0 when not same story."""
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.return_value = json.dumps({
+            "is_same_story": False,
+            "confidence": 0.9,  # High confidence it's NOT the same
+            "reasoning": "Different topics"
+        })
+
+        mock_storage = MagicMock(spec=Storage)
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+        result = clusterer._calculate_similarity(sample_article, sample_story)
+
+        # is_same_story=False means score is 0 regardless of confidence
+        assert result == 0.0
+
+    def test_calculate_similarity_calls_generate_with_prompt(
+        self, sample_article, sample_story
+    ):
+        """Test that _calculate_similarity calls generate with a prompt."""
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.return_value = json.dumps({
+            "is_same_story": True,
+            "confidence": 0.85,
+            "reasoning": "Test"
+        })
+
+        mock_storage = MagicMock(spec=Storage)
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+        clusterer._calculate_similarity(sample_article, sample_story)
+
+        # Verify generate was called with a prompt and max_tokens
+        mock_llm.generate.assert_called_once()
+        call_args = mock_llm.generate.call_args
+        assert call_args[0][0]  # Prompt is not empty
+        assert call_args[1].get("max_tokens") == 200
+
+    def test_calculate_similarity_zero_confidence(
+        self, sample_article, sample_story
+    ):
+        """Test _calculate_similarity with zero confidence."""
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.return_value = json.dumps({
+            "is_same_story": True,
+            "confidence": 0.0,
+            "reasoning": "No confidence"
+        })
+
+        mock_storage = MagicMock(spec=Storage)
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+        result = clusterer._calculate_similarity(sample_article, sample_story)
+
+        assert result == 0.0
+
+    def test_calculate_similarity_full_confidence(
+        self, sample_article, sample_story
+    ):
+        """Test _calculate_similarity with full (1.0) confidence."""
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.return_value = json.dumps({
+            "is_same_story": True,
+            "confidence": 1.0,
+            "reasoning": "Perfect match"
+        })
+
+        mock_storage = MagicMock(spec=Storage)
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+        result = clusterer._calculate_similarity(sample_article, sample_story)
+
+        assert result == 1.0
+
+
+class TestCalculateSimilarityWithFallback:
+    """Tests for _calculate_similarity fallback to keyword similarity."""
+
+    def test_calculate_similarity_llm_error_falls_back_to_keywords(
+        self, sample_article, sample_story
+    ):
+        """Test that LLM errors trigger keyword-based fallback."""
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.side_effect = Exception("LLM error")
+
+        mock_storage = MagicMock(spec=Storage)
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+
+        # Should not raise, should use fallback
+        result = clusterer._calculate_similarity(sample_article, sample_story)
+
+        # Result should be a float from keyword similarity
+        assert isinstance(result, float)
+        assert 0.0 <= result <= 1.0
+
+    def test_calculate_similarity_llm_timeout_falls_back(
+        self, sample_article, sample_story
+    ):
+        """Test that LLM timeout triggers keyword-based fallback."""
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.side_effect = TimeoutError("Request timed out")
+
+        mock_storage = MagicMock(spec=Storage)
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+
+        result = clusterer._calculate_similarity(sample_article, sample_story)
+
+        assert isinstance(result, float)
+        assert 0.0 <= result <= 1.0
+
+    def test_calculate_similarity_runtime_error_falls_back(
+        self, sample_article, sample_story
+    ):
+        """Test that RuntimeError triggers keyword-based fallback."""
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.side_effect = RuntimeError("Provider unavailable")
+
+        mock_storage = MagicMock(spec=Storage)
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+
+        result = clusterer._calculate_similarity(sample_article, sample_story)
+
+        assert isinstance(result, float)
+        assert 0.0 <= result <= 1.0
+
+    def test_calculate_similarity_fallback_with_matching_keywords(self):
+        """Test fallback produces high score when keywords match."""
+        # Create article with content containing story keywords
+        article = Article(
+            id="test-article",
+            feed_url="https://example.com/feed.xml",
+            title="AI Technology Breaking News",
+            link="https://example.com/article",
+            published=datetime.now(),
+            content="This article discusses AI and technology advancements in machine learning.",
+            summary=None,
+        )
+
+        # Story with keywords that appear in article
+        story = Story(
+            id="test-story",
+            title="AI Technology",
+            description="About AI",
+            keywords=["AI", "technology", "machine learning"],
+            first_seen=datetime.now() - timedelta(days=1),
+            last_updated=datetime.now(),
+            lifecycle_state="developing",
+            article_ids=["old-article"],
+            news_item_ids=[],
+        )
+
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.side_effect = Exception("LLM error")
+
+        mock_storage = MagicMock(spec=Storage)
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+
+        result = clusterer._calculate_similarity(article, story)
+
+        # All 3 keywords should match - ai, technology, machine learning
+        assert result > 0.5  # Should have high similarity
+
+    def test_calculate_similarity_fallback_with_no_matching_keywords(self):
+        """Test fallback produces low score when keywords don't match."""
+        # Create article with unrelated content
+        article = Article(
+            id="test-article",
+            feed_url="https://example.com/feed.xml",
+            title="Sports News",
+            link="https://example.com/article",
+            published=datetime.now(),
+            content="Football game results and basketball scores.",
+            summary=None,
+        )
+
+        # Story with completely different keywords
+        story = Story(
+            id="test-story",
+            title="AI Technology",
+            description="About AI",
+            keywords=["AI", "technology", "machine learning"],
+            first_seen=datetime.now() - timedelta(days=1),
+            last_updated=datetime.now(),
+            lifecycle_state="developing",
+            article_ids=["old-article"],
+            news_item_ids=[],
+        )
+
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.side_effect = Exception("LLM error")
+
+        mock_storage = MagicMock(spec=Storage)
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+
+        result = clusterer._calculate_similarity(article, story)
+
+        # No keywords should match
+        assert result == 0.0
+
+
+class TestCalculateSimilarityEdgeCases:
+    """Edge case tests for _calculate_similarity."""
+
+    def test_calculate_similarity_with_unicode_content(self, sample_story):
+        """Test _calculate_similarity handles unicode content."""
+        article = Article(
+            id="unicode-article",
+            feed_url="https://example.com/feed.xml",
+            title="Unicode Test: Café 中文 🚀",
+            link="https://example.com/article",
+            published=datetime.now(),
+            content="This article contains unicode: 中文测试, 日本語, 😀👍🎉",
+            summary=None,
+        )
+
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.return_value = json.dumps({
+            "is_same_story": True,
+            "confidence": 0.8,
+            "reasoning": "Unicode test"
+        })
+
+        mock_storage = MagicMock(spec=Storage)
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+
+        # Should not raise
+        result = clusterer._calculate_similarity(article, sample_story)
+        assert result == 0.8
+
+    def test_calculate_similarity_with_very_long_content(self, sample_story):
+        """Test _calculate_similarity handles very long content (truncated in prompt)."""
+        article = Article(
+            id="long-article",
+            feed_url="https://example.com/feed.xml",
+            title="Long Article",
+            link="https://example.com/article",
+            published=datetime.now(),
+            content="Very long content. " * 1000,  # Very long
+            summary=None,
+        )
+
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.return_value = json.dumps({
+            "is_same_story": True,
+            "confidence": 0.85,
+            "reasoning": "Match"
+        })
+
+        mock_storage = MagicMock(spec=Storage)
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+
+        result = clusterer._calculate_similarity(article, sample_story)
+        assert result == 0.85
+
+        # Verify content was truncated in prompt
+        call_args = mock_llm.generate.call_args
+        prompt = call_args[0][0]
+        # Content in prompt should be truncated at 500 chars
+        assert len(prompt) < len(article.content)
+
+    def test_calculate_similarity_with_empty_article_content(self, sample_story):
+        """Test _calculate_similarity handles empty article content."""
+        article = Article(
+            id="empty-article",
+            feed_url="https://example.com/feed.xml",
+            title="Empty Content Article",
+            link="https://example.com/article",
+            published=datetime.now(),
+            content="",
+            summary=None,
+        )
+
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.return_value = json.dumps({
+            "is_same_story": True,
+            "confidence": 0.7,
+            "reasoning": "Based on title"
+        })
+
+        mock_storage = MagicMock(spec=Storage)
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+
+        result = clusterer._calculate_similarity(article, sample_story)
+        assert result == 0.7
+
+    def test_calculate_similarity_with_story_no_keywords(self, sample_article):
+        """Test _calculate_similarity handles story with no keywords."""
+        story = Story(
+            id="no-keyword-story",
+            title="Story Without Keywords",
+            description="No keywords",
+            keywords=[],  # Empty keywords
+            first_seen=datetime.now() - timedelta(days=1),
+            last_updated=datetime.now(),
+            lifecycle_state="developing",
+            article_ids=["old-article"],
+            news_item_ids=[],
+        )
+
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.return_value = json.dumps({
+            "is_same_story": True,
+            "confidence": 0.8,
+            "reasoning": "Match"
+        })
+
+        mock_storage = MagicMock(spec=Storage)
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+
+        result = clusterer._calculate_similarity(sample_article, story)
+        assert result == 0.8
+
+    def test_calculate_similarity_with_story_many_keywords(self, sample_article):
+        """Test _calculate_similarity handles story with many keywords (truncated)."""
+        story = Story(
+            id="many-keyword-story",
+            title="Story With Many Keywords",
+            description="Lots of keywords",
+            keywords=[f"keyword{i}" for i in range(50)],  # Many keywords
+            first_seen=datetime.now() - timedelta(days=1),
+            last_updated=datetime.now(),
+            lifecycle_state="developing",
+            article_ids=["old-article"],
+            news_item_ids=[],
+        )
+
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.return_value = json.dumps({
+            "is_same_story": True,
+            "confidence": 0.85,
+            "reasoning": "Match"
+        })
+
+        mock_storage = MagicMock(spec=Storage)
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+
+        result = clusterer._calculate_similarity(sample_article, story)
+        assert result == 0.85
+
+        # Verify only first 10 keywords were used in prompt
+        call_args = mock_llm.generate.call_args
+        prompt = call_args[0][0]
+        # Should only see first 10 keywords
+        assert "keyword0" in prompt
+        assert "keyword9" in prompt
+        # keyword10 and beyond should NOT be in prompt
+        assert "keyword10" not in prompt
+
+    def test_calculate_similarity_with_special_characters(self, sample_story):
+        """Test _calculate_similarity handles special characters in content."""
+        article = Article(
+            id="special-chars-article",
+            feed_url="https://example.com/feed.xml",
+            title='Article with "quotes" & <special> chars',
+            link="https://example.com/article",
+            published=datetime.now(),
+            content='Content with "quotes", <brackets>, & ampersands. Plus $dollar$ and @at@ signs.',
+            summary=None,
+        )
+
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.return_value = json.dumps({
+            "is_same_story": True,
+            "confidence": 0.75,
+            "reasoning": "Test"
+        })
+
+        mock_storage = MagicMock(spec=Storage)
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+
+        result = clusterer._calculate_similarity(article, sample_story)
+        assert result == 0.75
+
+
+# =============================================================================
+# Tests for _keyword_similarity
+# =============================================================================
+
+
+class TestKeywordSimilarityBasic:
+    """Basic tests for _keyword_similarity method."""
+
+    def test_keyword_similarity_returns_float(
+        self, mock_llm_provider, mock_storage, sample_article, sample_story
+    ):
+        """Test that _keyword_similarity returns a float."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        result = clusterer._keyword_similarity(sample_article, sample_story)
+
+        assert isinstance(result, float)
+
+    def test_keyword_similarity_range(
+        self, mock_llm_provider, mock_storage, sample_article, sample_story
+    ):
+        """Test that _keyword_similarity returns value between 0 and 1."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        result = clusterer._keyword_similarity(sample_article, sample_story)
+
+        assert 0.0 <= result <= 1.0
+
+    def test_keyword_similarity_all_keywords_match(self, mock_llm_provider, mock_storage):
+        """Test _keyword_similarity when all keywords match."""
+        article = Article(
+            id="test-article",
+            feed_url="https://example.com/feed.xml",
+            title="AI Technology Machine Learning",
+            link="https://example.com/article",
+            published=datetime.now(),
+            content="AI technology machine learning article content.",
+            summary=None,
+        )
+
+        story = Story(
+            id="test-story",
+            title="AI Story",
+            description="About AI",
+            keywords=["ai", "technology", "machine"],
+            first_seen=datetime.now() - timedelta(days=1),
+            last_updated=datetime.now(),
+            lifecycle_state="developing",
+            article_ids=[],
+            news_item_ids=[],
+        )
+
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        result = clusterer._keyword_similarity(article, story)
+
+        # All 3 keywords should match
+        assert result == 1.0
+
+    def test_keyword_similarity_no_keywords_match(self, mock_llm_provider, mock_storage):
+        """Test _keyword_similarity when no keywords match."""
+        article = Article(
+            id="test-article",
+            feed_url="https://example.com/feed.xml",
+            title="Sports News",
+            link="https://example.com/article",
+            published=datetime.now(),
+            content="Football and basketball news.",
+            summary=None,
+        )
+
+        story = Story(
+            id="test-story",
+            title="Tech Story",
+            description="About tech",
+            keywords=["ai", "technology", "machine"],
+            first_seen=datetime.now() - timedelta(days=1),
+            last_updated=datetime.now(),
+            lifecycle_state="developing",
+            article_ids=[],
+            news_item_ids=[],
+        )
+
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        result = clusterer._keyword_similarity(article, story)
+
+        # No keywords should match
+        assert result == 0.0
+
+    def test_keyword_similarity_partial_match(self, mock_llm_provider, mock_storage):
+        """Test _keyword_similarity when some keywords match."""
+        article = Article(
+            id="test-article",
+            feed_url="https://example.com/feed.xml",
+            title="AI News",
+            link="https://example.com/article",
+            published=datetime.now(),
+            content="AI article about technology.",  # 2 of 4 keywords
+            summary=None,
+        )
+
+        story = Story(
+            id="test-story",
+            title="Tech Story",
+            description="About tech",
+            keywords=["ai", "technology", "machine", "learning"],  # 4 keywords
+            first_seen=datetime.now() - timedelta(days=1),
+            last_updated=datetime.now(),
+            lifecycle_state="developing",
+            article_ids=[],
+            news_item_ids=[],
+        )
+
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        result = clusterer._keyword_similarity(article, story)
+
+        # 2 of 4 keywords match = 0.5
+        assert result == 0.5
+
+    def test_keyword_similarity_empty_story_keywords(
+        self, mock_llm_provider, mock_storage, sample_article
+    ):
+        """Test _keyword_similarity returns 0 when story has no keywords."""
+        story = Story(
+            id="test-story",
+            title="Story",
+            description="Description",
+            keywords=[],  # Empty keywords
+            first_seen=datetime.now() - timedelta(days=1),
+            last_updated=datetime.now(),
+            lifecycle_state="developing",
+            article_ids=[],
+            news_item_ids=[],
+        )
+
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        result = clusterer._keyword_similarity(sample_article, story)
+
+        # Empty keywords should return 0
+        assert result == 0.0
+
+
+class TestKeywordSimilarityCaseSensitivity:
+    """Tests for _keyword_similarity case sensitivity."""
+
+    def test_keyword_similarity_case_insensitive(self, mock_llm_provider, mock_storage):
+        """Test that keyword matching is case insensitive."""
+        article = Article(
+            id="test-article",
+            feed_url="https://example.com/feed.xml",
+            title="AI TECHNOLOGY",
+            link="https://example.com/article",
+            published=datetime.now(),
+            content="Discussing AI Technology advances.",
+            summary=None,
+        )
+
+        story = Story(
+            id="test-story",
+            title="Tech Story",
+            description="About tech",
+            keywords=["ai", "technology"],  # lowercase
+            first_seen=datetime.now() - timedelta(days=1),
+            last_updated=datetime.now(),
+            lifecycle_state="developing",
+            article_ids=[],
+            news_item_ids=[],
+        )
+
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        result = clusterer._keyword_similarity(article, story)
+
+        # Should match despite case difference
+        assert result == 1.0
+
+    def test_keyword_similarity_mixed_case_keywords(self, mock_llm_provider, mock_storage):
+        """Test matching when story keywords have mixed case."""
+        article = Article(
+            id="test-article",
+            feed_url="https://example.com/feed.xml",
+            title="machine learning article",
+            link="https://example.com/article",
+            published=datetime.now(),
+            content="machine learning and neural networks",
+            summary=None,
+        )
+
+        story = Story(
+            id="test-story",
+            title="Tech Story",
+            description="About tech",
+            keywords=["Machine", "Learning", "Neural"],  # Mixed case
+            first_seen=datetime.now() - timedelta(days=1),
+            last_updated=datetime.now(),
+            lifecycle_state="developing",
+            article_ids=[],
+            news_item_ids=[],
+        )
+
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        result = clusterer._keyword_similarity(article, story)
+
+        # All 3 keywords should match (case insensitive)
+        assert result == 1.0
+
+
+class TestKeywordSimilaritySearchBehavior:
+    """Tests for _keyword_similarity substring matching behavior."""
+
+    def test_keyword_similarity_substring_in_word(self, mock_llm_provider, mock_storage):
+        """Test that keywords match as substrings within words."""
+        article = Article(
+            id="test-article",
+            feed_url="https://example.com/feed.xml",
+            title="Testing Article",
+            link="https://example.com/article",
+            published=datetime.now(),
+            content="This is about technologies and intelligence systems.",
+            summary=None,
+        )
+
+        story = Story(
+            id="test-story",
+            title="Tech Story",
+            description="About tech",
+            keywords=["tech", "intel"],  # 'tech' is in 'technologies', 'intel' in 'intelligence'
+            first_seen=datetime.now() - timedelta(days=1),
+            last_updated=datetime.now(),
+            lifecycle_state="developing",
+            article_ids=[],
+            news_item_ids=[],
+        )
+
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        result = clusterer._keyword_similarity(article, story)
+
+        # Both should match as substrings
+        assert result == 1.0
+
+    def test_keyword_similarity_title_and_content_combined(
+        self, mock_llm_provider, mock_storage
+    ):
+        """Test that keywords are matched against title + content combined."""
+        article = Article(
+            id="test-article",
+            feed_url="https://example.com/feed.xml",
+            title="AI Development",  # 'ai' in title
+            link="https://example.com/article",
+            published=datetime.now(),
+            content="This discusses technology advances.",  # 'technology' in content
+            summary=None,
+        )
+
+        story = Story(
+            id="test-story",
+            title="Tech Story",
+            description="About tech",
+            keywords=["ai", "technology"],
+            first_seen=datetime.now() - timedelta(days=1),
+            last_updated=datetime.now(),
+            lifecycle_state="developing",
+            article_ids=[],
+            news_item_ids=[],
+        )
+
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        result = clusterer._keyword_similarity(article, story)
+
+        # Both keywords should match (one from title, one from content)
+        assert result == 1.0
+
+
+class TestKeywordSimilarityEdgeCases:
+    """Edge case tests for _keyword_similarity."""
+
+    def test_keyword_similarity_empty_article_content(
+        self, mock_llm_provider, mock_storage
+    ):
+        """Test _keyword_similarity with empty article content."""
+        article = Article(
+            id="test-article",
+            feed_url="https://example.com/feed.xml",
+            title="AI Article",  # Only title
+            link="https://example.com/article",
+            published=datetime.now(),
+            content="",  # Empty content
+            summary=None,
+        )
+
+        story = Story(
+            id="test-story",
+            title="Tech Story",
+            description="About tech",
+            keywords=["ai"],
+            first_seen=datetime.now() - timedelta(days=1),
+            last_updated=datetime.now(),
+            lifecycle_state="developing",
+            article_ids=[],
+            news_item_ids=[],
+        )
+
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        result = clusterer._keyword_similarity(article, story)
+
+        # Should still match from title
+        assert result == 1.0
+
+    def test_keyword_similarity_empty_article_title(
+        self, mock_llm_provider, mock_storage
+    ):
+        """Test _keyword_similarity with empty article title."""
+        article = Article(
+            id="test-article",
+            feed_url="https://example.com/feed.xml",
+            title="",  # Empty title
+            link="https://example.com/article",
+            published=datetime.now(),
+            content="AI technology content here.",
+            summary=None,
+        )
+
+        story = Story(
+            id="test-story",
+            title="Tech Story",
+            description="About tech",
+            keywords=["ai", "technology"],
+            first_seen=datetime.now() - timedelta(days=1),
+            last_updated=datetime.now(),
+            lifecycle_state="developing",
+            article_ids=[],
+            news_item_ids=[],
+        )
+
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        result = clusterer._keyword_similarity(article, story)
+
+        # Should match from content
+        assert result == 1.0
+
+    def test_keyword_similarity_both_empty(self, mock_llm_provider, mock_storage):
+        """Test _keyword_similarity with both title and content empty."""
+        article = Article(
+            id="test-article",
+            feed_url="https://example.com/feed.xml",
+            title="",
+            link="https://example.com/article",
+            published=datetime.now(),
+            content="",
+            summary=None,
+        )
+
+        story = Story(
+            id="test-story",
+            title="Tech Story",
+            description="About tech",
+            keywords=["ai", "technology"],
+            first_seen=datetime.now() - timedelta(days=1),
+            last_updated=datetime.now(),
+            lifecycle_state="developing",
+            article_ids=[],
+            news_item_ids=[],
+        )
+
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        result = clusterer._keyword_similarity(article, story)
+
+        # No matches possible
+        assert result == 0.0
+
+    def test_keyword_similarity_single_keyword_match(
+        self, mock_llm_provider, mock_storage
+    ):
+        """Test _keyword_similarity with single keyword that matches."""
+        article = Article(
+            id="test-article",
+            feed_url="https://example.com/feed.xml",
+            title="AI Article",
+            link="https://example.com/article",
+            published=datetime.now(),
+            content="AI content",
+            summary=None,
+        )
+
+        story = Story(
+            id="test-story",
+            title="AI Story",
+            description="About AI",
+            keywords=["ai"],  # Single keyword
+            first_seen=datetime.now() - timedelta(days=1),
+            last_updated=datetime.now(),
+            lifecycle_state="developing",
+            article_ids=[],
+            news_item_ids=[],
+        )
+
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        result = clusterer._keyword_similarity(article, story)
+
+        assert result == 1.0
+
+    def test_keyword_similarity_unicode_keywords(self, mock_llm_provider, mock_storage):
+        """Test _keyword_similarity with unicode keywords."""
+        article = Article(
+            id="test-article",
+            feed_url="https://example.com/feed.xml",
+            title="中文新闻",
+            link="https://example.com/article",
+            published=datetime.now(),
+            content="This article contains 中文 content and 日本語.",
+            summary=None,
+        )
+
+        story = Story(
+            id="test-story",
+            title="Asian News",
+            description="About Asian news",
+            keywords=["中文", "日本語", "english"],
+            first_seen=datetime.now() - timedelta(days=1),
+            last_updated=datetime.now(),
+            lifecycle_state="developing",
+            article_ids=[],
+            news_item_ids=[],
+        )
+
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        result = clusterer._keyword_similarity(article, story)
+
+        # 2 of 3 keywords should match (中文 and 日本語)
+        assert result == pytest.approx(2/3, rel=0.01)
+
+    def test_keyword_similarity_many_keywords(self, mock_llm_provider, mock_storage):
+        """Test _keyword_similarity with many keywords."""
+        article = Article(
+            id="test-article",
+            feed_url="https://example.com/feed.xml",
+            title="Tech Article",
+            link="https://example.com/article",
+            published=datetime.now(),
+            content="keyword1 keyword2 keyword5 keyword10",
+            summary=None,
+        )
+
+        story = Story(
+            id="test-story",
+            title="Story",
+            description="Description",
+            keywords=[f"keyword{i}" for i in range(1, 21)],  # 20 keywords
+            first_seen=datetime.now() - timedelta(days=1),
+            last_updated=datetime.now(),
+            lifecycle_state="developing",
+            article_ids=[],
+            news_item_ids=[],
+        )
+
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        result = clusterer._keyword_similarity(article, story)
+
+        # 4 of 20 keywords match = 0.2
+        assert result == 0.2
+
+    def test_keyword_similarity_special_chars_in_keywords(
+        self, mock_llm_provider, mock_storage
+    ):
+        """Test _keyword_similarity with special characters in keywords."""
+        article = Article(
+            id="test-article",
+            feed_url="https://example.com/feed.xml",
+            title="C++ and C# Programming",
+            link="https://example.com/article",
+            published=datetime.now(),
+            content="Programming languages like c++ and c# are popular.",
+            summary=None,
+        )
+
+        story = Story(
+            id="test-story",
+            title="Programming Story",
+            description="About programming",
+            keywords=["c++", "c#", "python"],
+            first_seen=datetime.now() - timedelta(days=1),
+            last_updated=datetime.now(),
+            lifecycle_state="developing",
+            article_ids=[],
+            news_item_ids=[],
+        )
+
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        result = clusterer._keyword_similarity(article, story)
+
+        # 2 of 3 keywords should match
+        assert result == pytest.approx(2/3, rel=0.01)
+
+
+# =============================================================================
+# Tests for LLM-based comparison (_generate_comparison_prompt, _parse_similarity_response)
+# =============================================================================
+
+
+class TestGenerateComparisonPrompt:
+    """Tests for _generate_comparison_prompt method."""
+
+    def test_generate_comparison_prompt_returns_string(
+        self, mock_llm_provider, mock_storage, sample_article, sample_story
+    ):
+        """Test that _generate_comparison_prompt returns a string."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        result = clusterer._generate_comparison_prompt(sample_article, sample_story)
+
+        assert isinstance(result, str)
+
+    def test_generate_comparison_prompt_contains_article_title(
+        self, mock_llm_provider, mock_storage, sample_article, sample_story
+    ):
+        """Test that prompt contains article title."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        result = clusterer._generate_comparison_prompt(sample_article, sample_story)
+
+        assert sample_article.title in result
+
+    def test_generate_comparison_prompt_contains_story_title(
+        self, mock_llm_provider, mock_storage, sample_article, sample_story
+    ):
+        """Test that prompt contains story title."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        result = clusterer._generate_comparison_prompt(sample_article, sample_story)
+
+        assert sample_story.title in result
+
+    def test_generate_comparison_prompt_contains_story_description(
+        self, mock_llm_provider, mock_storage, sample_article, sample_story
+    ):
+        """Test that prompt contains story description."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        result = clusterer._generate_comparison_prompt(sample_article, sample_story)
+
+        assert sample_story.description in result
+
+    def test_generate_comparison_prompt_contains_keywords(
+        self, mock_llm_provider, mock_storage, sample_article, sample_story
+    ):
+        """Test that prompt contains story keywords."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        result = clusterer._generate_comparison_prompt(sample_article, sample_story)
+
+        # Should contain at least some keywords
+        for keyword in sample_story.keywords[:3]:
+            assert keyword in result
+
+    def test_generate_comparison_prompt_truncates_content(
+        self, mock_llm_provider, mock_storage, sample_story
+    ):
+        """Test that prompt truncates very long content."""
+        article = Article(
+            id="long-article",
+            feed_url="https://example.com/feed.xml",
+            title="Long Article",
+            link="https://example.com/article",
+            published=datetime.now(),
+            content="X" * 1000,  # 1000 characters
+            summary=None,
+        )
+
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        result = clusterer._generate_comparison_prompt(article, sample_story)
+
+        # Content should be truncated at 500 chars
+        assert "X" * 500 in result
+        assert "X" * 501 not in result
+
+    def test_generate_comparison_prompt_truncates_keywords(
+        self, mock_llm_provider, mock_storage, sample_article
+    ):
+        """Test that prompt only includes first 10 keywords."""
+        story = Story(
+            id="many-keywords-story",
+            title="Story",
+            description="Description",
+            keywords=[f"keyword{i}" for i in range(20)],  # 20 keywords
+            first_seen=datetime.now() - timedelta(days=1),
+            last_updated=datetime.now(),
+            lifecycle_state="developing",
+            article_ids=[],
+            news_item_ids=[],
+        )
+
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        result = clusterer._generate_comparison_prompt(sample_article, story)
+
+        # Should contain first 10 keywords
+        assert "keyword0" in result
+        assert "keyword9" in result
+        # Should NOT contain keyword10 and beyond
+        assert "keyword10" not in result
+
+    def test_generate_comparison_prompt_contains_json_format(
+        self, mock_llm_provider, mock_storage, sample_article, sample_story
+    ):
+        """Test that prompt contains expected JSON format."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        result = clusterer._generate_comparison_prompt(sample_article, sample_story)
+
+        assert "is_same_story" in result
+        assert "confidence" in result
+        assert "reasoning" in result
+
+    def test_generate_comparison_prompt_with_empty_story_keywords(
+        self, mock_llm_provider, mock_storage, sample_article
+    ):
+        """Test prompt generation with story that has no keywords."""
+        story = Story(
+            id="no-keywords-story",
+            title="Story",
+            description="Description",
+            keywords=[],
+            first_seen=datetime.now() - timedelta(days=1),
+            last_updated=datetime.now(),
+            lifecycle_state="developing",
+            article_ids=[],
+            news_item_ids=[],
+        )
+
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        result = clusterer._generate_comparison_prompt(sample_article, story)
+
+        # Should still work
+        assert isinstance(result, str)
+        assert "Keywords:" in result
+
+
+class TestParseSimilarityResponse:
+    """Tests for _parse_similarity_response method."""
+
+    def test_parse_similarity_response_valid_json(
+        self, mock_llm_provider, mock_storage
+    ):
+        """Test parsing valid JSON response."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        response = json.dumps({
+            "is_same_story": True,
+            "confidence": 0.85,
+            "reasoning": "Same topic"
+        })
+
+        result = clusterer._parse_similarity_response(response)
+
+        assert result["is_same_story"] is True
+        assert result["confidence"] == 0.85
+        assert result["reasoning"] == "Same topic"
+
+    def test_parse_similarity_response_json_with_surrounding_text(
+        self, mock_llm_provider, mock_storage
+    ):
+        """Test parsing JSON embedded in surrounding text."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        response = '''Here's my analysis:
+        {"is_same_story": true, "confidence": 0.9, "reasoning": "Match"}
+        Hope that helps!'''
+
+        result = clusterer._parse_similarity_response(response)
+
+        assert result["is_same_story"] is True
+        assert result["confidence"] == 0.9
+
+    def test_parse_similarity_response_invalid_json_with_true(
+        self, mock_llm_provider, mock_storage
+    ):
+        """Test fallback parsing when response contains 'true'."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        response = "Yes, these articles are about the same topic. It's true they're related."
+
+        result = clusterer._parse_similarity_response(response)
+
+        assert result["is_same_story"] is True
+        assert result["confidence"] == 0.7
+
+    def test_parse_similarity_response_invalid_json_with_yes(
+        self, mock_llm_provider, mock_storage
+    ):
+        """Test fallback parsing when response contains 'yes'."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        response = "Yes, definitely the same story."
+
+        result = clusterer._parse_similarity_response(response)
+
+        assert result["is_same_story"] is True
+        assert result["confidence"] == 0.7
+
+    def test_parse_similarity_response_invalid_json_with_same(
+        self, mock_llm_provider, mock_storage
+    ):
+        """Test fallback parsing when response contains 'same'."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        response = "These appear to be the same story about the topic."
+
+        result = clusterer._parse_similarity_response(response)
+
+        assert result["is_same_story"] is True
+        assert result["confidence"] == 0.7
+
+    def test_parse_similarity_response_invalid_json_negative(
+        self, mock_llm_provider, mock_storage
+    ):
+        """Test fallback parsing when response indicates no match."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        response = "No, these articles discuss completely different topics."
+
+        result = clusterer._parse_similarity_response(response)
+
+        # Doesn't contain 'true', 'yes', or 'same'
+        assert result["is_same_story"] is False
+        assert result["confidence"] == 0.3
+
+    def test_parse_similarity_response_empty_string(
+        self, mock_llm_provider, mock_storage
+    ):
+        """Test parsing empty string response."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        response = ""
+
+        result = clusterer._parse_similarity_response(response)
+
+        assert result["is_same_story"] is False
+        assert result["confidence"] == 0.3
+
+    def test_parse_similarity_response_malformed_json(
+        self, mock_llm_provider, mock_storage
+    ):
+        """Test parsing malformed JSON response."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        response = '{"is_same_story": true, "confidence": '  # Incomplete JSON
+
+        result = clusterer._parse_similarity_response(response)
+
+        # Should use fallback (contains 'true')
+        assert result["is_same_story"] is True
+        assert result["confidence"] == 0.7
+
+    def test_parse_similarity_response_json_missing_fields(
+        self, mock_llm_provider, mock_storage
+    ):
+        """Test parsing JSON with missing fields."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        response = '{"is_same_story": true}'  # Missing confidence
+
+        result = clusterer._parse_similarity_response(response)
+
+        assert result["is_same_story"] is True
+        # confidence should be missing from result
+        assert "confidence" not in result or result.get("confidence") is None
+
+    def test_parse_similarity_response_case_insensitive_keywords(
+        self, mock_llm_provider, mock_storage
+    ):
+        """Test that fallback keyword matching is case insensitive."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        response = "YES, they are the SAME story."
+
+        result = clusterer._parse_similarity_response(response)
+
+        assert result["is_same_story"] is True
+        assert result["confidence"] == 0.7
+
+    def test_parse_similarity_response_json_false(
+        self, mock_llm_provider, mock_storage
+    ):
+        """Test parsing JSON with is_same_story=false."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        response = json.dumps({
+            "is_same_story": False,
+            "confidence": 0.2,
+            "reasoning": "Different"
+        })
+
+        result = clusterer._parse_similarity_response(response)
+
+        assert result["is_same_story"] is False
+        assert result["confidence"] == 0.2
+
+
+class TestLLMComparisonIntegration:
+    """Integration tests for LLM-based comparison flow."""
+
+    def test_comparison_flow_high_confidence_match(
+        self, sample_article, sample_story
+    ):
+        """Test full comparison flow with high confidence match."""
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.return_value = json.dumps({
+            "is_same_story": True,
+            "confidence": 0.95,
+            "reasoning": "Perfect match"
+        })
+
+        mock_storage = MagicMock(spec=Storage)
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+
+        # Full flow: generate prompt, call LLM, parse response, return score
+        result = clusterer._calculate_similarity(sample_article, sample_story)
+
+        assert result == 0.95
+        mock_llm.generate.assert_called_once()
+
+    def test_comparison_flow_low_confidence_no_match(
+        self, sample_article, sample_story
+    ):
+        """Test full comparison flow with low confidence."""
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.return_value = json.dumps({
+            "is_same_story": True,
+            "confidence": 0.4,
+            "reasoning": "Weak match"
+        })
+
+        mock_storage = MagicMock(spec=Storage)
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+
+        result = clusterer._calculate_similarity(sample_article, sample_story)
+
+        assert result == 0.4
+
+    def test_comparison_flow_different_story(
+        self, sample_article, sample_story
+    ):
+        """Test full comparison flow when not same story."""
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.return_value = json.dumps({
+            "is_same_story": False,
+            "confidence": 0.9,
+            "reasoning": "Different topics"
+        })
+
+        mock_storage = MagicMock(spec=Storage)
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+
+        result = clusterer._calculate_similarity(sample_article, sample_story)
+
+        # is_same_story=False means score is 0
+        assert result == 0.0
+
+    def test_comparison_flow_llm_returns_text(
+        self, sample_article, sample_story
+    ):
+        """Test comparison flow when LLM returns text instead of JSON."""
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.return_value = "Yes, I believe these are the same story."
+
+        mock_storage = MagicMock(spec=Storage)
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+
+        result = clusterer._calculate_similarity(sample_article, sample_story)
+
+        # Fallback parser should detect 'yes' and return is_same_story=True with 0.7 confidence
+        assert result == 0.7
+
+    def test_comparison_flow_llm_error_keyword_fallback(self):
+        """Test comparison flow when LLM errors and keyword fallback is used."""
+        # Article with keywords matching story
+        article = Article(
+            id="test-article",
+            feed_url="https://example.com/feed.xml",
+            title="AI Technology News",
+            link="https://example.com/article",
+            published=datetime.now(),
+            content="AI and technology advances in machine learning.",
+            summary=None,
+        )
+
+        story = Story(
+            id="test-story",
+            title="AI Story",
+            description="About AI",
+            keywords=["ai", "technology", "machine"],  # 3 keywords
+            first_seen=datetime.now() - timedelta(days=1),
+            last_updated=datetime.now(),
+            lifecycle_state="developing",
+            article_ids=[],
+            news_item_ids=[],
+        )
+
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.side_effect = Exception("LLM unavailable")
+
+        mock_storage = MagicMock(spec=Storage)
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+
+        result = clusterer._calculate_similarity(article, story)
+
+        # Should fall back to keyword similarity
+        # All 3 keywords match = 1.0
+        assert result == 1.0
+
+    def test_comparison_uses_generate_not_summarize(
+        self, sample_article, sample_story
+    ):
+        """Test that comparison uses generate() not summarize()."""
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.return_value = json.dumps({
+            "is_same_story": True,
+            "confidence": 0.85,
+            "reasoning": "Test"
+        })
+
+        mock_storage = MagicMock(spec=Storage)
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+
+        clusterer._calculate_similarity(sample_article, sample_story)
+
+        # Verify generate was called, not summarize
+        mock_llm.generate.assert_called_once()
+        mock_llm.summarize.assert_not_called()
+
+    def test_comparison_passes_max_tokens(
+        self, sample_article, sample_story
+    ):
+        """Test that comparison passes max_tokens to generate()."""
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.return_value = json.dumps({
+            "is_same_story": True,
+            "confidence": 0.85,
+            "reasoning": "Test"
+        })
+
+        mock_storage = MagicMock(spec=Storage)
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+
+        clusterer._calculate_similarity(sample_article, sample_story)
+
+        # Verify max_tokens was passed
+        call_args = mock_llm.generate.call_args
+        assert call_args[1].get("max_tokens") == 200
+
+
+class TestSimilarityCalculationIntegration:
+    """Integration tests combining similarity calculation with find_matching_story."""
+
+    def test_similarity_calculation_affects_matching(
+        self, sample_article
+    ):
+        """Test that similarity calculation directly affects story matching."""
+        # Create two stories - one should match better than the other
+        story1 = Story(
+            id="story-1",
+            title="Unrelated Story",
+            description="About something else",
+            keywords=["sports", "games"],
+            first_seen=datetime.now() - timedelta(days=1),
+            last_updated=datetime.now(),
+            lifecycle_state="developing",
+            article_ids=[],
+            news_item_ids=[],
+        )
+
+        story2 = Story(
+            id="story-2",
+            title="Tech News Story",
+            description="About technology",
+            keywords=["tech", "AI", "company"],
+            first_seen=datetime.now() - timedelta(days=1),
+            last_updated=datetime.now(),
+            lifecycle_state="developing",
+            article_ids=[],
+            news_item_ids=[],
+        )
+
+        call_count = [0]
+
+        def generate_response(*args, **kwargs):
+            call_count[0] += 1
+            # Story 1 gets low score, Story 2 gets high score
+            if call_count[0] == 1:
+                return json.dumps({
+                    "is_same_story": True,
+                    "confidence": 0.3,  # Low
+                    "reasoning": "Weak match"
+                })
+            else:
+                return json.dumps({
+                    "is_same_story": True,
+                    "confidence": 0.9,  # High
+                    "reasoning": "Strong match"
+                })
+
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.side_effect = generate_response
+
+        mock_storage = MagicMock(spec=Storage)
+        mock_storage.get_active_stories.return_value = [story1, story2]
+
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+        result = clusterer.find_matching_story(sample_article)
+
+        # Should select story-2 with higher similarity
+        assert result is not None
+        assert result.id == "story-2"
+
+    def test_threshold_boundary_with_similarity(self, sample_article):
+        """Test threshold boundary behavior with similarity calculation."""
+        story = Story(
+            id="story-1",
+            title="Story",
+            description="Description",
+            keywords=["test"],
+            first_seen=datetime.now() - timedelta(days=1),
+            last_updated=datetime.now(),
+            lifecycle_state="developing",
+            article_ids=[],
+            news_item_ids=[],
+        )
+
+        # Just below threshold
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.return_value = json.dumps({
+            "is_same_story": True,
+            "confidence": 0.74,  # Just below 0.75 threshold
+            "reasoning": "Close"
+        })
+
+        mock_storage = MagicMock(spec=Storage)
+        mock_storage.get_active_stories.return_value = [story]
+
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+        result = clusterer.find_matching_story(sample_article)
+
+        # Should NOT match (0.74 < 0.75)
+        assert result is None
+
+    def test_threshold_exact_boundary(self, sample_article):
+        """Test exact threshold boundary."""
+        story = Story(
+            id="story-1",
+            title="Story",
+            description="Description",
+            keywords=["test"],
+            first_seen=datetime.now() - timedelta(days=1),
+            last_updated=datetime.now(),
+            lifecycle_state="developing",
+            article_ids=[],
+            news_item_ids=[],
+        )
+
+        # Exactly at threshold
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.return_value = json.dumps({
+            "is_same_story": True,
+            "confidence": 0.75,  # Exactly at threshold
+            "reasoning": "Exact"
+        })
+
+        mock_storage = MagicMock(spec=Storage)
+        mock_storage.get_active_stories.return_value = [story]
+
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+        result = clusterer.find_matching_story(sample_article)
+
+        # Should match (0.75 >= 0.75)
+        assert result is not None
+        assert result.id == "story-1"
