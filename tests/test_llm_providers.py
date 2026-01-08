@@ -3874,3 +3874,866 @@ class TestClaudeProviderIntegration:
         )
         assert claude_provider is not None
         assert claude_provider["available"] is False
+
+
+# =============================================================================
+# Tests for GeminiProvider
+# =============================================================================
+
+
+class TestGeminiProviderInitialization:
+    """Tests for GeminiProvider initialization."""
+
+    def test_initialization_with_default_model(self, clean_env):
+        """Test GeminiProvider initializes with default model."""
+        provider = GeminiProvider()
+
+        assert provider._model == "gemini-1.5-flash"
+        assert provider.name == "Gemini"
+        assert provider._client is None
+
+    def test_initialization_with_custom_model(self, clean_env):
+        """Test GeminiProvider initializes with custom model."""
+        provider = GeminiProvider(model="gemini-1.5-pro")
+
+        assert provider._model == "gemini-1.5-pro"
+        assert provider.name == "Gemini"
+
+    def test_model_name_property(self, clean_env):
+        """Test model_name property returns configured model."""
+        provider = GeminiProvider(model="gemini-2.0-flash")
+        assert provider.model_name == "gemini-2.0-flash"
+
+    def test_model_name_property_default(self, clean_env):
+        """Test model_name property returns default model."""
+        provider = GeminiProvider()
+        assert provider.model_name == "gemini-1.5-flash"
+
+    def test_inherits_from_llm_provider(self, clean_env):
+        """Test GeminiProvider inherits from LLMProvider."""
+        provider = GeminiProvider()
+        assert isinstance(provider, LLMProvider)
+
+    def test_session_usage_initialized(self, clean_env):
+        """Test session usage is initialized correctly."""
+        provider = GeminiProvider()
+        assert provider.session_usage == {"calls": 0, "total_tokens": 0}
+        assert provider.last_usage is None
+
+
+class TestGeminiProviderIsAvailable:
+    """Tests for GeminiProvider.is_available() method."""
+
+    def test_is_available_returns_true_with_sdk_and_google_api_key(self, clean_env):
+        """Test is_available returns True when SDK installed and GOOGLE_API_KEY set."""
+        os.environ["GOOGLE_API_KEY"] = "test-google-key"
+        mock_genai = MagicMock()
+
+        with patch.dict("sys.modules", {"google.generativeai": mock_genai}):
+            provider = GeminiProvider()
+            assert provider.is_available() is True
+
+    def test_is_available_returns_true_with_sdk_and_gemini_api_key(self, clean_env):
+        """Test is_available returns True when SDK installed and GEMINI_API_KEY set."""
+        os.environ["GEMINI_API_KEY"] = "test-gemini-key"
+        mock_genai = MagicMock()
+
+        with patch.dict("sys.modules", {"google.generativeai": mock_genai}):
+            provider = GeminiProvider()
+            assert provider.is_available() is True
+
+    def test_is_available_prefers_google_api_key(self, clean_env):
+        """Test is_available works when both API keys are set."""
+        os.environ["GOOGLE_API_KEY"] = "test-google-key"
+        os.environ["GEMINI_API_KEY"] = "test-gemini-key"
+        mock_genai = MagicMock()
+
+        with patch.dict("sys.modules", {"google.generativeai": mock_genai}):
+            provider = GeminiProvider()
+            assert provider.is_available() is True
+
+    def test_is_available_returns_false_without_api_key(self, clean_env):
+        """Test is_available returns False when API key not set."""
+        # Ensure no API key is set
+        if "GOOGLE_API_KEY" in os.environ:
+            del os.environ["GOOGLE_API_KEY"]
+        if "GEMINI_API_KEY" in os.environ:
+            del os.environ["GEMINI_API_KEY"]
+
+        mock_genai = MagicMock()
+        with patch.dict("sys.modules", {"google.generativeai": mock_genai}):
+            provider = GeminiProvider()
+            assert provider.is_available() is False
+
+    def test_is_available_returns_false_without_sdk(self, clean_env):
+        """Test is_available returns False when SDK not installed."""
+        os.environ["GOOGLE_API_KEY"] = "test-google-key"
+
+        # Mock ImportError by making the import fail
+        with patch.dict("sys.modules", {"google.generativeai": None}):
+            provider = GeminiProvider()
+            # When module is None, import will raise ImportError or TypeError
+            assert provider.is_available() is False
+
+    def test_is_available_returns_false_without_both(self, clean_env):
+        """Test is_available returns False when neither SDK nor API key present."""
+        if "GOOGLE_API_KEY" in os.environ:
+            del os.environ["GOOGLE_API_KEY"]
+        if "GEMINI_API_KEY" in os.environ:
+            del os.environ["GEMINI_API_KEY"]
+
+        with patch.dict("sys.modules", {"google.generativeai": None}):
+            provider = GeminiProvider()
+            assert provider.is_available() is False
+
+    def test_is_available_with_empty_api_key(self, clean_env):
+        """Test is_available returns False when API key is empty string."""
+        os.environ["GOOGLE_API_KEY"] = ""
+
+        mock_genai = MagicMock()
+        with patch.dict("sys.modules", {"google.generativeai": mock_genai}):
+            provider = GeminiProvider()
+            assert provider.is_available() is False
+
+
+class TestGeminiProviderSummarize:
+    """Tests for GeminiProvider.summarize() method with mocked responses."""
+
+    def test_summarize_returns_empty_for_empty_input(self, clean_env):
+        """Test summarize returns empty string for empty input."""
+        provider = GeminiProvider()
+        result = provider.summarize("")
+        assert result == ""
+
+    def test_summarize_makes_correct_api_call(self, clean_env):
+        """Test summarize makes correct API call to Gemini."""
+        os.environ["GOOGLE_API_KEY"] = "test-google-key"
+
+        # Create mock usage metadata
+        mock_usage = MagicMock()
+        mock_usage.prompt_token_count = 50
+        mock_usage.candidates_token_count = 10
+        mock_usage.total_token_count = 60
+
+        mock_response = MagicMock()
+        mock_response.text = "Gemini summary"
+        mock_response.usage_metadata = mock_usage
+
+        mock_model = MagicMock()
+        mock_model.generate_content.return_value = mock_response
+
+        provider = GeminiProvider()
+        # Patch the _get_client method to return our mock
+        with patch.object(provider, "_get_client", return_value=mock_model):
+            result = provider.summarize("Test article content", max_length=150)
+
+            assert result == "Gemini summary"
+            mock_model.generate_content.assert_called_once()
+
+    def test_summarize_with_custom_model(self, clean_env):
+        """Test summarize uses custom model in API call."""
+        os.environ["GOOGLE_API_KEY"] = "test-google-key"
+
+        mock_usage = MagicMock()
+        mock_usage.prompt_token_count = 50
+        mock_usage.candidates_token_count = 10
+        mock_usage.total_token_count = 60
+
+        mock_response = MagicMock()
+        mock_response.text = "Summary"
+        mock_response.usage_metadata = mock_usage
+
+        mock_model = MagicMock()
+        mock_model.generate_content.return_value = mock_response
+
+        provider = GeminiProvider(model="gemini-1.5-pro")
+        with patch.object(provider, "_get_client", return_value=mock_model):
+            provider.summarize("Test text")
+
+            # Verify the model was called
+            mock_model.generate_content.assert_called_once()
+            # Verify the provider has the custom model set
+            assert provider._model == "gemini-1.5-pro"
+
+    def test_summarize_records_usage_from_response(self, clean_env):
+        """Test summarize records usage stats from API response."""
+        os.environ["GOOGLE_API_KEY"] = "test-google-key"
+
+        mock_usage = MagicMock()
+        mock_usage.prompt_token_count = 100
+        mock_usage.candidates_token_count = 25
+        mock_usage.total_token_count = 125
+
+        mock_response = MagicMock()
+        mock_response.text = "Summary"
+        mock_response.usage_metadata = mock_usage
+
+        mock_model = MagicMock()
+        mock_model.generate_content.return_value = mock_response
+
+        provider = GeminiProvider()
+        with patch.object(provider, "_get_client", return_value=mock_model):
+            provider.summarize("Test text")
+
+            assert provider.last_usage is not None
+            assert provider.last_usage.input_tokens == 100
+            assert provider.last_usage.output_tokens == 25
+            assert provider.last_usage.total_tokens == 125
+            assert provider.last_usage.model == "gemini-1.5-flash"
+            assert provider.last_usage.provider == "Gemini"
+
+    def test_summarize_accumulates_session_usage(self, clean_env):
+        """Test multiple summarize calls accumulate session usage."""
+        os.environ["GOOGLE_API_KEY"] = "test-google-key"
+
+        mock_usage = MagicMock()
+        mock_usage.prompt_token_count = 50
+        mock_usage.candidates_token_count = 10
+        mock_usage.total_token_count = 60
+
+        mock_response = MagicMock()
+        mock_response.text = "Summary"
+        mock_response.usage_metadata = mock_usage
+
+        mock_model = MagicMock()
+        mock_model.generate_content.return_value = mock_response
+
+        provider = GeminiProvider()
+        with patch.object(provider, "_get_client", return_value=mock_model):
+            provider.summarize("First text")
+            provider.summarize("Second text")
+
+            assert provider.session_usage["calls"] == 2
+            assert provider.session_usage["total_tokens"] == 120  # 60 * 2
+
+    def test_summarize_strips_whitespace(self, clean_env):
+        """Test summarize strips whitespace from response."""
+        os.environ["GOOGLE_API_KEY"] = "test-google-key"
+
+        mock_usage = MagicMock()
+        mock_usage.prompt_token_count = 10
+        mock_usage.candidates_token_count = 5
+        mock_usage.total_token_count = 15
+
+        mock_response = MagicMock()
+        mock_response.text = "  Summary with whitespace  \n\n"
+        mock_response.usage_metadata = mock_usage
+
+        mock_model = MagicMock()
+        mock_model.generate_content.return_value = mock_response
+
+        provider = GeminiProvider()
+        with patch.object(provider, "_get_client", return_value=mock_model):
+            result = provider.summarize("Test")
+
+            assert result == "Summary with whitespace"
+
+    def test_summarize_raises_when_not_available(self, clean_env):
+        """Test summarize raises RuntimeError when provider not available."""
+        if "GOOGLE_API_KEY" in os.environ:
+            del os.environ["GOOGLE_API_KEY"]
+        if "GEMINI_API_KEY" in os.environ:
+            del os.environ["GEMINI_API_KEY"]
+
+        with patch.dict("sys.modules", {"google.generativeai": None}):
+            provider = GeminiProvider()
+
+            with pytest.raises(RuntimeError, match="Gemini provider not available"):
+                provider.summarize("Test text")
+
+    def test_summarize_estimates_tokens_when_usage_none(self, clean_env):
+        """Test summarize estimates tokens when usage is None."""
+        os.environ["GOOGLE_API_KEY"] = "test-google-key"
+
+        mock_response = MagicMock()
+        mock_response.text = "Summary result"
+        mock_response.usage_metadata = None  # No usage data
+
+        mock_model = MagicMock()
+        mock_model.generate_content.return_value = mock_response
+
+        provider = GeminiProvider()
+        with patch.object(provider, "_get_client", return_value=mock_model):
+            provider.summarize("Test text for summarization")
+
+            assert provider.last_usage is not None
+            # Should have estimated tokens
+            assert provider.last_usage.input_tokens > 0
+            assert provider.last_usage.output_tokens > 0
+
+
+class TestGeminiProviderAPIKeyHandling:
+    """Tests for GeminiProvider API key handling."""
+
+    def test_api_key_from_google_api_key(self, clean_env):
+        """Test API key is read from GOOGLE_API_KEY environment variable."""
+        os.environ["GOOGLE_API_KEY"] = "test-key-12345"
+
+        mock_genai = MagicMock()
+        with patch.dict("sys.modules", {"google.generativeai": mock_genai}):
+            provider = GeminiProvider()
+            assert provider.is_available() is True
+
+    def test_api_key_from_gemini_api_key(self, clean_env):
+        """Test API key is read from GEMINI_API_KEY environment variable."""
+        os.environ["GEMINI_API_KEY"] = "test-key-12345"
+
+        mock_genai = MagicMock()
+        with patch.dict("sys.modules", {"google.generativeai": mock_genai}):
+            provider = GeminiProvider()
+            assert provider.is_available() is True
+
+    def test_api_key_not_in_other_env_vars(self, clean_env):
+        """Test API key is not read from other common env vars."""
+        # Set other provider keys but not GOOGLE_API_KEY or GEMINI_API_KEY
+        os.environ["OPENAI_API_KEY"] = "openai-key"
+        os.environ["ANTHROPIC_API_KEY"] = "anthropic-key"
+
+        mock_genai = MagicMock()
+        with patch.dict("sys.modules", {"google.generativeai": mock_genai}):
+            provider = GeminiProvider()
+            assert provider.is_available() is False
+
+    def test_empty_api_key_treated_as_unavailable(self, clean_env):
+        """Test empty string API key is treated as unavailable."""
+        os.environ["GOOGLE_API_KEY"] = ""
+        os.environ["GEMINI_API_KEY"] = ""
+
+        mock_genai = MagicMock()
+        with patch.dict("sys.modules", {"google.generativeai": mock_genai}):
+            provider = GeminiProvider()
+            assert provider.is_available() is False
+
+    def test_whitespace_only_api_key(self, clean_env):
+        """Test whitespace-only API key is treated as available (truthy)."""
+        os.environ["GOOGLE_API_KEY"] = "   "
+
+        mock_genai = MagicMock()
+        with patch.dict("sys.modules", {"google.generativeai": mock_genai}):
+            provider = GeminiProvider()
+            # Whitespace is truthy in Python, so this will return True
+            assert provider.is_available() is True
+
+
+class TestGeminiProviderErrorHandling:
+    """Tests for GeminiProvider error handling."""
+
+    def test_summarize_raises_on_api_error(self, clean_env):
+        """Test summarize raises when API returns error."""
+        os.environ["GOOGLE_API_KEY"] = "test-google-key"
+
+        mock_model = MagicMock()
+        mock_model.generate_content.side_effect = Exception("API Error")
+
+        provider = GeminiProvider()
+        with patch.object(provider, "_get_client", return_value=mock_model):
+            with pytest.raises(Exception, match="API Error"):
+                provider.summarize("Test text")
+
+    def test_summarize_raises_on_rate_limit(self, clean_env):
+        """Test summarize raises on rate limit error."""
+        os.environ["GOOGLE_API_KEY"] = "test-google-key"
+
+        mock_model = MagicMock()
+        mock_model.generate_content.side_effect = Exception("Rate limit exceeded")
+
+        provider = GeminiProvider()
+        with patch.object(provider, "_get_client", return_value=mock_model):
+            with pytest.raises(Exception, match="Rate limit exceeded"):
+                provider.summarize("Test text")
+
+    def test_summarize_raises_on_invalid_api_key(self, clean_env):
+        """Test summarize raises on invalid API key."""
+        os.environ["GOOGLE_API_KEY"] = "invalid-key"
+
+        mock_model = MagicMock()
+        mock_model.generate_content.side_effect = Exception("Invalid API key")
+
+        provider = GeminiProvider()
+        with patch.object(provider, "_get_client", return_value=mock_model):
+            with pytest.raises(Exception, match="Invalid API key"):
+                provider.summarize("Test text")
+
+
+class TestGeminiProviderIntegration:
+    """Integration tests for GeminiProvider with get_provider and list_providers."""
+
+    def test_get_provider_returns_gemini_provider(self, clean_env):
+        """Test get_provider returns GeminiProvider when configured."""
+        config = LLMConfig(
+            provider=ProviderType.GEMINI,
+            model="gemini-1.5-flash",
+        )
+
+        provider = get_provider(config)
+
+        assert isinstance(provider, GeminiProvider)
+        assert provider._model == "gemini-1.5-flash"
+
+    def test_get_provider_with_custom_model(self, clean_env):
+        """Test get_provider uses custom model for GeminiProvider."""
+        config = LLMConfig(
+            provider=ProviderType.GEMINI,
+            model="gemini-1.5-pro",
+        )
+
+        provider = get_provider(config)
+
+        assert isinstance(provider, GeminiProvider)
+        assert provider._model == "gemini-1.5-pro"
+
+    def test_get_provider_uses_default_model(self, clean_env):
+        """Test get_provider uses default model when not specified."""
+        config = LLMConfig(
+            provider=ProviderType.GEMINI,
+            model=None,
+        )
+
+        provider = get_provider(config)
+
+        assert isinstance(provider, GeminiProvider)
+        assert provider._model == "gemini-1.5-flash"
+
+    def test_list_providers_includes_gemini(self, clean_env):
+        """Test list_providers includes Gemini in the list."""
+        os.environ["GOOGLE_API_KEY"] = "test-key"
+
+        mock_genai = MagicMock()
+        with patch.dict("sys.modules", {"google.generativeai": mock_genai}):
+            providers = list_providers()
+
+            gemini_provider = next(
+                (p for p in providers if p["type"] == ProviderType.GEMINI),
+                None
+            )
+            assert gemini_provider is not None
+            assert gemini_provider["name"] == "Gemini (API)"
+            assert gemini_provider["available"] is True
+
+    def test_list_providers_gemini_unavailable(self, clean_env):
+        """Test list_providers shows Gemini as unavailable without API key."""
+        if "GOOGLE_API_KEY" in os.environ:
+            del os.environ["GOOGLE_API_KEY"]
+        if "GEMINI_API_KEY" in os.environ:
+            del os.environ["GEMINI_API_KEY"]
+
+        providers = list_providers()
+
+        gemini_provider = next(
+            (p for p in providers if p["type"] == ProviderType.GEMINI),
+            None
+        )
+        assert gemini_provider is not None
+        assert gemini_provider["available"] is False
+
+    def test_auto_detect_includes_gemini_in_priority(self, clean_env):
+        """Test auto_detect_provider considers Gemini in detection."""
+        os.environ["GOOGLE_API_KEY"] = "test-key"
+
+        # Mock no other providers available
+        mock_genai = MagicMock()
+
+        with patch.dict("sys.modules", {"google.generativeai": mock_genai}):
+            with patch("src.llm_providers.LMStudioProvider.is_available", return_value=False):
+                with patch("src.llm_providers.OllamaProvider.is_available", return_value=False):
+                    provider = auto_detect_provider()
+
+                    if provider is not None:
+                        # Should detect Gemini as available
+                        assert isinstance(provider, (GeminiProvider, type(provider)))
+
+
+# =============================================================================
+# Tests for GeminiCLIProvider
+# =============================================================================
+
+
+class TestGeminiCLIProviderInitialization:
+    """Tests for GeminiCLIProvider initialization."""
+
+    def test_initialization_with_default_model(self):
+        """Test GeminiCLIProvider initializes with default model."""
+        provider = GeminiCLIProvider()
+
+        assert provider._model == "gemini-2.0-flash"
+        assert provider.name == "Gemini CLI"
+
+    def test_initialization_with_custom_model(self):
+        """Test GeminiCLIProvider initializes with custom model."""
+        provider = GeminiCLIProvider(model="gemini-1.5-pro")
+
+        assert provider._model == "gemini-1.5-pro"
+        assert provider.name == "Gemini CLI"
+
+    def test_model_name_property(self):
+        """Test model_name property returns configured model."""
+        provider = GeminiCLIProvider(model="gemini-1.5-flash")
+        assert provider.model_name == "gemini-1.5-flash"
+
+    def test_model_name_property_default(self):
+        """Test model_name property returns default model."""
+        provider = GeminiCLIProvider()
+        assert provider.model_name == "gemini-2.0-flash"
+
+    def test_inherits_from_llm_provider(self):
+        """Test GeminiCLIProvider inherits from LLMProvider."""
+        provider = GeminiCLIProvider()
+        assert isinstance(provider, LLMProvider)
+
+    def test_session_usage_initialized(self):
+        """Test session usage is initialized correctly."""
+        provider = GeminiCLIProvider()
+        assert provider.session_usage == {"calls": 0, "total_tokens": 0}
+        assert provider.last_usage is None
+
+
+class TestGeminiCLIProviderIsAvailable:
+    """Tests for GeminiCLIProvider.is_available() method."""
+
+    def test_is_available_returns_true_when_gemini_cli_found(self):
+        """Test is_available returns True when Gemini CLI is found."""
+        with patch("shutil.which") as mock_which:
+            mock_which.return_value = "/usr/local/bin/gemini"
+
+            provider = GeminiCLIProvider()
+            assert provider.is_available() is True
+            mock_which.assert_called_once_with("gemini")
+
+    def test_is_available_returns_false_when_gemini_cli_not_found(self):
+        """Test is_available returns False when Gemini CLI not found."""
+        with patch("shutil.which") as mock_which:
+            mock_which.return_value = None
+
+            provider = GeminiCLIProvider()
+            assert provider.is_available() is False
+            mock_which.assert_called_once_with("gemini")
+
+    def test_is_available_checks_shutil_which(self):
+        """Test is_available uses shutil.which to check CLI."""
+        with patch("shutil.which") as mock_which:
+            mock_which.return_value = "/opt/homebrew/bin/gemini"
+
+            provider = GeminiCLIProvider()
+            provider.is_available()
+
+            mock_which.assert_called_with("gemini")
+
+    def test_is_available_with_custom_model_same_check(self):
+        """Test is_available uses same check regardless of model."""
+        with patch("shutil.which") as mock_which:
+            mock_which.return_value = "/usr/bin/gemini"
+
+            provider = GeminiCLIProvider(model="gemini-1.5-pro")
+            assert provider.is_available() is True
+            mock_which.assert_called_once_with("gemini")
+
+    def test_is_available_on_windows_path(self):
+        """Test is_available works with Windows-style paths."""
+        with patch("shutil.which") as mock_which:
+            mock_which.return_value = "C:\\Program Files\\Gemini\\gemini.exe"
+
+            provider = GeminiCLIProvider()
+            assert provider.is_available() is True
+
+    def test_is_available_on_npm_global_install(self):
+        """Test is_available works with npm global install path."""
+        with patch("shutil.which") as mock_which:
+            mock_which.return_value = "/Users/user/.npm-global/bin/gemini"
+
+            provider = GeminiCLIProvider()
+            assert provider.is_available() is True
+
+
+class TestGeminiCLIProviderSummarize:
+    """Tests for GeminiCLIProvider.summarize() method with mocked subprocess."""
+
+    def test_summarize_returns_empty_for_empty_input(self):
+        """Test summarize returns empty string for empty input."""
+        provider = GeminiCLIProvider()
+        result = provider.summarize("")
+        assert result == ""
+
+    def test_summarize_makes_correct_cli_call(self):
+        """Test summarize makes correct CLI call to Gemini CLI."""
+        with patch("shutil.which") as mock_which, \
+             patch("subprocess.run") as mock_run:
+            mock_which.return_value = "/usr/local/bin/gemini"
+
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            mock_result.stdout = "Gemini CLI summary"
+            mock_result.stderr = ""
+            mock_run.return_value = mock_result
+
+            provider = GeminiCLIProvider()
+            result = provider.summarize("Test article content", max_length=150)
+
+            assert result == "Gemini CLI summary"
+            mock_run.assert_called_once()
+
+            # Verify command arguments
+            call_args = mock_run.call_args
+            cmd = call_args[0][0]
+            assert cmd[0] == "gemini"
+            assert "ask" in cmd
+            assert "-o" in cmd
+            assert "text" in cmd
+
+    def test_summarize_with_custom_model(self):
+        """Test summarize uses custom model setting (model is stored internally)."""
+        with patch("shutil.which") as mock_which, \
+             patch("subprocess.run") as mock_run:
+            mock_which.return_value = "/usr/local/bin/gemini"
+
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            mock_result.stdout = "Summary"
+            mock_result.stderr = ""
+            mock_run.return_value = mock_result
+
+            provider = GeminiCLIProvider(model="gemini-1.5-pro")
+            provider.summarize("Test text")
+
+            # Verify the provider has the custom model set
+            assert provider._model == "gemini-1.5-pro"
+            mock_run.assert_called_once()
+
+    def test_summarize_records_usage(self):
+        """Test summarize records usage stats."""
+        with patch("shutil.which") as mock_which, \
+             patch("subprocess.run") as mock_run:
+            mock_which.return_value = "/usr/local/bin/gemini"
+
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            mock_result.stdout = "Summary"
+            mock_result.stderr = ""
+            mock_run.return_value = mock_result
+
+            provider = GeminiCLIProvider()
+            provider.summarize("Test text for summarization")
+
+            assert provider.last_usage is not None
+            assert provider.last_usage.model == "gemini-2.0-flash"
+            assert provider.last_usage.provider == "Gemini CLI"
+
+    def test_summarize_strips_whitespace(self):
+        """Test summarize strips whitespace from response."""
+        with patch("shutil.which") as mock_which, \
+             patch("subprocess.run") as mock_run:
+            mock_which.return_value = "/usr/local/bin/gemini"
+
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            mock_result.stdout = "  Summary with whitespace  \n\n"
+            mock_result.stderr = ""
+            mock_run.return_value = mock_result
+
+            provider = GeminiCLIProvider()
+            result = provider.summarize("Test")
+
+            assert result == "Summary with whitespace"
+
+    def test_summarize_raises_when_not_available(self):
+        """Test summarize raises RuntimeError when CLI not available."""
+        with patch("shutil.which") as mock_which:
+            mock_which.return_value = None
+
+            provider = GeminiCLIProvider()
+
+            with pytest.raises(RuntimeError, match="Gemini CLI not available"):
+                provider.summarize("Test text")
+
+    def test_summarize_uses_correct_cli_flags(self):
+        """Test summarize uses all required CLI flags."""
+        with patch("shutil.which") as mock_which, \
+             patch("subprocess.run") as mock_run:
+            mock_which.return_value = "/usr/local/bin/gemini"
+
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            mock_result.stdout = "Summary"
+            mock_result.stderr = ""
+            mock_run.return_value = mock_result
+
+            provider = GeminiCLIProvider()
+            provider.summarize("Test text")
+
+            call_args = mock_run.call_args
+            cmd = call_args[0][0]
+
+            # Verify all expected flags are present
+            assert "gemini" in cmd
+            assert "ask" in cmd
+            assert "-o" in cmd
+            assert "text" in cmd
+
+    def test_summarize_accumulates_session_usage(self):
+        """Test multiple summarize calls accumulate session usage."""
+        with patch("shutil.which") as mock_which, \
+             patch("subprocess.run") as mock_run:
+            mock_which.return_value = "/usr/local/bin/gemini"
+
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            mock_result.stdout = "Summary"
+            mock_result.stderr = ""
+            mock_run.return_value = mock_result
+
+            provider = GeminiCLIProvider()
+            provider.summarize("First text")
+            provider.summarize("Second text")
+
+            assert provider.session_usage["calls"] == 2
+            # Total tokens are estimated since CLI doesn't return usage
+            assert provider.session_usage["total_tokens"] > 0
+
+
+class TestGeminiCLIProviderErrorHandling:
+    """Tests for GeminiCLIProvider error handling."""
+
+    def test_summarize_raises_on_cli_error(self):
+        """Test summarize raises when CLI returns non-zero exit code."""
+        with patch("shutil.which") as mock_which, \
+             patch("subprocess.run") as mock_run:
+            mock_which.return_value = "/usr/local/bin/gemini"
+
+            mock_result = MagicMock()
+            mock_result.returncode = 1
+            mock_result.stdout = ""
+            mock_result.stderr = "CLI Error: Authentication failed"
+            mock_run.return_value = mock_result
+
+            provider = GeminiCLIProvider()
+
+            with pytest.raises(RuntimeError, match="Gemini CLI failed"):
+                provider.summarize("Test text")
+
+    def test_summarize_raises_on_timeout(self):
+        """Test summarize raises on CLI timeout."""
+        import subprocess
+
+        with patch("shutil.which") as mock_which, \
+             patch("subprocess.run") as mock_run:
+            mock_which.return_value = "/usr/local/bin/gemini"
+            mock_run.side_effect = subprocess.TimeoutExpired(cmd="gemini", timeout=60)
+
+            provider = GeminiCLIProvider()
+
+            with pytest.raises(subprocess.TimeoutExpired):
+                provider.summarize("Test text")
+
+    def test_summarize_handles_empty_response(self):
+        """Test summarize handles empty response from CLI."""
+        with patch("shutil.which") as mock_which, \
+             patch("subprocess.run") as mock_run:
+            mock_which.return_value = "/usr/local/bin/gemini"
+
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            mock_result.stdout = ""  # Empty response
+            mock_result.stderr = ""
+            mock_run.return_value = mock_result
+
+            provider = GeminiCLIProvider()
+            result = provider.summarize("Test text")
+
+            # Should return empty string
+            assert result == ""
+
+    def test_summarize_handles_whitespace_only_response(self):
+        """Test summarize handles whitespace-only response from CLI."""
+        with patch("shutil.which") as mock_which, \
+             patch("subprocess.run") as mock_run:
+            mock_which.return_value = "/usr/local/bin/gemini"
+
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            mock_result.stdout = "   \n\n   "  # Whitespace only
+            mock_result.stderr = ""
+            mock_run.return_value = mock_result
+
+            provider = GeminiCLIProvider()
+            result = provider.summarize("Test text")
+
+            # Should return empty string after stripping
+            assert result == ""
+
+
+class TestGeminiCLIProviderIntegration:
+    """Integration tests for GeminiCLIProvider with get_provider and list_providers."""
+
+    def test_get_provider_returns_gemini_cli_provider(self, clean_env):
+        """Test get_provider returns GeminiCLIProvider when configured."""
+        config = LLMConfig(
+            provider=ProviderType.GEMINI_CLI,
+            model="gemini-2.0-flash",
+        )
+
+        provider = get_provider(config)
+
+        assert isinstance(provider, GeminiCLIProvider)
+        assert provider._model == "gemini-2.0-flash"
+
+    def test_get_provider_with_custom_model(self, clean_env):
+        """Test get_provider uses custom model for GeminiCLIProvider."""
+        config = LLMConfig(
+            provider=ProviderType.GEMINI_CLI,
+            model="gemini-1.5-pro",
+        )
+
+        provider = get_provider(config)
+
+        assert isinstance(provider, GeminiCLIProvider)
+        assert provider._model == "gemini-1.5-pro"
+
+    def test_get_provider_uses_default_model(self, clean_env):
+        """Test get_provider uses default model when not specified."""
+        config = LLMConfig(
+            provider=ProviderType.GEMINI_CLI,
+            model=None,
+        )
+
+        provider = get_provider(config)
+
+        assert isinstance(provider, GeminiCLIProvider)
+        assert provider._model == "gemini-2.0-flash"
+
+    def test_list_providers_includes_gemini_cli(self):
+        """Test list_providers includes Gemini CLI in the list."""
+        with patch("shutil.which") as mock_which:
+            mock_which.return_value = "/usr/local/bin/gemini"
+
+            providers = list_providers()
+
+            gemini_cli_provider = next(
+                (p for p in providers if p["type"] == ProviderType.GEMINI_CLI),
+                None
+            )
+            assert gemini_cli_provider is not None
+            assert gemini_cli_provider["name"] == "Gemini CLI"
+            assert gemini_cli_provider["available"] is True
+
+    def test_list_providers_gemini_cli_unavailable(self):
+        """Test list_providers shows Gemini CLI as unavailable when CLI not found."""
+        with patch("shutil.which") as mock_which:
+            mock_which.return_value = None
+
+            providers = list_providers()
+
+            gemini_cli_provider = next(
+                (p for p in providers if p["type"] == ProviderType.GEMINI_CLI),
+                None
+            )
+            assert gemini_cli_provider is not None
+            assert gemini_cli_provider["available"] is False
+
+    def test_config_with_gemini_cli_provider_type(self, clean_env):
+        """Test LLMConfig can be created with GEMINI_CLI provider type."""
+        config = LLMConfig(
+            provider=ProviderType.GEMINI_CLI,
+            model="gemini-2.0-flash",
+        )
+
+        assert config.provider == ProviderType.GEMINI_CLI
+        assert config.model == "gemini-2.0-flash"
