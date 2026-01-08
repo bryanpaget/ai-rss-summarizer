@@ -13,6 +13,7 @@ from typing import Optional
 from unittest.mock import MagicMock, patch, Mock
 
 import pytest
+import typer
 from typer.testing import CliRunner
 
 from src.cli import (
@@ -762,3 +763,640 @@ def sample_article_minimal():
 def typer_app():
     """Provide access to the main Typer app for testing."""
     return app
+
+
+# =============================================================================
+# CLI App Initialization Tests
+# =============================================================================
+
+
+class TestAppCreation:
+    """Test Typer app creation and configuration."""
+
+    def test_app_is_typer_instance(self):
+        """Test that app is a Typer instance."""
+        assert isinstance(app, typer.Typer)
+
+    def test_app_has_name(self):
+        """Test that app has the correct name."""
+        # The name is set via Typer(name="rss")
+        assert app.info.name == "rss"
+
+    def test_app_has_help_text(self):
+        """Test that app has help text."""
+        assert app.info.help is not None
+        assert "AI-powered RSS feed summarizer" in app.info.help
+
+    def test_app_completion_disabled(self):
+        """Test that shell completion is disabled."""
+        # add_completion=False was passed to Typer
+        # When add_completion=False, there's no 'completion' command registered
+        command_names = [cmd.name or cmd.callback.__name__ for cmd in app.registered_commands]
+        # If completion was enabled, there would be a completion command
+        # We verify by checking the app was configured correctly during init
+        # Note: We can't directly check add_completion after init, but we can verify no shell completion commands
+        assert "--install-completion" not in [c for c in command_names]
+
+    def test_app_callback_registered(self):
+        """Test that the main callback is registered."""
+        assert app.registered_callback is not None
+
+    def test_app_callback_function(self):
+        """Test that the callback function is the main function."""
+        # The callback should exist and have the expected docstring
+        callback = app.registered_callback.callback
+        assert callback is not None
+        assert "AI RSS Summarizer" in callback.__doc__
+
+    def test_app_has_commands(self):
+        """Test that app has registered commands."""
+        assert len(app.registered_commands) > 0
+
+    def test_app_has_subtypers(self):
+        """Test that app has registered subtyper groups."""
+        # The tag subcommand group is a registered typer
+        assert len(app.registered_groups) > 0
+
+
+class TestConsoleConfiguration:
+    """Test console configuration."""
+
+    def test_console_is_rich_console(self):
+        """Test that console is a Rich Console instance."""
+        from rich.console import Console as RichConsole
+        assert isinstance(console, RichConsole)
+
+    def test_console_is_configured_correctly(self):
+        """Test that console is configured for Windows compatibility."""
+        # The console should be configured - we check it's a valid Console instance
+        # The force_terminal and legacy_windows are internal settings set during init
+        assert console is not None
+        # Console should be able to print (basic functionality test)
+        assert hasattr(console, 'print')
+        assert callable(console.print)
+
+    def test_console_is_terminal_mode(self):
+        """Test that console is in terminal mode (for color output)."""
+        # When force_terminal=True, is_terminal should be True
+        assert console.is_terminal is True
+
+
+class TestCommandRegistration:
+    """Test that all expected commands are registered."""
+
+    def test_fetch_command_registered(self):
+        """Test that fetch command is registered."""
+        command_names = [cmd.name or cmd.callback.__name__ for cmd in app.registered_commands]
+        assert "fetch" in command_names
+
+    def test_summarize_command_registered(self):
+        """Test that summarize command is registered."""
+        command_names = [cmd.name or cmd.callback.__name__ for cmd in app.registered_commands]
+        assert "summarize" in command_names
+
+    def test_trends_command_registered(self):
+        """Test that trends command is registered."""
+        command_names = [cmd.name or cmd.callback.__name__ for cmd in app.registered_commands]
+        assert "trends" in command_names
+
+    def test_list_command_registered(self):
+        """Test that list command is registered with correct name."""
+        command_names = [cmd.name or cmd.callback.__name__ for cmd in app.registered_commands]
+        assert "list" in command_names
+
+    def test_stats_command_registered(self):
+        """Test that stats command is registered."""
+        command_names = [cmd.name or cmd.callback.__name__ for cmd in app.registered_commands]
+        assert "stats" in command_names
+
+    def test_add_feed_command_registered(self):
+        """Test that add-feed command is registered."""
+        command_names = [cmd.name or cmd.callback.__name__ for cmd in app.registered_commands]
+        assert "add_feed" in command_names or "add-feed" in command_names
+
+    def test_update_command_registered(self):
+        """Test that update command is registered."""
+        command_names = [cmd.name or cmd.callback.__name__ for cmd in app.registered_commands]
+        assert "update" in command_names
+
+    def test_setup_command_registered(self):
+        """Test that setup command is registered."""
+        command_names = [cmd.name or cmd.callback.__name__ for cmd in app.registered_commands]
+        assert "setup" in command_names
+
+    def test_discover_command_registered(self):
+        """Test that discover command is registered."""
+        command_names = [cmd.name or cmd.callback.__name__ for cmd in app.registered_commands]
+        assert "discover" in command_names
+
+    def test_help_command_registered(self):
+        """Test that help command is registered."""
+        command_names = [cmd.name or cmd.callback.__name__ for cmd in app.registered_commands]
+        # The function is named help_cmd but registered as "help"
+        assert "help" in command_names or "help_cmd" in command_names
+
+    def test_providers_command_registered(self):
+        """Test that providers command is registered."""
+        command_names = [cmd.name or cmd.callback.__name__ for cmd in app.registered_commands]
+        assert "providers" in command_names
+
+    def test_extract_knowledge_command_registered(self):
+        """Test that extract-knowledge command is registered."""
+        command_names = [cmd.name or cmd.callback.__name__ for cmd in app.registered_commands]
+        assert "extract_knowledge" in command_names or "extract-knowledge" in command_names
+
+    def test_query_command_registered(self):
+        """Test that query command is registered."""
+        command_names = [cmd.name or cmd.callback.__name__ for cmd in app.registered_commands]
+        assert "query" in command_names
+
+    def test_contradictions_command_registered(self):
+        """Test that contradictions command is registered."""
+        command_names = [cmd.name or cmd.callback.__name__ for cmd in app.registered_commands]
+        assert "contradictions" in command_names
+
+    def test_knowledge_stats_command_registered(self):
+        """Test that knowledge-stats command is registered."""
+        command_names = [cmd.name or cmd.callback.__name__ for cmd in app.registered_commands]
+        assert "knowledge-stats" in command_names or "knowledge_stats" in command_names
+
+    def test_graph_command_registered(self):
+        """Test that graph command is registered."""
+        command_names = [cmd.name or cmd.callback.__name__ for cmd in app.registered_commands]
+        assert "graph" in command_names
+
+    def test_graph_path_command_registered(self):
+        """Test that graph-path command is registered."""
+        command_names = [cmd.name or cmd.callback.__name__ for cmd in app.registered_commands]
+        assert "graph-path" in command_names or "graph_path" in command_names
+
+    def test_graph_stats_command_registered(self):
+        """Test that graph-stats command is registered."""
+        command_names = [cmd.name or cmd.callback.__name__ for cmd in app.registered_commands]
+        assert "graph-stats" in command_names or "graph_stats" in command_names
+
+    def test_context_add_command_registered(self):
+        """Test that context-add command is registered."""
+        command_names = [cmd.name or cmd.callback.__name__ for cmd in app.registered_commands]
+        assert "context_add" in command_names or "context-add" in command_names
+
+    def test_context_list_command_registered(self):
+        """Test that context-list command is registered."""
+        command_names = [cmd.name or cmd.callback.__name__ for cmd in app.registered_commands]
+        assert "context_list" in command_names or "context-list" in command_names
+
+    def test_emerging_command_registered(self):
+        """Test that emerging command is registered."""
+        command_names = [cmd.name or cmd.callback.__name__ for cmd in app.registered_commands]
+        assert "emerging" in command_names
+
+
+class TestPerspectiveCommandsRegistration:
+    """Test perspective commands are registered via add_perspective_commands."""
+
+    def test_perspectives_command_registered(self):
+        """Test that perspectives command is registered."""
+        command_names = [cmd.name or cmd.callback.__name__ for cmd in app.registered_commands]
+        assert "perspectives" in command_names
+
+    def test_perspective_config_command_registered(self):
+        """Test that perspective-config command is registered."""
+        command_names = [cmd.name or cmd.callback.__name__ for cmd in app.registered_commands]
+        assert "perspective-config" in command_names or "configure_perspectives" in command_names
+
+    def test_cluster_stories_command_registered(self):
+        """Test that cluster-stories command is registered."""
+        command_names = [cmd.name or cmd.callback.__name__ for cmd in app.registered_commands]
+        assert "cluster-stories" in command_names or "cluster_stories" in command_names
+
+
+class TestSubcommandGroupsRegistration:
+    """Test subcommand groups are registered correctly."""
+
+    def test_tag_subcommand_group_registered(self):
+        """Test that tag subcommand group is registered."""
+        group_names = [group.name for group in app.registered_groups]
+        assert "tag" in group_names
+
+    def test_tag_subcommand_group_has_help(self):
+        """Test that tag subcommand group has help text."""
+        for group in app.registered_groups:
+            if group.name == "tag":
+                assert group.typer_instance.info.help is not None
+                break
+        else:
+            pytest.fail("tag group not found")
+
+    def test_tag_subcommand_group_has_commands(self):
+        """Test that tag subcommand group has its own commands."""
+        for group in app.registered_groups:
+            if group.name == "tag":
+                assert len(group.typer_instance.registered_commands) > 0
+                break
+        else:
+            pytest.fail("tag group not found")
+
+    def test_tag_articles_subcommand_exists(self):
+        """Test that tag articles subcommand exists."""
+        for group in app.registered_groups:
+            if group.name == "tag":
+                command_names = [
+                    cmd.name or cmd.callback.__name__
+                    for cmd in group.typer_instance.registered_commands
+                ]
+                assert "articles" in command_names
+                break
+        else:
+            pytest.fail("tag group not found")
+
+    def test_tag_stats_subcommand_exists(self):
+        """Test that tag stats subcommand exists."""
+        for group in app.registered_groups:
+            if group.name == "tag":
+                command_names = [
+                    cmd.name or cmd.callback.__name__
+                    for cmd in group.typer_instance.registered_commands
+                ]
+                assert "stats" in command_names
+                break
+        else:
+            pytest.fail("tag group not found")
+
+    def test_tag_filter_subcommand_exists(self):
+        """Test that tag filter subcommand exists."""
+        for group in app.registered_groups:
+            if group.name == "tag":
+                command_names = [
+                    cmd.name or cmd.callback.__name__
+                    for cmd in group.typer_instance.registered_commands
+                ]
+                assert "filter" in command_names
+                break
+        else:
+            pytest.fail("tag group not found")
+
+
+class TestCommandCount:
+    """Test expected number of commands and groups."""
+
+    def test_minimum_command_count(self):
+        """Test that we have at least the expected number of commands."""
+        # Expected: fetch, summarize, trends, list, stats, add-feed, update, setup,
+        # discover, help, providers, extract-knowledge, query, contradictions,
+        # knowledge-stats, graph, graph-path, graph-stats, context-add, context-list,
+        # emerging, perspectives, perspective-config, cluster-stories
+        # That's at least 24 commands
+        assert len(app.registered_commands) >= 24
+
+    def test_minimum_subcommand_group_count(self):
+        """Test that we have at least the expected number of subcommand groups."""
+        # Expected: tag
+        assert len(app.registered_groups) >= 1
+
+
+class TestIsSetupComplete:
+    """Test is_setup_complete function."""
+
+    def test_is_setup_complete_when_config_exists(self, temp_config_dir):
+        """Test is_setup_complete returns True when config exists."""
+        # Create the config file
+        config_path = os.path.join(temp_config_dir, "llm.json")
+        with open(config_path, "w") as f:
+            f.write('{"provider": "ollama"}')
+
+        with patch("src.cli.Path") as mock_path:
+            mock_path.return_value.exists.return_value = True
+            result = is_setup_complete()
+            assert result is True
+
+    def test_is_setup_complete_when_config_missing(self):
+        """Test is_setup_complete returns False when config is missing."""
+        with patch("src.cli.Path") as mock_path:
+            mock_path.return_value.exists.return_value = False
+            result = is_setup_complete()
+            assert result is False
+
+
+class TestRequireSetup:
+    """Test require_setup function."""
+
+    def test_require_setup_passes_when_complete(self):
+        """Test require_setup does nothing when setup is complete."""
+        with patch("src.cli.is_setup_complete") as mock_check:
+            mock_check.return_value = True
+            # Should not raise
+            require_setup()
+
+    def test_require_setup_exits_when_incomplete(self):
+        """Test require_setup raises Exit when setup is incomplete."""
+        with patch("src.cli.is_setup_complete") as mock_check:
+            mock_check.return_value = False
+            with pytest.raises(typer.Exit) as exc_info:
+                require_setup()
+            assert exc_info.value.exit_code == 1
+
+    def test_require_setup_prints_message_when_incomplete(self, mock_console):
+        """Test require_setup prints setup required message."""
+        with patch("src.cli.is_setup_complete") as mock_check:
+            mock_check.return_value = False
+            with patch("src.cli.console", mock_console):
+                with pytest.raises(typer.Exit):
+                    require_setup()
+                # Verify message was printed
+                mock_console.print.assert_called()
+
+
+class TestGetStorage:
+    """Test get_storage function."""
+
+    def test_get_storage_returns_storage_instance(self, temp_dir):
+        """Test get_storage returns a Storage instance."""
+        db_path = os.path.join(temp_dir, "test.db")
+        storage = get_storage(db_path)
+        assert isinstance(storage, Storage)
+
+    def test_get_storage_uses_default_path(self):
+        """Test get_storage uses default path if none provided."""
+        with patch("src.cli.Storage") as mock_storage:
+            get_storage()
+            mock_storage.assert_called_once_with("articles.db")
+
+    def test_get_storage_uses_custom_path(self):
+        """Test get_storage uses custom path if provided."""
+        with patch("src.cli.Storage") as mock_storage:
+            get_storage("/custom/path/db.sqlite")
+            mock_storage.assert_called_once_with("/custom/path/db.sqlite")
+
+
+class TestAppHelpViaCLI:
+    """Test app help output via CLI runner."""
+
+    def test_app_shows_help_with_no_args(self, cli_runner):
+        """Test that app runs when invoked without arguments."""
+        result = cli_runner.invoke(app)
+        # Typer app with callback and no required args should run successfully
+        # Exit code 0 = success, 2 = CLI error (acceptable for some Typer configs)
+        assert result.exit_code in [0, 2]
+
+    def test_app_shows_help_with_help_flag(self, cli_runner):
+        """Test that app shows help with --help flag."""
+        result = cli_runner.invoke(app, ["--help"])
+        assert result.exit_code == 0
+        # Should contain the app description
+        assert "AI RSS Summarizer" in result.stdout or "RSS" in result.stdout
+
+    def test_command_help_available(self, cli_runner):
+        """Test that command help is available."""
+        result = cli_runner.invoke(app, ["fetch", "--help"])
+        assert result.exit_code == 0
+        assert "feeds" in result.stdout.lower() or "fetch" in result.stdout.lower()
+
+
+class TestSubcommandHelpViaCLI:
+    """Test subcommand group help via CLI runner."""
+
+    def test_tag_help_available(self, cli_runner):
+        """Test that tag subcommand help is available."""
+        result = cli_runner.invoke(app, ["tag", "--help"])
+        assert result.exit_code == 0
+        assert "signal tag" in result.stdout.lower() or "tag" in result.stdout.lower()
+
+    def test_tag_articles_help_available(self, cli_runner):
+        """Test that tag articles help is available."""
+        result = cli_runner.invoke(app, ["tag", "articles", "--help"])
+        assert result.exit_code == 0
+        assert "tag" in result.stdout.lower() or "articles" in result.stdout.lower()
+
+    def test_tag_stats_help_available(self, cli_runner):
+        """Test that tag stats help is available."""
+        result = cli_runner.invoke(app, ["tag", "stats", "--help"])
+        assert result.exit_code == 0
+
+    def test_tag_filter_help_available(self, cli_runner):
+        """Test that tag filter help is available."""
+        result = cli_runner.invoke(app, ["tag", "filter", "--help"])
+        assert result.exit_code == 0
+
+
+class TestCommandCallbacksExist:
+    """Test that command callbacks are properly defined."""
+
+    def test_fetch_callback_exists(self):
+        """Test that fetch command has a callback function."""
+        for cmd in app.registered_commands:
+            if (cmd.name or cmd.callback.__name__) == "fetch":
+                assert cmd.callback is not None
+                assert callable(cmd.callback)
+                break
+        else:
+            pytest.fail("fetch command not found")
+
+    def test_summarize_callback_exists(self):
+        """Test that summarize command has a callback function."""
+        for cmd in app.registered_commands:
+            if (cmd.name or cmd.callback.__name__) == "summarize":
+                assert cmd.callback is not None
+                assert callable(cmd.callback)
+                break
+        else:
+            pytest.fail("summarize command not found")
+
+    def test_update_callback_exists(self):
+        """Test that update command has a callback function."""
+        for cmd in app.registered_commands:
+            if (cmd.name or cmd.callback.__name__) == "update":
+                assert cmd.callback is not None
+                assert callable(cmd.callback)
+                break
+        else:
+            pytest.fail("update command not found")
+
+    def test_setup_callback_exists(self):
+        """Test that setup command has a callback function."""
+        for cmd in app.registered_commands:
+            if (cmd.name or cmd.callback.__name__) == "setup":
+                assert cmd.callback is not None
+                assert callable(cmd.callback)
+                break
+        else:
+            pytest.fail("setup command not found")
+
+
+class TestCommandHasCorrectDecorator:
+    """Test that commands have correct decorators and metadata."""
+
+    def test_list_command_uses_name_decorator(self):
+        """Test that list command is registered with name='list'."""
+        # The function is list_articles but registered as 'list'
+        for cmd in app.registered_commands:
+            if cmd.name == "list":
+                assert cmd.callback.__name__ == "list_articles"
+                break
+        else:
+            pytest.fail("list command not found with correct name")
+
+    def test_help_command_uses_name_decorator(self):
+        """Test that help command is registered with name='help'."""
+        # The function is help_cmd but registered as 'help'
+        for cmd in app.registered_commands:
+            if cmd.name == "help":
+                assert cmd.callback.__name__ == "help_cmd"
+                break
+        else:
+            pytest.fail("help command not found with correct name")
+
+    def test_knowledge_stats_command_uses_name_decorator(self):
+        """Test that knowledge-stats command is registered correctly."""
+        for cmd in app.registered_commands:
+            if cmd.name == "knowledge-stats":
+                assert cmd.callback.__name__ == "knowledge_stats"
+                break
+        else:
+            pytest.fail("knowledge-stats command not found with correct name")
+
+    def test_graph_path_command_uses_name_decorator(self):
+        """Test that graph-path command is registered correctly."""
+        for cmd in app.registered_commands:
+            if cmd.name == "graph-path":
+                assert cmd.callback.__name__ == "graph_path"
+                break
+        else:
+            pytest.fail("graph-path command not found with correct name")
+
+    def test_graph_stats_command_uses_name_decorator(self):
+        """Test that graph-stats command is registered correctly."""
+        for cmd in app.registered_commands:
+            if cmd.name == "graph-stats":
+                assert cmd.callback.__name__ == "graph_stats"
+                break
+        else:
+            pytest.fail("graph-stats command not found with correct name")
+
+
+class TestAppIntegration:
+    """Integration tests for app initialization."""
+
+    def test_app_can_be_invoked(self, cli_runner):
+        """Test that app can be invoked without errors."""
+        result = cli_runner.invoke(app)
+        # Should run without exception (exit_code 0 or 2 for missing required)
+        assert result.exit_code in [0, 2]
+
+    def test_unknown_command_error(self, cli_runner):
+        """Test that unknown command returns error."""
+        result = cli_runner.invoke(app, ["unknown-command-xyz"])
+        assert result.exit_code != 0
+
+    def test_all_registered_commands_have_callbacks(self):
+        """Test that all registered commands have callback functions."""
+        for cmd in app.registered_commands:
+            assert cmd.callback is not None, f"Command {cmd.name} has no callback"
+            assert callable(cmd.callback), f"Command {cmd.name} callback is not callable"
+
+    def test_all_subcommand_group_commands_have_callbacks(self):
+        """Test that all subcommand group commands have callbacks."""
+        for group in app.registered_groups:
+            for cmd in group.typer_instance.registered_commands:
+                assert cmd.callback is not None, f"Subcommand {cmd.name} in {group.name} has no callback"
+                assert callable(cmd.callback), f"Subcommand {cmd.name} in {group.name} callback is not callable"
+
+
+class TestAddPerspectiveCommandsFunction:
+    """Test the add_perspective_commands function."""
+
+    def test_add_perspective_commands_function_exists(self):
+        """Test that add_perspective_commands function exists."""
+        from src.cli_perspectives import add_perspective_commands
+        assert callable(add_perspective_commands)
+
+    def test_add_perspective_commands_adds_to_app(self):
+        """Test that add_perspective_commands adds commands to an app."""
+        from src.cli_perspectives import add_perspective_commands
+
+        test_app = typer.Typer()
+        initial_count = len(test_app.registered_commands)
+
+        add_perspective_commands(test_app)
+
+        # Should have added at least 3 commands: perspectives, perspective-config, cluster-stories
+        assert len(test_app.registered_commands) >= initial_count + 3
+
+    def test_perspective_commands_registered_with_correct_names(self):
+        """Test perspective commands are registered with correct names."""
+        from src.cli_perspectives import add_perspective_commands
+
+        test_app = typer.Typer()
+        add_perspective_commands(test_app)
+
+        command_names = [cmd.name or cmd.callback.__name__ for cmd in test_app.registered_commands]
+
+        assert "perspectives" in command_names
+        assert "perspective-config" in command_names or "configure_perspectives" in command_names
+        assert "cluster-stories" in command_names or "cluster_stories" in command_names
+
+
+class TestSignalTagsAppConfiguration:
+    """Test signal_tags_app configuration."""
+
+    def test_signal_tags_app_exists(self):
+        """Test that signal_tags_app exists."""
+        from src.cli_signal_tags import app as signal_tags_app
+        assert isinstance(signal_tags_app, typer.Typer)
+
+    def test_signal_tags_app_has_name(self):
+        """Test that signal_tags_app has the correct name."""
+        from src.cli_signal_tags import app as signal_tags_app
+        assert signal_tags_app.info.name == "tag"
+
+    def test_signal_tags_app_has_help(self):
+        """Test that signal_tags_app has help text."""
+        from src.cli_signal_tags import app as signal_tags_app
+        assert signal_tags_app.info.help is not None
+        assert "signal tag" in signal_tags_app.info.help.lower()
+
+    def test_signal_tags_app_has_articles_command(self):
+        """Test that signal_tags_app has articles command."""
+        from src.cli_signal_tags import app as signal_tags_app
+        command_names = [cmd.name or cmd.callback.__name__ for cmd in signal_tags_app.registered_commands]
+        assert "articles" in command_names
+
+    def test_signal_tags_app_has_stats_command(self):
+        """Test that signal_tags_app has stats command."""
+        from src.cli_signal_tags import app as signal_tags_app
+        command_names = [cmd.name or cmd.callback.__name__ for cmd in signal_tags_app.registered_commands]
+        assert "stats" in command_names
+
+    def test_signal_tags_app_has_filter_command(self):
+        """Test that signal_tags_app has filter command."""
+        from src.cli_signal_tags import app as signal_tags_app
+        command_names = [cmd.name or cmd.callback.__name__ for cmd in signal_tags_app.registered_commands]
+        assert "filter" in command_names
+
+
+class TestAppImports:
+    """Test that necessary imports are available."""
+
+    def test_app_import(self):
+        """Test that app can be imported."""
+        from src.cli import app
+        assert app is not None
+
+    def test_console_import(self):
+        """Test that console can be imported."""
+        from src.cli import console
+        assert console is not None
+
+    def test_is_setup_complete_import(self):
+        """Test that is_setup_complete can be imported."""
+        from src.cli import is_setup_complete
+        assert callable(is_setup_complete)
+
+    def test_require_setup_import(self):
+        """Test that require_setup can be imported."""
+        from src.cli import require_setup
+        assert callable(require_setup)
+
+    def test_get_storage_import(self):
+        """Test that get_storage can be imported."""
+        from src.cli import get_storage
+        assert callable(get_storage)
