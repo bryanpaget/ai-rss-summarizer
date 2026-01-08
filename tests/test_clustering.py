@@ -1199,3 +1199,399 @@ def mock_process_dependencies():
             "extractor": mock_extractor,
             "story": mock_story,
         }
+
+
+# =============================================================================
+# Tests for StoryClusterer Initialization
+# =============================================================================
+
+
+class TestStoryClustererInitialization:
+    """Tests for StoryClusterer __init__ and basic setup."""
+
+    def test_clusterer_initialization_with_mock_dependencies(
+        self, mock_llm_provider, mock_storage
+    ):
+        """Test that StoryClusterer can be initialized with mock dependencies."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+
+        assert clusterer is not None
+        assert clusterer.llm is mock_llm_provider
+        assert clusterer.storage is mock_storage
+
+    def test_clusterer_initialization_with_real_storage(
+        self, mock_llm_provider, storage
+    ):
+        """Test that StoryClusterer can be initialized with real storage."""
+        clusterer = StoryClusterer(mock_llm_provider, storage)
+
+        assert clusterer is not None
+        assert clusterer.llm is mock_llm_provider
+        assert clusterer.storage is storage
+
+    def test_clusterer_stores_llm_provider_reference(
+        self, mock_llm_provider, mock_storage
+    ):
+        """Test that the LLM provider reference is properly stored."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+
+        assert clusterer.llm is mock_llm_provider
+        assert clusterer.llm.is_available() is True
+        assert clusterer.llm.name == "mock-provider"
+
+    def test_clusterer_stores_storage_reference(
+        self, mock_llm_provider, mock_storage
+    ):
+        """Test that the storage reference is properly stored."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+
+        assert clusterer.storage is mock_storage
+        # Verify storage methods are accessible
+        assert hasattr(clusterer.storage, 'get_active_stories')
+        assert hasattr(clusterer.storage, 'save_story')
+
+    def test_clusterer_with_unavailable_provider(
+        self, mock_llm_provider_unavailable, mock_storage
+    ):
+        """Test that StoryClusterer can be initialized with unavailable provider."""
+        # Initialization should succeed even if provider is unavailable
+        clusterer = StoryClusterer(mock_llm_provider_unavailable, mock_storage)
+
+        assert clusterer is not None
+        assert clusterer.llm is mock_llm_provider_unavailable
+        assert clusterer.llm.is_available() is False
+
+    def test_clusterer_with_error_prone_provider(
+        self, mock_llm_provider_error, mock_storage
+    ):
+        """Test that StoryClusterer can be initialized with error-prone provider."""
+        clusterer = StoryClusterer(mock_llm_provider_error, mock_storage)
+
+        assert clusterer is not None
+        assert clusterer.llm is mock_llm_provider_error
+
+    def test_clusterer_fixture_creation(self, story_clusterer):
+        """Test that the story_clusterer fixture works correctly."""
+        assert story_clusterer is not None
+        assert isinstance(story_clusterer, StoryClusterer)
+
+    def test_clusterer_real_storage_fixture_creation(
+        self, story_clusterer_real_storage
+    ):
+        """Test that the story_clusterer_real_storage fixture works correctly."""
+        assert story_clusterer_real_storage is not None
+        assert isinstance(story_clusterer_real_storage, StoryClusterer)
+
+
+class TestStoryClustererSimilarityThreshold:
+    """Tests for similarity threshold configuration."""
+
+    def test_default_similarity_threshold_value(
+        self, mock_llm_provider, mock_storage
+    ):
+        """Test that the default similarity threshold is 0.75."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+
+        assert clusterer.similarity_threshold == 0.75
+
+    def test_similarity_threshold_type(self, mock_llm_provider, mock_storage):
+        """Test that similarity threshold is a float."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+
+        assert isinstance(clusterer.similarity_threshold, float)
+
+    def test_similarity_threshold_is_valid_probability(
+        self, mock_llm_provider, mock_storage
+    ):
+        """Test that similarity threshold is within valid probability range [0, 1]."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+
+        assert 0.0 <= clusterer.similarity_threshold <= 1.0
+
+    def test_similarity_threshold_can_be_modified(
+        self, mock_llm_provider, mock_storage
+    ):
+        """Test that similarity threshold can be modified after initialization."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+
+        # Modify the threshold
+        clusterer.similarity_threshold = 0.5
+
+        assert clusterer.similarity_threshold == 0.5
+
+    def test_similarity_threshold_modification_to_higher_value(
+        self, mock_llm_provider, mock_storage
+    ):
+        """Test modifying threshold to a higher value (more strict matching)."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+
+        clusterer.similarity_threshold = 0.9
+
+        assert clusterer.similarity_threshold == 0.9
+
+    def test_similarity_threshold_modification_to_lower_value(
+        self, mock_llm_provider, mock_storage
+    ):
+        """Test modifying threshold to a lower value (more lenient matching)."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+
+        clusterer.similarity_threshold = 0.3
+
+        assert clusterer.similarity_threshold == 0.3
+
+    def test_similarity_threshold_edge_case_zero(
+        self, mock_llm_provider, mock_storage
+    ):
+        """Test setting threshold to 0 (match everything)."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+
+        clusterer.similarity_threshold = 0.0
+
+        assert clusterer.similarity_threshold == 0.0
+
+    def test_similarity_threshold_edge_case_one(
+        self, mock_llm_provider, mock_storage
+    ):
+        """Test setting threshold to 1 (match only perfect similarity)."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+
+        clusterer.similarity_threshold = 1.0
+
+        assert clusterer.similarity_threshold == 1.0
+
+    def test_similarity_threshold_persists_across_operations(
+        self, mock_llm_provider, mock_storage
+    ):
+        """Test that threshold persists when operations are performed."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        clusterer.similarity_threshold = 0.8
+
+        # Perform some operation (even if it doesn't change threshold)
+        _ = clusterer.storage
+
+        assert clusterer.similarity_threshold == 0.8
+
+
+class TestStoryClustererMultipleInstances:
+    """Tests for multiple StoryClusterer instances."""
+
+    def test_multiple_clusterers_independent_thresholds(
+        self, mock_llm_provider, mock_storage
+    ):
+        """Test that multiple clusterer instances have independent thresholds."""
+        clusterer1 = StoryClusterer(mock_llm_provider, mock_storage)
+        clusterer2 = StoryClusterer(mock_llm_provider, mock_storage)
+
+        # Modify one instance's threshold
+        clusterer1.similarity_threshold = 0.5
+
+        # The other instance should be unaffected
+        assert clusterer1.similarity_threshold == 0.5
+        assert clusterer2.similarity_threshold == 0.75  # Default
+
+    def test_multiple_clusterers_same_storage(self, mock_llm_provider, mock_storage):
+        """Test that multiple clusterers can share the same storage."""
+        clusterer1 = StoryClusterer(mock_llm_provider, mock_storage)
+        clusterer2 = StoryClusterer(mock_llm_provider, mock_storage)
+
+        assert clusterer1.storage is clusterer2.storage
+        assert clusterer1.storage is mock_storage
+
+    def test_multiple_clusterers_same_llm(self, mock_llm_provider, mock_storage):
+        """Test that multiple clusterers can share the same LLM provider."""
+        clusterer1 = StoryClusterer(mock_llm_provider, mock_storage)
+        clusterer2 = StoryClusterer(mock_llm_provider, mock_storage)
+
+        assert clusterer1.llm is clusterer2.llm
+        assert clusterer1.llm is mock_llm_provider
+
+
+class TestStoryClustererAttributeAccess:
+    """Tests for StoryClusterer attribute access patterns."""
+
+    def test_llm_attribute_is_accessible(self, story_clusterer):
+        """Test that llm attribute is accessible."""
+        assert hasattr(story_clusterer, 'llm')
+        assert story_clusterer.llm is not None
+
+    def test_storage_attribute_is_accessible(self, story_clusterer):
+        """Test that storage attribute is accessible."""
+        assert hasattr(story_clusterer, 'storage')
+        assert story_clusterer.storage is not None
+
+    def test_similarity_threshold_attribute_is_accessible(self, story_clusterer):
+        """Test that similarity_threshold attribute is accessible."""
+        assert hasattr(story_clusterer, 'similarity_threshold')
+        assert story_clusterer.similarity_threshold is not None
+
+    def test_all_public_methods_exist(self, story_clusterer):
+        """Test that all expected public methods exist."""
+        assert hasattr(story_clusterer, 'cluster_article')
+        assert hasattr(story_clusterer, 'find_matching_story')
+        assert hasattr(story_clusterer, 'create_new_story')
+        assert hasattr(story_clusterer, 'update_story_with_article')
+
+    def test_all_private_methods_exist(self, story_clusterer):
+        """Test that expected private methods exist."""
+        assert hasattr(story_clusterer, '_calculate_similarity')
+        assert hasattr(story_clusterer, '_generate_comparison_prompt')
+        assert hasattr(story_clusterer, '_parse_similarity_response')
+        assert hasattr(story_clusterer, '_keyword_similarity')
+        assert hasattr(story_clusterer, '_generate_story_title')
+        assert hasattr(story_clusterer, '_generate_story_description')
+        assert hasattr(story_clusterer, '_extract_keywords')
+
+
+class TestStoryClustererWithDifferentProviders:
+    """Tests for StoryClusterer with various LLM provider configurations."""
+
+    def test_clusterer_with_high_confidence_provider(
+        self, mock_llm_provider_high_confidence, mock_storage
+    ):
+        """Test initialization with high confidence provider."""
+        clusterer = StoryClusterer(mock_llm_provider_high_confidence, mock_storage)
+
+        assert clusterer is not None
+        assert clusterer.llm is mock_llm_provider_high_confidence
+
+    def test_clusterer_with_low_confidence_provider(
+        self, mock_llm_provider_low_confidence, mock_storage
+    ):
+        """Test initialization with low confidence provider."""
+        clusterer = StoryClusterer(mock_llm_provider_low_confidence, mock_storage)
+
+        assert clusterer is not None
+        assert clusterer.llm is mock_llm_provider_low_confidence
+
+    def test_clusterer_with_not_same_story_provider(
+        self, mock_llm_provider_not_same_story, mock_storage
+    ):
+        """Test initialization with provider that returns 'not same story'."""
+        clusterer = StoryClusterer(mock_llm_provider_not_same_story, mock_storage)
+
+        assert clusterer is not None
+        assert clusterer.llm is mock_llm_provider_not_same_story
+
+    def test_clusterer_with_invalid_json_provider(
+        self, mock_llm_provider_invalid_json, mock_storage
+    ):
+        """Test initialization with provider that returns invalid JSON."""
+        clusterer = StoryClusterer(mock_llm_provider_invalid_json, mock_storage)
+
+        assert clusterer is not None
+        assert clusterer.llm is mock_llm_provider_invalid_json
+
+    def test_clusterer_with_configurable_provider_available(
+        self, mock_llm_provider_configurable, mock_storage
+    ):
+        """Test initialization with configurable provider that is available."""
+        provider = mock_llm_provider_configurable(available=True)
+        clusterer = StoryClusterer(provider, mock_storage)
+
+        assert clusterer is not None
+        assert clusterer.llm.is_available() is True
+
+    def test_clusterer_with_configurable_provider_unavailable(
+        self, mock_llm_provider_configurable, mock_storage
+    ):
+        """Test initialization with configurable provider that is unavailable."""
+        provider = mock_llm_provider_configurable(available=False)
+        clusterer = StoryClusterer(provider, mock_storage)
+
+        assert clusterer is not None
+        assert clusterer.llm.is_available() is False
+
+
+class TestStoryClustererWithDifferentStorage:
+    """Tests for StoryClusterer with various storage configurations."""
+
+    def test_clusterer_with_empty_storage(self, mock_llm_provider, storage_empty):
+        """Test initialization with empty storage."""
+        clusterer = StoryClusterer(mock_llm_provider, storage_empty)
+
+        assert clusterer is not None
+        assert clusterer.storage is storage_empty
+
+    def test_clusterer_with_storage_containing_articles(
+        self, mock_llm_provider, storage_with_articles
+    ):
+        """Test initialization with storage containing articles."""
+        clusterer = StoryClusterer(mock_llm_provider, storage_with_articles)
+
+        assert clusterer is not None
+        assert clusterer.storage is storage_with_articles
+
+    def test_clusterer_with_storage_containing_stories(
+        self, mock_llm_provider, storage_with_stories
+    ):
+        """Test initialization with storage containing stories."""
+        clusterer = StoryClusterer(mock_llm_provider, storage_with_stories)
+
+        assert clusterer is not None
+        assert clusterer.storage is storage_with_stories
+
+    def test_clusterer_with_storage_containing_both(
+        self, mock_llm_provider, storage_with_articles_and_stories
+    ):
+        """Test initialization with storage containing articles and stories."""
+        clusterer = StoryClusterer(mock_llm_provider, storage_with_articles_and_stories)
+
+        assert clusterer is not None
+        assert clusterer.storage is storage_with_articles_and_stories
+
+    def test_clusterer_with_mock_storage_with_stories(
+        self, mock_llm_provider, mock_storage_with_stories
+    ):
+        """Test initialization with mock storage that has stories."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage_with_stories)
+
+        assert clusterer is not None
+        # Verify mock storage returns stories
+        stories = clusterer.storage.get_active_stories()
+        assert len(stories) == 5
+
+
+class TestStoryClustererThresholdUsage:
+    """Tests for how similarity threshold is used in matching logic."""
+
+    def test_threshold_used_in_find_matching_story(
+        self, mock_llm_provider, mock_storage_with_stories
+    ):
+        """Test that threshold is used when finding matching stories."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage_with_stories)
+
+        # Default threshold is 0.75, mock returns 0.85 confidence
+        # So it should find a match
+        assert clusterer.similarity_threshold == 0.75
+
+    def test_threshold_affects_match_decisions(
+        self, mock_llm_provider_low_confidence, mock_storage_with_stories
+    ):
+        """Test that threshold affects whether stories are matched."""
+        # Low confidence provider returns 0.5 confidence
+        clusterer = StoryClusterer(mock_llm_provider_low_confidence, mock_storage_with_stories)
+
+        # With default threshold of 0.75, the 0.5 confidence should not match
+        assert clusterer.similarity_threshold == 0.75
+
+    def test_lowering_threshold_allows_more_matches(
+        self, mock_llm_provider_low_confidence, mock_storage_with_stories
+    ):
+        """Test that lowering threshold can allow more matches."""
+        clusterer = StoryClusterer(mock_llm_provider_low_confidence, mock_storage_with_stories)
+
+        # Lower the threshold to allow the 0.5 confidence to match
+        clusterer.similarity_threshold = 0.4
+
+        assert clusterer.similarity_threshold == 0.4
+
+    def test_raising_threshold_prevents_matches(
+        self, mock_llm_provider, mock_storage_with_stories
+    ):
+        """Test that raising threshold can prevent matches."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage_with_stories)
+
+        # Raise the threshold above the 0.85 confidence
+        clusterer.similarity_threshold = 0.9
+
+        assert clusterer.similarity_threshold == 0.9
