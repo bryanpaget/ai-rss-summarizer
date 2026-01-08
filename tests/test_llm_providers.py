@@ -855,3 +855,778 @@ def config_with_safe_api_key():
 def mock_all_providers_unavailable(mock_httpx_unavailable, mock_shutil_which_none, clean_env):
     """Mock all providers being unavailable."""
     yield
+
+
+# =============================================================================
+# Tests for LLMConfig.from_env()
+# =============================================================================
+
+
+class TestLLMConfigFromEnv:
+    """Tests for LLMConfig.from_env() method."""
+
+    def test_from_env_with_all_vars(self, clean_env):
+        """Test loading config with all environment variables set."""
+        os.environ["RSS_LLM_PROVIDER"] = "openai"
+        os.environ["RSS_LLM_BASE_URL"] = "https://api.openai.com/v1"
+        os.environ["RSS_LLM_API_KEY"] = "test-api-key"
+        os.environ["RSS_LLM_MODEL"] = "gpt-4o-mini"
+
+        config = LLMConfig.from_env()
+
+        assert config.provider == ProviderType.OPENAI
+        assert config.base_url == "https://api.openai.com/v1"
+        assert config.api_key == "test-api-key"
+        assert config.model == "gpt-4o-mini"
+        assert config.defaults == {}
+
+    def test_from_env_with_ollama(self, clean_env):
+        """Test loading Ollama config from environment."""
+        os.environ["RSS_LLM_PROVIDER"] = "ollama"
+        os.environ["RSS_LLM_MODEL"] = "llama2"
+
+        config = LLMConfig.from_env()
+
+        assert config.provider == ProviderType.OLLAMA
+        assert config.model == "llama2"
+        assert config.base_url is None
+        assert config.api_key is None
+
+    def test_from_env_with_lm_studio(self, clean_env):
+        """Test loading LM Studio config from environment."""
+        os.environ["RSS_LLM_PROVIDER"] = "lm-studio"
+        os.environ["RSS_LLM_MODEL"] = "local-model"
+
+        config = LLMConfig.from_env()
+
+        assert config.provider == ProviderType.LM_STUDIO
+        assert config.model == "local-model"
+
+    def test_from_env_with_claude(self, clean_env):
+        """Test loading Claude config from environment."""
+        os.environ["RSS_LLM_PROVIDER"] = "claude"
+        os.environ["RSS_LLM_MODEL"] = "claude-sonnet-4-20250514"
+
+        config = LLMConfig.from_env()
+
+        assert config.provider == ProviderType.CLAUDE
+        assert config.model == "claude-sonnet-4-20250514"
+
+    def test_from_env_with_gemini(self, clean_env):
+        """Test loading Gemini config from environment."""
+        os.environ["RSS_LLM_PROVIDER"] = "gemini"
+        os.environ["RSS_LLM_MODEL"] = "gemini-1.5-flash"
+
+        config = LLMConfig.from_env()
+
+        assert config.provider == ProviderType.GEMINI
+        assert config.model == "gemini-1.5-flash"
+
+    def test_from_env_with_groq(self, clean_env):
+        """Test loading Groq config from environment."""
+        os.environ["RSS_LLM_PROVIDER"] = "groq"
+        os.environ["RSS_LLM_MODEL"] = "llama-3.3-70b-versatile"
+
+        config = LLMConfig.from_env()
+
+        assert config.provider == ProviderType.GROQ
+        assert config.model == "llama-3.3-70b-versatile"
+
+    def test_from_env_with_grok(self, clean_env):
+        """Test loading Grok config from environment."""
+        os.environ["RSS_LLM_PROVIDER"] = "grok"
+        os.environ["RSS_LLM_MODEL"] = "grok-beta"
+
+        config = LLMConfig.from_env()
+
+        assert config.provider == ProviderType.GROK
+        assert config.model == "grok-beta"
+
+    def test_from_env_with_transformers(self, clean_env):
+        """Test loading Transformers config from environment."""
+        os.environ["RSS_LLM_PROVIDER"] = "transformers"
+        os.environ["RSS_LLM_MODEL"] = "facebook/bart-large-cnn"
+
+        config = LLMConfig.from_env()
+
+        assert config.provider == ProviderType.TRANSFORMERS
+        assert config.model == "facebook/bart-large-cnn"
+
+    def test_from_env_with_openai_compatible(self, clean_env):
+        """Test loading OpenAI-compatible config from environment."""
+        os.environ["RSS_LLM_PROVIDER"] = "openai-compatible"
+        os.environ["RSS_LLM_BASE_URL"] = "https://custom-api.example.com/v1"
+        os.environ["RSS_LLM_API_KEY"] = "custom-key"
+        os.environ["RSS_LLM_MODEL"] = "custom-model"
+
+        config = LLMConfig.from_env()
+
+        assert config.provider == ProviderType.OPENAI_COMPATIBLE
+        assert config.base_url == "https://custom-api.example.com/v1"
+        assert config.api_key == "custom-key"
+        assert config.model == "custom-model"
+
+    def test_from_env_with_claude_code(self, clean_env):
+        """Test loading Claude Code config from environment."""
+        os.environ["RSS_LLM_PROVIDER"] = "claude-code"
+        os.environ["RSS_LLM_MODEL"] = "sonnet"
+
+        config = LLMConfig.from_env()
+
+        assert config.provider == ProviderType.CLAUDE_CODE
+        assert config.model == "sonnet"
+
+    def test_from_env_with_gemini_cli(self, clean_env):
+        """Test loading Gemini CLI config from environment."""
+        os.environ["RSS_LLM_PROVIDER"] = "gemini-cli"
+        os.environ["RSS_LLM_MODEL"] = "gemini-2.0-flash"
+
+        config = LLMConfig.from_env()
+
+        assert config.provider == ProviderType.GEMINI_CLI
+        assert config.model == "gemini-2.0-flash"
+
+    def test_from_env_with_codex_cli(self, clean_env):
+        """Test loading Codex CLI config from environment."""
+        os.environ["RSS_LLM_PROVIDER"] = "codex-cli"
+        os.environ["RSS_LLM_MODEL"] = "gpt-4.1"
+
+        config = LLMConfig.from_env()
+
+        assert config.provider == ProviderType.CODEX_CLI
+        assert config.model == "gpt-4.1"
+
+    def test_from_env_with_no_vars(self, clean_env):
+        """Test loading config with no environment variables set."""
+        config = LLMConfig.from_env()
+
+        assert config.provider is None
+        assert config.base_url is None
+        assert config.api_key is None
+        assert config.model is None
+        assert config.defaults == {}
+
+    def test_from_env_with_only_provider(self, clean_env):
+        """Test loading config with only provider set."""
+        os.environ["RSS_LLM_PROVIDER"] = "ollama"
+
+        config = LLMConfig.from_env()
+
+        assert config.provider == ProviderType.OLLAMA
+        assert config.base_url is None
+        assert config.api_key is None
+        assert config.model is None
+
+    def test_from_env_with_only_api_key(self, clean_env):
+        """Test loading config with only API key set (no provider)."""
+        os.environ["RSS_LLM_API_KEY"] = "test-key"
+
+        config = LLMConfig.from_env()
+
+        assert config.provider is None
+        assert config.api_key == "test-key"
+
+    def test_from_env_with_invalid_provider_raises(self, clean_env):
+        """Test that invalid provider type raises ValueError."""
+        os.environ["RSS_LLM_PROVIDER"] = "invalid-provider"
+
+        with pytest.raises(ValueError):
+            LLMConfig.from_env()
+
+
+# =============================================================================
+# Tests for LLMConfig.from_file()
+# =============================================================================
+
+
+class TestLLMConfigFromFile:
+    """Tests for LLMConfig.from_file() method."""
+
+    def test_from_file_with_valid_config(self, config_file_openai, sample_config_data):
+        """Test loading valid config from file."""
+        config = LLMConfig.from_file(config_file_openai)
+
+        assert config.provider == ProviderType.OPENAI
+        assert config.base_url == sample_config_data["base_url"]
+        assert config.api_key == sample_config_data["api_key"]
+        assert config.model == sample_config_data["model"]
+        assert config.defaults == sample_config_data["defaults"]
+
+    def test_from_file_with_lm_studio_config(self, config_file_lm_studio, sample_config_lm_studio):
+        """Test loading LM Studio config from file."""
+        config = LLMConfig.from_file(config_file_lm_studio)
+
+        assert config.provider == ProviderType.LM_STUDIO
+        assert config.base_url == sample_config_lm_studio["base_url"]
+        assert config.model == sample_config_lm_studio["model"]
+        assert config.defaults == sample_config_lm_studio["defaults"]
+
+    def test_from_file_with_minimal_config(self, temp_config_dir):
+        """Test loading minimal config with just provider."""
+        config_path = os.path.join(temp_config_dir, "llm.json")
+        with open(config_path, "w") as f:
+            json.dump({"provider": "ollama"}, f)
+
+        config = LLMConfig.from_file(config_path)
+
+        assert config.provider == ProviderType.OLLAMA
+        assert config.base_url is None
+        assert config.api_key is None
+        assert config.model is None
+        assert config.defaults == {}
+
+    def test_from_file_with_empty_config(self, config_file_empty):
+        """Test loading empty config file."""
+        config = LLMConfig.from_file(config_file_empty)
+
+        assert config.provider is None
+        assert config.base_url is None
+        assert config.api_key is None
+        assert config.model is None
+        assert config.defaults == {}
+
+    def test_from_file_with_nonexistent_file(self, temp_dir):
+        """Test loading config from nonexistent file returns empty config."""
+        nonexistent_path = os.path.join(temp_dir, "nonexistent", "llm.json")
+
+        config = LLMConfig.from_file(nonexistent_path)
+
+        assert config.provider is None
+        assert config.base_url is None
+        assert config.api_key is None
+        assert config.model is None
+
+    def test_from_file_with_invalid_json_raises(self, config_file_invalid_json):
+        """Test that invalid JSON raises exception."""
+        with pytest.raises(json.JSONDecodeError):
+            LLMConfig.from_file(config_file_invalid_json)
+
+    def test_from_file_with_invalid_provider_raises(self, config_file_invalid_provider):
+        """Test that invalid provider type raises ValueError."""
+        with pytest.raises(ValueError):
+            LLMConfig.from_file(config_file_invalid_provider)
+
+    def test_from_file_with_all_provider_types(self, temp_config_dir):
+        """Test loading config file with each provider type."""
+        provider_types = [
+            ("lm-studio", ProviderType.LM_STUDIO),
+            ("ollama", ProviderType.OLLAMA),
+            ("openai", ProviderType.OPENAI),
+            ("openai-compatible", ProviderType.OPENAI_COMPATIBLE),
+            ("transformers", ProviderType.TRANSFORMERS),
+            ("claude", ProviderType.CLAUDE),
+            ("claude-code", ProviderType.CLAUDE_CODE),
+            ("gemini", ProviderType.GEMINI),
+            ("gemini-cli", ProviderType.GEMINI_CLI),
+            ("codex-cli", ProviderType.CODEX_CLI),
+            ("grok", ProviderType.GROK),
+            ("groq", ProviderType.GROQ),
+        ]
+
+        for provider_str, expected_type in provider_types:
+            config_path = os.path.join(temp_config_dir, "llm.json")
+            with open(config_path, "w") as f:
+                json.dump({"provider": provider_str}, f)
+
+            config = LLMConfig.from_file(config_path)
+            assert config.provider == expected_type, f"Failed for provider: {provider_str}"
+
+    def test_from_file_with_defaults(self, temp_config_dir):
+        """Test loading config with various defaults."""
+        config_path = os.path.join(temp_config_dir, "llm.json")
+        defaults = {
+            "temperature": 0.5,
+            "max_tokens": 1000,
+            "auto_load": {"enabled": True, "ttl_seconds": 600},
+        }
+        with open(config_path, "w") as f:
+            json.dump({"provider": "openai", "defaults": defaults}, f)
+
+        config = LLMConfig.from_file(config_path)
+
+        assert config.defaults == defaults
+        assert config.defaults["temperature"] == 0.5
+        assert config.defaults["auto_load"]["enabled"] is True
+
+    def test_from_file_uses_default_path(self, temp_dir):
+        """Test that from_file uses default path when not specified."""
+        # Create default config path
+        config_dir = os.path.join(temp_dir, "config")
+        os.makedirs(config_dir, exist_ok=True)
+        config_path = os.path.join(config_dir, "llm.json")
+        with open(config_path, "w") as f:
+            json.dump({"provider": "ollama", "model": "llama2"}, f)
+
+        # Change to temp_dir to test relative path
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(temp_dir)
+            config = LLMConfig.from_file()
+
+            assert config.provider == ProviderType.OLLAMA
+            assert config.model == "llama2"
+        finally:
+            os.chdir(original_cwd)
+
+
+# =============================================================================
+# Tests for LLMConfig.save()
+# =============================================================================
+
+
+class TestLLMConfigSave:
+    """Tests for LLMConfig.save() method."""
+
+    def test_save_creates_directory(self, temp_dir):
+        """Test that save creates parent directories if they don't exist."""
+        config_path = os.path.join(temp_dir, "nested", "deep", "config", "llm.json")
+        config = LLMConfig(
+            provider=ProviderType.OLLAMA,
+            model="llama2",
+        )
+
+        config.save(config_path)
+
+        assert os.path.exists(config_path)
+        with open(config_path) as f:
+            saved_data = json.load(f)
+        assert saved_data["provider"] == "ollama"
+        assert saved_data["model"] == "llama2"
+
+    def test_save_includes_provider(self, temp_config_dir):
+        """Test that save includes provider value."""
+        config_path = os.path.join(temp_config_dir, "llm.json")
+        config = LLMConfig(provider=ProviderType.OPENAI)
+
+        config.save(config_path)
+
+        with open(config_path) as f:
+            saved_data = json.load(f)
+        assert saved_data["provider"] == "openai"
+
+    def test_save_includes_base_url(self, temp_config_dir):
+        """Test that save includes base_url."""
+        config_path = os.path.join(temp_config_dir, "llm.json")
+        config = LLMConfig(
+            provider=ProviderType.OPENAI_COMPATIBLE,
+            base_url="https://custom.api.com/v1",
+        )
+
+        config.save(config_path)
+
+        with open(config_path) as f:
+            saved_data = json.load(f)
+        assert saved_data["base_url"] == "https://custom.api.com/v1"
+
+    def test_save_includes_model(self, temp_config_dir):
+        """Test that save includes model."""
+        config_path = os.path.join(temp_config_dir, "llm.json")
+        config = LLMConfig(
+            provider=ProviderType.OPENAI,
+            model="gpt-4o-mini",
+        )
+
+        config.save(config_path)
+
+        with open(config_path) as f:
+            saved_data = json.load(f)
+        assert saved_data["model"] == "gpt-4o-mini"
+
+    def test_save_includes_defaults(self, temp_config_dir):
+        """Test that save includes defaults."""
+        config_path = os.path.join(temp_config_dir, "llm.json")
+        defaults = {"temperature": 0.3, "max_tokens": 500}
+        config = LLMConfig(
+            provider=ProviderType.OPENAI,
+            defaults=defaults,
+        )
+
+        config.save(config_path)
+
+        with open(config_path) as f:
+            saved_data = json.load(f)
+        assert saved_data["defaults"] == defaults
+
+    def test_save_excludes_sk_api_key(self, temp_config_dir):
+        """Test that save does NOT include API keys starting with 'sk-'."""
+        config_path = os.path.join(temp_config_dir, "llm.json")
+        config = LLMConfig(
+            provider=ProviderType.OPENAI,
+            api_key="sk-secret-openai-key-12345",
+        )
+
+        config.save(config_path)
+
+        with open(config_path) as f:
+            saved_data = json.load(f)
+        assert "api_key" not in saved_data
+
+    def test_save_includes_non_sk_api_key(self, temp_config_dir):
+        """Test that save DOES include API keys NOT starting with 'sk-'."""
+        config_path = os.path.join(temp_config_dir, "llm.json")
+        config = LLMConfig(
+            provider=ProviderType.GROQ,
+            api_key="gsk_groq_test_key_12345",
+        )
+
+        config.save(config_path)
+
+        with open(config_path) as f:
+            saved_data = json.load(f)
+        assert saved_data["api_key"] == "gsk_groq_test_key_12345"
+
+    def test_save_excludes_none_api_key(self, temp_config_dir):
+        """Test that save doesn't include api_key when it's None."""
+        config_path = os.path.join(temp_config_dir, "llm.json")
+        config = LLMConfig(
+            provider=ProviderType.OLLAMA,
+            api_key=None,
+        )
+
+        config.save(config_path)
+
+        with open(config_path) as f:
+            saved_data = json.load(f)
+        assert "api_key" not in saved_data
+
+    def test_save_excludes_empty_api_key(self, temp_config_dir):
+        """Test that save doesn't include api_key when it's empty string."""
+        config_path = os.path.join(temp_config_dir, "llm.json")
+        config = LLMConfig(
+            provider=ProviderType.OLLAMA,
+            api_key="",
+        )
+
+        config.save(config_path)
+
+        with open(config_path) as f:
+            saved_data = json.load(f)
+        assert "api_key" not in saved_data
+
+    def test_save_with_all_provider_types(self, temp_config_dir):
+        """Test saving config with each provider type."""
+        for provider_type in ProviderType:
+            config_path = os.path.join(temp_config_dir, "llm.json")
+            config = LLMConfig(provider=provider_type, model="test-model")
+
+            config.save(config_path)
+
+            with open(config_path) as f:
+                saved_data = json.load(f)
+            assert saved_data["provider"] == provider_type.value
+
+    def test_save_overwrites_existing(self, temp_config_dir):
+        """Test that save overwrites existing file."""
+        config_path = os.path.join(temp_config_dir, "llm.json")
+
+        # Save first config
+        config1 = LLMConfig(provider=ProviderType.OLLAMA, model="llama2")
+        config1.save(config_path)
+
+        # Save second config
+        config2 = LLMConfig(provider=ProviderType.OPENAI, model="gpt-4o-mini")
+        config2.save(config_path)
+
+        # Verify second config was saved
+        with open(config_path) as f:
+            saved_data = json.load(f)
+        assert saved_data["provider"] == "openai"
+        assert saved_data["model"] == "gpt-4o-mini"
+
+    def test_save_and_load_roundtrip(self, temp_config_dir):
+        """Test that config survives save/load roundtrip."""
+        config_path = os.path.join(temp_config_dir, "llm.json")
+        original = LLMConfig(
+            provider=ProviderType.OPENAI_COMPATIBLE,
+            base_url="https://api.example.com/v1",
+            api_key="non-sk-api-key-12345",
+            model="custom-model",
+            defaults={"temperature": 0.7, "stream": True},
+        )
+
+        original.save(config_path)
+        loaded = LLMConfig.from_file(config_path)
+
+        assert loaded.provider == original.provider
+        assert loaded.base_url == original.base_url
+        assert loaded.api_key == original.api_key
+        assert loaded.model == original.model
+        assert loaded.defaults == original.defaults
+
+    def test_save_uses_default_path(self, temp_dir):
+        """Test that save uses default path when not specified."""
+        # Change to temp_dir to test relative path
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(temp_dir)
+            config = LLMConfig(provider=ProviderType.OLLAMA, model="llama2")
+
+            config.save()
+
+            expected_path = os.path.join(temp_dir, "config", "llm.json")
+            assert os.path.exists(expected_path)
+        finally:
+            os.chdir(original_cwd)
+
+
+# =============================================================================
+# Tests for ProviderType Enum
+# =============================================================================
+
+
+class TestProviderTypeEnum:
+    """Tests for ProviderType enum validation and conversion."""
+
+    def test_all_provider_types_exist(self, all_provider_types):
+        """Test that all expected provider types exist."""
+        expected_values = [
+            "lm-studio",
+            "ollama",
+            "openai",
+            "openai-compatible",
+            "transformers",
+            "claude",
+            "claude-code",
+            "gemini",
+            "gemini-cli",
+            "codex-cli",
+            "grok",
+            "groq",
+        ]
+        actual_values = [p.value for p in all_provider_types]
+
+        assert len(actual_values) == len(expected_values)
+        for expected in expected_values:
+            assert expected in actual_values
+
+    def test_provider_type_count(self, all_provider_types):
+        """Test that we have the expected number of provider types."""
+        assert len(all_provider_types) == 12
+
+    def test_provider_type_from_value(self):
+        """Test creating ProviderType from string value."""
+        assert ProviderType("lm-studio") == ProviderType.LM_STUDIO
+        assert ProviderType("ollama") == ProviderType.OLLAMA
+        assert ProviderType("openai") == ProviderType.OPENAI
+        assert ProviderType("openai-compatible") == ProviderType.OPENAI_COMPATIBLE
+        assert ProviderType("transformers") == ProviderType.TRANSFORMERS
+        assert ProviderType("claude") == ProviderType.CLAUDE
+        assert ProviderType("claude-code") == ProviderType.CLAUDE_CODE
+        assert ProviderType("gemini") == ProviderType.GEMINI
+        assert ProviderType("gemini-cli") == ProviderType.GEMINI_CLI
+        assert ProviderType("codex-cli") == ProviderType.CODEX_CLI
+        assert ProviderType("grok") == ProviderType.GROK
+        assert ProviderType("groq") == ProviderType.GROQ
+
+    def test_provider_type_value(self):
+        """Test ProviderType.value returns correct string."""
+        assert ProviderType.LM_STUDIO.value == "lm-studio"
+        assert ProviderType.OLLAMA.value == "ollama"
+        assert ProviderType.OPENAI.value == "openai"
+        assert ProviderType.OPENAI_COMPATIBLE.value == "openai-compatible"
+        assert ProviderType.TRANSFORMERS.value == "transformers"
+        assert ProviderType.CLAUDE.value == "claude"
+        assert ProviderType.CLAUDE_CODE.value == "claude-code"
+        assert ProviderType.GEMINI.value == "gemini"
+        assert ProviderType.GEMINI_CLI.value == "gemini-cli"
+        assert ProviderType.CODEX_CLI.value == "codex-cli"
+        assert ProviderType.GROK.value == "grok"
+        assert ProviderType.GROQ.value == "groq"
+
+    def test_provider_type_invalid_value_raises(self):
+        """Test that invalid provider value raises ValueError."""
+        with pytest.raises(ValueError):
+            ProviderType("invalid")
+
+        with pytest.raises(ValueError):
+            ProviderType("OPENAI")  # Case-sensitive
+
+        with pytest.raises(ValueError):
+            ProviderType("OpenAI")
+
+        with pytest.raises(ValueError):
+            ProviderType("")
+
+    def test_provider_type_is_str_enum(self):
+        """Test that ProviderType is a string enum."""
+        assert isinstance(ProviderType.OPENAI, str)
+        # ProviderType inherits from str, so it can be used as a string value
+        assert ProviderType.OPENAI.value == "openai"
+        # str() returns the enum representation, use .value for string value
+        assert ProviderType.OPENAI == "openai"  # Comparison works due to str inheritance
+
+    def test_provider_type_comparison(self):
+        """Test ProviderType comparison operations."""
+        assert ProviderType.OPENAI == ProviderType.OPENAI
+        assert ProviderType.OPENAI != ProviderType.OLLAMA
+        assert ProviderType.OPENAI == "openai"
+        assert ProviderType.OLLAMA != "openai"
+
+    def test_provider_type_in_list(self, all_provider_types):
+        """Test checking if ProviderType is in a list."""
+        assert ProviderType.OPENAI in all_provider_types
+        assert ProviderType.CLAUDE in all_provider_types
+        assert ProviderType.GROQ in all_provider_types
+
+    def test_local_providers(self, local_provider_types):
+        """Test that local provider types are correctly categorized."""
+        assert ProviderType.LM_STUDIO in local_provider_types
+        assert ProviderType.OLLAMA in local_provider_types
+        assert ProviderType.TRANSFORMERS in local_provider_types
+        assert ProviderType.CLAUDE_CODE in local_provider_types
+        assert ProviderType.GEMINI_CLI in local_provider_types
+        assert ProviderType.CODEX_CLI in local_provider_types
+
+        # API providers should not be in local list
+        assert ProviderType.OPENAI not in local_provider_types
+        assert ProviderType.CLAUDE not in local_provider_types
+        assert ProviderType.GEMINI not in local_provider_types
+
+    def test_api_providers(self, api_provider_types):
+        """Test that API provider types are correctly categorized."""
+        assert ProviderType.OPENAI in api_provider_types
+        assert ProviderType.OPENAI_COMPATIBLE in api_provider_types
+        assert ProviderType.CLAUDE in api_provider_types
+        assert ProviderType.GEMINI in api_provider_types
+        assert ProviderType.GROK in api_provider_types
+        assert ProviderType.GROQ in api_provider_types
+
+        # Local providers should not be in API list
+        assert ProviderType.LM_STUDIO not in api_provider_types
+        assert ProviderType.OLLAMA not in api_provider_types
+        assert ProviderType.TRANSFORMERS not in api_provider_types
+
+    def test_provider_type_iteration(self, all_provider_types):
+        """Test iterating over ProviderType enum."""
+        provider_count = 0
+        for provider in ProviderType:
+            assert isinstance(provider, ProviderType)
+            provider_count += 1
+
+        assert provider_count == len(all_provider_types)
+
+
+# =============================================================================
+# Tests for LLMConfig Integration
+# =============================================================================
+
+
+class TestLLMConfigIntegration:
+    """Integration tests for LLMConfig class."""
+
+    def test_env_takes_precedence_over_file(self, clean_env, config_file_openai):
+        """Test that environment variables take precedence over file config."""
+        # Set different provider in environment
+        os.environ["RSS_LLM_PROVIDER"] = "ollama"
+        os.environ["RSS_LLM_MODEL"] = "llama2"
+
+        # Load from environment
+        env_config = LLMConfig.from_env()
+        file_config = LLMConfig.from_file(config_file_openai)
+
+        assert env_config.provider == ProviderType.OLLAMA
+        assert file_config.provider == ProviderType.OPENAI
+        assert env_config.provider != file_config.provider
+
+    def test_empty_config_defaults(self):
+        """Test that empty LLMConfig has correct defaults."""
+        config = LLMConfig()
+
+        assert config.provider is None
+        assert config.base_url is None
+        assert config.api_key is None
+        assert config.model is None
+        assert config.defaults == {}
+
+    def test_config_with_partial_data(self, clean_env):
+        """Test config with partial environment data."""
+        os.environ["RSS_LLM_PROVIDER"] = "groq"
+        # No model or API key set
+
+        config = LLMConfig.from_env()
+
+        assert config.provider == ProviderType.GROQ
+        assert config.model is None
+        assert config.api_key is None
+
+    def test_config_save_preserves_null_values(self, temp_config_dir):
+        """Test that save handles None values correctly."""
+        config_path = os.path.join(temp_config_dir, "llm.json")
+        config = LLMConfig(
+            provider=ProviderType.OLLAMA,
+            base_url=None,
+            api_key=None,
+            model=None,
+            defaults={},
+        )
+
+        config.save(config_path)
+
+        with open(config_path) as f:
+            saved_data = json.load(f)
+
+        # base_url and model should be present (as None/null)
+        assert "base_url" in saved_data
+        assert saved_data["base_url"] is None
+        assert "model" in saved_data
+        assert saved_data["model"] is None
+
+    def test_config_with_complex_defaults(self, temp_config_dir):
+        """Test config with nested defaults."""
+        config_path = os.path.join(temp_config_dir, "llm.json")
+        complex_defaults = {
+            "auto_load": {
+                "enabled": True,
+                "ttl_seconds": 600,
+                "models": ["llama2", "mistral"],
+            },
+            "retry": {"max_attempts": 3, "delay_ms": 1000},
+            "features": ["streaming", "json_mode"],
+        }
+        config = LLMConfig(
+            provider=ProviderType.LM_STUDIO,
+            defaults=complex_defaults,
+        )
+
+        config.save(config_path)
+        loaded = LLMConfig.from_file(config_path)
+
+        assert loaded.defaults == complex_defaults
+        assert loaded.defaults["auto_load"]["models"] == ["llama2", "mistral"]
+
+    def test_multiple_configs_independent(self, temp_config_dir):
+        """Test that multiple configs are independent."""
+        config1 = LLMConfig(provider=ProviderType.OPENAI, model="gpt-4")
+        config2 = LLMConfig(provider=ProviderType.CLAUDE, model="sonnet")
+
+        assert config1.provider != config2.provider
+        assert config1.model != config2.model
+
+        # Modifying one shouldn't affect the other
+        config1.model = "gpt-4o"
+        assert config2.model == "sonnet"
+
+    def test_config_equality(self):
+        """Test LLMConfig instances with same values."""
+        config1 = LLMConfig(provider=ProviderType.OPENAI, model="gpt-4")
+        config2 = LLMConfig(provider=ProviderType.OPENAI, model="gpt-4")
+
+        # Dataclasses should be equal if all fields match
+        assert config1 == config2
+
+    def test_config_from_file_with_extra_fields(self, temp_config_dir):
+        """Test that extra fields in config file are ignored."""
+        config_path = os.path.join(temp_config_dir, "llm.json")
+        with open(config_path, "w") as f:
+            json.dump({
+                "provider": "openai",
+                "model": "gpt-4",
+                "extra_field": "should be ignored",
+                "another_extra": {"nested": "value"},
+            }, f)
+
+        config = LLMConfig.from_file(config_path)
+
+        assert config.provider == ProviderType.OPENAI
+        assert config.model == "gpt-4"
+        # Extra fields should not cause errors
