@@ -6095,3 +6095,672 @@ class TestProviderPriorityRationale:
             result = auto_detect_provider()
 
             assert isinstance(result, TransformersProvider)
+
+
+# =============================================================================
+# Tests for UsageStats Class
+# =============================================================================
+
+
+class TestUsageStatsConstruction:
+    """Tests for UsageStats class construction and initialization."""
+
+    def test_usage_stats_default_values(self):
+        """Test UsageStats initializes with default values."""
+        stats = UsageStats()
+
+        assert stats.input_tokens == 0
+        assert stats.output_tokens == 0
+        assert stats.total_tokens == 0
+        assert stats.model == ""
+        assert stats.provider == ""
+
+    def test_usage_stats_with_explicit_values(self):
+        """Test UsageStats with explicitly provided values."""
+        stats = UsageStats(
+            input_tokens=100,
+            output_tokens=50,
+            total_tokens=150,
+            model="gpt-4o-mini",
+            provider="OpenAI",
+        )
+
+        assert stats.input_tokens == 100
+        assert stats.output_tokens == 50
+        assert stats.total_tokens == 150
+        assert stats.model == "gpt-4o-mini"
+        assert stats.provider == "OpenAI"
+
+    def test_usage_stats_auto_calculates_total_tokens(self):
+        """Test __post_init__ auto-calculates total_tokens when not provided."""
+        stats = UsageStats(
+            input_tokens=100,
+            output_tokens=50,
+            model="test-model",
+            provider="Test",
+        )
+
+        # total_tokens should be auto-calculated as input + output
+        assert stats.total_tokens == 150
+
+    def test_usage_stats_respects_explicit_total_tokens(self):
+        """Test explicit total_tokens is not overwritten."""
+        stats = UsageStats(
+            input_tokens=100,
+            output_tokens=50,
+            total_tokens=200,  # Explicitly different from sum
+            model="test-model",
+            provider="Test",
+        )
+
+        # total_tokens should remain as explicitly set
+        assert stats.total_tokens == 200
+
+    def test_usage_stats_zero_total_triggers_auto_calculation(self):
+        """Test total_tokens=0 triggers auto-calculation."""
+        stats = UsageStats(
+            input_tokens=100,
+            output_tokens=50,
+            total_tokens=0,
+            model="test-model",
+            provider="Test",
+        )
+
+        # total_tokens=0 should trigger recalculation
+        assert stats.total_tokens == 150
+
+
+class TestUsageStatsEdgeCases:
+    """Tests for UsageStats edge cases."""
+
+    def test_usage_stats_with_only_input_tokens(self):
+        """Test UsageStats with only input tokens."""
+        stats = UsageStats(input_tokens=100)
+
+        assert stats.input_tokens == 100
+        assert stats.output_tokens == 0
+        assert stats.total_tokens == 100
+
+    def test_usage_stats_with_only_output_tokens(self):
+        """Test UsageStats with only output tokens."""
+        stats = UsageStats(output_tokens=50)
+
+        assert stats.input_tokens == 0
+        assert stats.output_tokens == 50
+        assert stats.total_tokens == 50
+
+    def test_usage_stats_with_large_values(self):
+        """Test UsageStats handles large token counts."""
+        stats = UsageStats(
+            input_tokens=1_000_000,
+            output_tokens=500_000,
+            model="large-model",
+            provider="Test",
+        )
+
+        assert stats.input_tokens == 1_000_000
+        assert stats.output_tokens == 500_000
+        assert stats.total_tokens == 1_500_000
+
+    def test_usage_stats_with_model_only(self):
+        """Test UsageStats with just model name."""
+        stats = UsageStats(model="claude-sonnet-4-20250514")
+
+        assert stats.model == "claude-sonnet-4-20250514"
+        assert stats.input_tokens == 0
+        assert stats.output_tokens == 0
+        assert stats.total_tokens == 0
+
+    def test_usage_stats_with_provider_only(self):
+        """Test UsageStats with just provider name."""
+        stats = UsageStats(provider="Groq")
+
+        assert stats.provider == "Groq"
+        assert stats.model == ""
+
+
+class TestUsageStatsDataclass:
+    """Tests for UsageStats dataclass behavior."""
+
+    def test_usage_stats_is_dataclass(self):
+        """Test UsageStats is a dataclass with expected fields."""
+        from dataclasses import fields
+
+        stat_fields = {f.name for f in fields(UsageStats)}
+        expected_fields = {"input_tokens", "output_tokens", "total_tokens", "model", "provider"}
+
+        assert stat_fields == expected_fields
+
+    def test_usage_stats_equality(self):
+        """Test UsageStats instances can be compared for equality."""
+        stats1 = UsageStats(input_tokens=100, output_tokens=50, model="test")
+        stats2 = UsageStats(input_tokens=100, output_tokens=50, model="test")
+        stats3 = UsageStats(input_tokens=200, output_tokens=50, model="test")
+
+        assert stats1 == stats2
+        assert stats1 != stats3
+
+    def test_usage_stats_repr(self):
+        """Test UsageStats has a meaningful repr."""
+        stats = UsageStats(
+            input_tokens=100,
+            output_tokens=50,
+            model="test-model",
+            provider="Test",
+        )
+
+        repr_str = repr(stats)
+        assert "UsageStats" in repr_str
+        assert "100" in repr_str
+        assert "50" in repr_str
+
+
+# =============================================================================
+# Tests for Token Estimation (_estimate_tokens)
+# =============================================================================
+
+
+class ConcreteProviderForTesting(LLMProvider):
+    """Concrete implementation of LLMProvider for testing base class methods."""
+
+    def __init__(self, name: str = "Test Provider", model: str = "test-model"):
+        super().__init__()
+        self._name = name
+        self._model = model
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def model_name(self) -> str:
+        return self._model
+
+    def is_available(self) -> bool:
+        return True
+
+    def summarize(self, text: str, max_length: int = 150) -> str:
+        # Simple mock summarize
+        result = text[:max_length] if len(text) > max_length else text
+        self._record_usage(text, result, self._model)
+        return result
+
+
+class TestEstimateTokens:
+    """Tests for _estimate_tokens method."""
+
+    def test_estimate_tokens_empty_string(self):
+        """Test token estimation for empty string."""
+        provider = ConcreteProviderForTesting()
+
+        tokens = provider._estimate_tokens("")
+
+        assert tokens == 0
+
+    def test_estimate_tokens_short_text(self):
+        """Test token estimation for short text."""
+        provider = ConcreteProviderForTesting()
+
+        # "Hello" = 5 chars, ~1 token
+        tokens = provider._estimate_tokens("Hello")
+
+        assert tokens == 1  # 5 // 4 = 1
+
+    def test_estimate_tokens_medium_text(self):
+        """Test token estimation for medium-length text."""
+        provider = ConcreteProviderForTesting()
+
+        # 100 chars = ~25 tokens
+        text = "a" * 100
+        tokens = provider._estimate_tokens(text)
+
+        assert tokens == 25  # 100 // 4 = 25
+
+    def test_estimate_tokens_long_text(self):
+        """Test token estimation for long text."""
+        provider = ConcreteProviderForTesting()
+
+        # 4000 chars = ~1000 tokens
+        text = "x" * 4000
+        tokens = provider._estimate_tokens(text)
+
+        assert tokens == 1000  # 4000 // 4 = 1000
+
+    def test_estimate_tokens_exact_multiple(self):
+        """Test token estimation for text that's exact multiple of 4."""
+        provider = ConcreteProviderForTesting()
+
+        text = "abcd" * 25  # 100 chars
+        tokens = provider._estimate_tokens(text)
+
+        assert tokens == 25
+
+    def test_estimate_tokens_with_whitespace(self):
+        """Test token estimation includes whitespace in count."""
+        provider = ConcreteProviderForTesting()
+
+        text = "hello world"  # 11 chars
+        tokens = provider._estimate_tokens(text)
+
+        assert tokens == 2  # 11 // 4 = 2
+
+    def test_estimate_tokens_with_unicode(self):
+        """Test token estimation with unicode characters."""
+        provider = ConcreteProviderForTesting()
+
+        # Unicode chars are counted by string length
+        text = "こんにちは"  # 5 Japanese chars
+        tokens = provider._estimate_tokens(text)
+
+        # Python len() counts unicode codepoints
+        assert tokens == 1  # 5 // 4 = 1
+
+    def test_estimate_tokens_with_newlines(self):
+        """Test token estimation with newlines."""
+        provider = ConcreteProviderForTesting()
+
+        text = "line1\nline2\nline3"  # 17 chars
+        tokens = provider._estimate_tokens(text)
+
+        assert tokens == 4  # 17 // 4 = 4
+
+    def test_estimate_tokens_with_special_characters(self):
+        """Test token estimation with special characters."""
+        provider = ConcreteProviderForTesting()
+
+        text = "!@#$%^&*()[]{}|;:',.<>?"  # 23 chars
+        tokens = provider._estimate_tokens(text)
+
+        assert tokens == 5  # 23 // 4 = 5
+
+
+# =============================================================================
+# Tests for Session Tracking
+# =============================================================================
+
+
+class TestSessionTrackingInitialization:
+    """Tests for session tracking initialization."""
+
+    def test_session_usage_initialized_on_creation(self):
+        """Test session_usage is initialized on provider creation."""
+        provider = ConcreteProviderForTesting()
+
+        assert provider.session_usage == {"calls": 0, "total_tokens": 0}
+
+    def test_last_usage_initialized_none(self):
+        """Test last_usage is None initially."""
+        provider = ConcreteProviderForTesting()
+
+        assert provider.last_usage is None
+
+    def test_session_usage_is_mutable_dict(self):
+        """Test session_usage is a mutable dictionary."""
+        provider = ConcreteProviderForTesting()
+
+        provider.session_usage["calls"] = 5
+        provider.session_usage["total_tokens"] = 100
+
+        assert provider.session_usage["calls"] == 5
+        assert provider.session_usage["total_tokens"] == 100
+
+
+class TestSessionTrackingAccumulation:
+    """Tests for session tracking accumulation."""
+
+    def test_single_call_updates_session_usage(self):
+        """Test a single summarize call updates session_usage."""
+        provider = ConcreteProviderForTesting()
+
+        provider.summarize("Test input text")
+
+        assert provider.session_usage["calls"] == 1
+        assert provider.session_usage["total_tokens"] > 0
+
+    def test_multiple_calls_accumulate_count(self):
+        """Test multiple calls accumulate the call count."""
+        provider = ConcreteProviderForTesting()
+
+        provider.summarize("First call")
+        provider.summarize("Second call")
+        provider.summarize("Third call")
+
+        assert provider.session_usage["calls"] == 3
+
+    def test_multiple_calls_accumulate_tokens(self):
+        """Test multiple calls accumulate total tokens."""
+        provider = ConcreteProviderForTesting()
+
+        # Each call adds tokens
+        provider.summarize("a" * 40)  # ~10 input tokens
+        initial_tokens = provider.session_usage["total_tokens"]
+
+        provider.summarize("b" * 40)  # ~10 more input tokens
+        second_tokens = provider.session_usage["total_tokens"]
+
+        assert second_tokens > initial_tokens
+
+    def test_session_usage_tracks_all_calls_in_session(self):
+        """Test session_usage tracks cumulative usage across session."""
+        provider = ConcreteProviderForTesting()
+
+        # Make several calls
+        for i in range(5):
+            provider.summarize(f"Text number {i}")
+
+        assert provider.session_usage["calls"] == 5
+        assert provider.session_usage["total_tokens"] > 0
+
+
+class TestSessionTrackingWithLastUsage:
+    """Tests for interaction between session_usage and last_usage."""
+
+    def test_last_usage_updated_each_call(self):
+        """Test last_usage is updated after each call."""
+        provider = ConcreteProviderForTesting()
+
+        provider.summarize("First text")
+        first_usage = provider.last_usage
+
+        provider.summarize("Second text that is much longer")
+        second_usage = provider.last_usage
+
+        assert first_usage is not None
+        assert second_usage is not None
+        # last_usage should be different object or different values
+        assert first_usage is not second_usage or first_usage.input_tokens != second_usage.input_tokens
+
+    def test_last_usage_reflects_most_recent_call(self):
+        """Test last_usage reflects the most recent call only."""
+        provider = ConcreteProviderForTesting()
+
+        provider.summarize("Short")
+        provider.summarize("A much longer text string for testing")
+
+        # last_usage should reflect the longer text
+        assert provider.last_usage is not None
+        assert provider.last_usage.input_tokens > 0
+
+    def test_session_totals_match_sum_of_calls(self):
+        """Test session totals match sum of individual call totals."""
+        provider = ConcreteProviderForTesting()
+
+        calls_total = 0
+        tokens_total = 0
+
+        # Track each call manually
+        for i in range(3):
+            provider.summarize(f"Call number {i}")
+            calls_total += 1
+            tokens_total += provider.last_usage.total_tokens
+
+        assert provider.session_usage["calls"] == calls_total
+        assert provider.session_usage["total_tokens"] == tokens_total
+
+
+# =============================================================================
+# Tests for _record_usage Method
+# =============================================================================
+
+
+class TestRecordUsageBasic:
+    """Tests for basic _record_usage functionality."""
+
+    def test_record_usage_creates_usage_stats(self):
+        """Test _record_usage creates UsageStats instance."""
+        provider = ConcreteProviderForTesting()
+
+        provider._record_usage("input text", "output text", "test-model")
+
+        assert provider.last_usage is not None
+        assert isinstance(provider.last_usage, UsageStats)
+
+    def test_record_usage_sets_model_name(self):
+        """Test _record_usage sets model name from parameter."""
+        provider = ConcreteProviderForTesting()
+
+        provider._record_usage("input", "output", "my-custom-model")
+
+        assert provider.last_usage.model == "my-custom-model"
+
+    def test_record_usage_uses_model_name_property_when_empty(self):
+        """Test _record_usage uses model_name property when model param is empty."""
+        provider = ConcreteProviderForTesting(model="default-model")
+
+        provider._record_usage("input", "output", "")
+
+        assert provider.last_usage.model == "default-model"
+
+    def test_record_usage_sets_provider_name(self):
+        """Test _record_usage sets provider name from name property."""
+        provider = ConcreteProviderForTesting(name="Custom Provider")
+
+        provider._record_usage("input", "output", "model")
+
+        assert provider.last_usage.provider == "Custom Provider"
+
+    def test_record_usage_estimates_input_tokens(self):
+        """Test _record_usage estimates input tokens correctly."""
+        provider = ConcreteProviderForTesting()
+
+        # 100 chars = 25 tokens
+        input_text = "a" * 100
+        provider._record_usage(input_text, "output", "model")
+
+        assert provider.last_usage.input_tokens == 25
+
+    def test_record_usage_estimates_output_tokens(self):
+        """Test _record_usage estimates output tokens correctly."""
+        provider = ConcreteProviderForTesting()
+
+        # 40 chars = 10 tokens
+        output_text = "b" * 40
+        provider._record_usage("input", output_text, "model")
+
+        assert provider.last_usage.output_tokens == 10
+
+
+class TestRecordUsageSessionUpdate:
+    """Tests for _record_usage session tracking updates."""
+
+    def test_record_usage_increments_calls(self):
+        """Test _record_usage increments session calls count."""
+        provider = ConcreteProviderForTesting()
+
+        assert provider.session_usage["calls"] == 0
+
+        provider._record_usage("input", "output", "model")
+
+        assert provider.session_usage["calls"] == 1
+
+    def test_record_usage_adds_to_total_tokens(self):
+        """Test _record_usage adds to session total tokens."""
+        provider = ConcreteProviderForTesting()
+
+        assert provider.session_usage["total_tokens"] == 0
+
+        # 20 input chars = 5 tokens, 20 output chars = 5 tokens, total = 10
+        provider._record_usage("a" * 20, "b" * 20, "model")
+
+        assert provider.session_usage["total_tokens"] == 10
+
+    def test_record_usage_accumulates_across_calls(self):
+        """Test _record_usage accumulates across multiple calls."""
+        provider = ConcreteProviderForTesting()
+
+        provider._record_usage("a" * 40, "b" * 40, "model")  # 10 + 10 = 20 tokens
+        provider._record_usage("c" * 40, "d" * 40, "model")  # 10 + 10 = 20 tokens
+
+        assert provider.session_usage["calls"] == 2
+        assert provider.session_usage["total_tokens"] == 40
+
+
+class TestRecordUsageEdgeCases:
+    """Tests for _record_usage edge cases."""
+
+    def test_record_usage_with_empty_input(self):
+        """Test _record_usage handles empty input text."""
+        provider = ConcreteProviderForTesting()
+
+        provider._record_usage("", "output", "model")
+
+        assert provider.last_usage.input_tokens == 0
+
+    def test_record_usage_with_empty_output(self):
+        """Test _record_usage handles empty output text."""
+        provider = ConcreteProviderForTesting()
+
+        provider._record_usage("input", "", "model")
+
+        assert provider.last_usage.output_tokens == 0
+
+    def test_record_usage_with_both_empty(self):
+        """Test _record_usage handles both empty input and output."""
+        provider = ConcreteProviderForTesting()
+
+        provider._record_usage("", "", "model")
+
+        assert provider.last_usage.input_tokens == 0
+        assert provider.last_usage.output_tokens == 0
+        assert provider.last_usage.total_tokens == 0
+        # Call should still be counted
+        assert provider.session_usage["calls"] == 1
+
+    def test_record_usage_with_very_long_text(self):
+        """Test _record_usage handles very long text."""
+        provider = ConcreteProviderForTesting()
+
+        # 1MB of text
+        long_text = "x" * 1_000_000
+        provider._record_usage(long_text, "short output", "model")
+
+        assert provider.last_usage.input_tokens == 250_000  # 1M / 4
+
+    def test_record_usage_overwrites_last_usage(self):
+        """Test _record_usage overwrites previous last_usage."""
+        provider = ConcreteProviderForTesting()
+
+        provider._record_usage("first input", "first output", "model-1")
+        first_usage = provider.last_usage
+
+        provider._record_usage("second input", "second output", "model-2")
+
+        assert provider.last_usage is not first_usage
+        assert provider.last_usage.model == "model-2"
+
+
+# =============================================================================
+# Tests for Usage Tracking Integration
+# =============================================================================
+
+
+class TestUsageTrackingIntegration:
+    """Integration tests for usage tracking across provider operations."""
+
+    def test_usage_tracking_through_summarize(self):
+        """Test usage is tracked through summarize method."""
+        provider = ConcreteProviderForTesting()
+
+        result = provider.summarize("This is a test input for summarization")
+
+        assert provider.last_usage is not None
+        assert provider.session_usage["calls"] == 1
+        assert provider.session_usage["total_tokens"] > 0
+
+    def test_usage_tracking_multiple_summarize_calls(self):
+        """Test usage accumulates across multiple summarize calls."""
+        provider = ConcreteProviderForTesting()
+
+        provider.summarize("First text")
+        provider.summarize("Second text")
+        provider.summarize("Third text")
+
+        assert provider.session_usage["calls"] == 3
+
+    def test_usage_stats_reflects_actual_text_lengths(self):
+        """Test usage stats reflect actual input/output text lengths."""
+        provider = ConcreteProviderForTesting()
+
+        input_text = "a" * 400  # 100 tokens
+        provider.summarize(input_text)
+
+        assert provider.last_usage.input_tokens == 100
+
+    def test_different_providers_have_independent_tracking(self):
+        """Test different provider instances track usage independently."""
+        provider1 = ConcreteProviderForTesting(name="Provider 1")
+        provider2 = ConcreteProviderForTesting(name="Provider 2")
+
+        provider1.summarize("Text for provider 1")
+        provider1.summarize("Another text for provider 1")
+
+        provider2.summarize("Text for provider 2")
+
+        assert provider1.session_usage["calls"] == 2
+        assert provider2.session_usage["calls"] == 1
+        assert provider1.last_usage.provider == "Provider 1"
+        assert provider2.last_usage.provider == "Provider 2"
+
+    def test_usage_tracking_preserves_provider_identity(self):
+        """Test usage tracking preserves provider name in stats."""
+        provider = ConcreteProviderForTesting(name="Custom Named Provider")
+
+        provider.summarize("Some text")
+
+        assert provider.last_usage.provider == "Custom Named Provider"
+
+    def test_usage_tracking_preserves_model_identity(self):
+        """Test usage tracking preserves model name in stats."""
+        provider = ConcreteProviderForTesting(model="custom-model-v2")
+
+        provider.summarize("Some text")
+
+        assert provider.last_usage.model == "custom-model-v2"
+
+
+class TestUsageTrackingConsistency:
+    """Tests for usage tracking consistency and accuracy."""
+
+    def test_total_tokens_always_calculated(self):
+        """Test total_tokens is always calculated in last_usage."""
+        provider = ConcreteProviderForTesting()
+
+        provider._record_usage("a" * 40, "b" * 20, "model")
+
+        # 40/4 = 10 input, 20/4 = 5 output, total = 15
+        assert provider.last_usage.input_tokens == 10
+        assert provider.last_usage.output_tokens == 5
+        assert provider.last_usage.total_tokens == 15
+
+    def test_session_tokens_match_sum(self):
+        """Test session total tokens matches sum of all call totals."""
+        provider = ConcreteProviderForTesting()
+
+        expected_total = 0
+
+        for i in range(5):
+            text = "x" * ((i + 1) * 40)  # Varying lengths
+            provider._record_usage(text, "output", "model")
+            expected_total += provider.last_usage.total_tokens
+
+        assert provider.session_usage["total_tokens"] == expected_total
+
+    def test_session_calls_matches_record_count(self):
+        """Test session calls matches number of _record_usage calls."""
+        provider = ConcreteProviderForTesting()
+
+        num_calls = 7
+        for _ in range(num_calls):
+            provider._record_usage("input", "output", "model")
+
+        assert provider.session_usage["calls"] == num_calls
+
+    def test_empty_calls_still_counted(self):
+        """Test calls with empty text are still counted."""
+        provider = ConcreteProviderForTesting()
+
+        provider._record_usage("", "", "model")
+        provider._record_usage("", "", "model")
+
+        assert provider.session_usage["calls"] == 2
+        assert provider.session_usage["total_tokens"] == 0
