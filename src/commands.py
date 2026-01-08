@@ -18,7 +18,13 @@ from .clustering import batch_process_articles
 from .storage_perspectives import add_perspective_methods
 from .perspectives import synthesize_perspectives
 from .emergence import detect_emerging_trends
-from .knowledge import KnowledgeBase, extract_insights_from_article, detect_connections
+from .knowledge import (
+    KnowledgeBase,
+    extract_insights_from_article,
+    extract_triples_from_article,
+    extract_entity_relationships_from_article,
+    detect_connections,
+)
 
 console = Console(force_terminal=True, legacy_windows=True)
 
@@ -139,13 +145,23 @@ def update(
             storage.update_trends(article.id, tags)
             article.trend_tags = tags
 
-        # Extract knowledge
+        # Extract knowledge (insights, triples, entity relationships)
         try:
             insights = extract_insights_from_article(article, provider, kb)
             if insights:
                 stats["insights"] += len(insights)
                 for insight in insights:
                     detect_connections(insight, kb, provider)
+
+            # Extract knowledge graph triples
+            triples = extract_triples_from_article(article, provider, kb)
+            if triples:
+                stats["triples"] = stats.get("triples", 0) + len(triples)
+
+            # Extract entity relationships
+            entity_rels = extract_entity_relationships_from_article(article, provider, kb)
+            if entity_rels:
+                stats["entity_relationships"] = stats.get("entity_relationships", 0) + len(entity_rels)
         except Exception:
             pass
 
@@ -451,7 +467,7 @@ def setup_wizard() -> None:
         if p["available"]:
             status = "[green]Ready[/green]"
             available_providers.append((i, p))
-        elif p["type"] in [ProviderType.GEMINI, ProviderType.CLAUDE, ProviderType.GROK, ProviderType.OPENAI]:
+        elif p["type"] in [ProviderType.GEMINI, ProviderType.GROQ, ProviderType.CLAUDE, ProviderType.GROK, ProviderType.OPENAI]:
             status = "[yellow]Needs API Key[/yellow]"
             setup_providers.append((i, p))
         elif p["type"] == ProviderType.CLAUDE_CODE:
@@ -1145,23 +1161,33 @@ def _setup_new_provider(providers) -> None:
     console.print()
     console.print("[bold]Cloud Provider Setup[/bold]")
     console.print()
-    console.print("Available cloud providers:")
-    console.print("  [bold]1[/bold] - Gemini (FREE tier - recommended)")
-    console.print("  [bold]2[/bold] - Claude Code (uses Claude Code auth)")
-    console.print("  [bold]3[/bold] - Claude API (separate API key)")
-    console.print("  [bold]4[/bold] - Grok (xAI)")
+    console.print("[bold green]FREE OPTIONS (no credit card required):[/bold green]")
+    console.print("  [bold]1[/bold] - Gemini [green](FREE - 1.5M tokens/month)[/green]")
+    console.print("  [bold]2[/bold] - Groq [green](FREE - fast Llama 3.3, 6K tokens/min)[/green]")
+    console.print()
+    console.print("[bold]PAID OPTIONS:[/bold]")
+    console.print("  [bold]3[/bold] - Claude Code (uses Claude Code subscription)")
+    console.print("  [bold]4[/bold] - Claude API (separate API key)")
     console.print("  [bold]5[/bold] - OpenAI")
+    console.print("  [bold]6[/bold] - Grok (xAI)")
+    console.print()
     console.print("  [bold]q[/bold] - Cancel")
     console.print()
 
-    choice = console.input("[bold]Choice: [/bold]").strip()
+    choice = console.input("[bold]Choice [1]: [/bold]").strip() or "1"
 
     if choice == "q":
         return
 
     if choice == "1":
         console.print()
-        console.print("[bold]Gemini Setup[/bold]")
+        console.print("[bold green]Gemini Setup (FREE)[/bold green]")
+        console.print()
+        console.print("[cyan]Free tier includes:[/cyan]")
+        console.print("  - 1.5 million tokens per month")
+        console.print("  - 15 requests per minute")
+        console.print("  - No credit card required")
+        console.print()
         console.print("1. Get a free API key at: [link]https://aistudio.google.com/apikey[/link]")
         console.print("2. Install SDK: [bold]pip install google-generativeai[/bold]")
         console.print()
@@ -1175,6 +1201,26 @@ def _setup_new_provider(providers) -> None:
 
     elif choice == "2":
         console.print()
+        console.print("[bold green]Groq Setup (FREE)[/bold green]")
+        console.print()
+        console.print("[cyan]Free tier includes:[/cyan]")
+        console.print("  - 6,000 tokens per minute")
+        console.print("  - 30 requests per minute")
+        console.print("  - Llama 3.3 70B (extremely fast inference)")
+        console.print("  - No credit card required")
+        console.print()
+        console.print("1. Get a free API key at: [link]https://console.groq.com/keys[/link]")
+        console.print()
+        api_key = console.input("Enter your Groq API key (or 'skip' to set later): ").strip()
+        if api_key and api_key != "skip":
+            os.environ["GROQ_API_KEY"] = api_key
+            console.print("[yellow]Note: Set GROQ_API_KEY in your environment for persistence[/yellow]")
+            config = LLMConfig(provider=ProviderType.GROQ, api_key=api_key)
+            config.save()
+            console.print("[green]Groq configured![/green]")
+
+    elif choice == "3":
+        console.print()
         console.print("[bold]Claude Code Setup[/bold]")
         console.print("This uses your Claude Code authentication - no separate API key needed!")
         console.print()
@@ -1187,7 +1233,7 @@ def _setup_new_provider(providers) -> None:
             config.save()
             console.print("[green]Claude Code configured![/green]")
 
-    elif choice == "3":
+    elif choice == "4":
         console.print()
         console.print("[bold]Claude API Setup[/bold]")
         console.print("[yellow]Note: A Claude subscription is NOT an API key![/yellow]")
@@ -1201,19 +1247,6 @@ def _setup_new_provider(providers) -> None:
             config.save()
             console.print("[green]Claude API configured![/green]")
 
-    elif choice == "4":
-        console.print()
-        console.print("[bold]Grok Setup[/bold]")
-        console.print("Get an API key at: [link]https://console.x.ai/[/link]")
-        console.print()
-        api_key = console.input("Enter your xAI API key (or 'skip'): ").strip()
-        if api_key and api_key != "skip":
-            os.environ["XAI_API_KEY"] = api_key
-            console.print("[yellow]Note: Set XAI_API_KEY in your environment for persistence[/yellow]")
-            config = LLMConfig(provider=ProviderType.GROK, api_key=api_key)
-            config.save()
-            console.print("[green]Grok configured![/green]")
-
     elif choice == "5":
         console.print()
         console.print("[bold]OpenAI Setup[/bold]")
@@ -1226,6 +1259,19 @@ def _setup_new_provider(providers) -> None:
             config = LLMConfig(provider=ProviderType.OPENAI, api_key=api_key)
             config.save()
             console.print("[green]OpenAI configured![/green]")
+
+    elif choice == "6":
+        console.print()
+        console.print("[bold]Grok Setup[/bold]")
+        console.print("Get an API key at: [link]https://console.x.ai/[/link]")
+        console.print()
+        api_key = console.input("Enter your xAI API key (or 'skip'): ").strip()
+        if api_key and api_key != "skip":
+            os.environ["XAI_API_KEY"] = api_key
+            console.print("[yellow]Note: Set XAI_API_KEY in your environment for persistence[/yellow]")
+            config = LLMConfig(provider=ProviderType.GROK, api_key=api_key)
+            config.save()
+            console.print("[green]Grok configured![/green]")
 
 
 def _show_local_setup_instructions() -> None:

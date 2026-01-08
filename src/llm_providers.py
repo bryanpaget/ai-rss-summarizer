@@ -25,6 +25,7 @@ class ProviderType(str, Enum):
     GEMINI_CLI = "gemini-cli"  # Gemini via CLI (uses stored OAuth)
     CODEX_CLI = "codex-cli"  # OpenAI Codex CLI (uses ChatGPT subscription auth)
     GROK = "grok"  # xAI Grok API
+    GROQ = "groq"  # Groq API (fast inference, FREE tier available)
 
 
 @dataclass
@@ -723,6 +724,12 @@ def get_provider(config: Optional[LLMConfig] = None) -> LLMProvider:
     elif config.provider == ProviderType.GROK:
         return GrokProvider(model=config.model or "grok-beta")
 
+    elif config.provider == ProviderType.GROQ:
+        return GroqProvider(model=config.model or "llama-3.3-70b-versatile")
+
+    elif config.provider == ProviderType.CLAUDE:
+        return ClaudeProvider(model=config.model or "claude-sonnet-4-20250514")
+
     else:
         raise ValueError(f"Unknown provider type: {config.provider}")
 
@@ -785,6 +792,12 @@ def list_providers() -> list[dict]:
             "name": "Grok",
             "available": GrokProvider().is_available(),
             "description": "xAI Grok API (requires API key)",
+        },
+        {
+            "type": ProviderType.GROQ,
+            "name": "Groq",
+            "available": GroqProvider().is_available(),
+            "description": "Groq API - FREE tier (fast Llama inference)",
         },
     ]
     return providers
@@ -1174,6 +1187,28 @@ class GrokProvider(OpenAICompatibleProvider):
         return bool(api_key)
 
 
+class GroqProvider(OpenAICompatibleProvider):
+    """
+    Groq API provider - extremely fast inference.
+    Uses OpenAI-compatible API format.
+    Requires GROQ_API_KEY environment variable.
+
+    FREE TIER: 6,000 tokens/minute, 30 requests/minute
+    Get free API key at: https://console.groq.com/keys
+    """
+
+    def __init__(self, model: str = "llama-3.3-70b-versatile"):
+        api_key = os.getenv("GROQ_API_KEY")
+        super().__init__(
+            base_url="https://api.groq.com/openai/v1",
+            api_key=api_key,
+            model=model,
+            provider_name="Groq",
+        )
+
+    def is_available(self) -> bool:
+        """Check if Groq API key is set."""
+        return bool(os.getenv("GROQ_API_KEY"))
 
 
 class OpenAIAgentsProvider(LLMProvider):

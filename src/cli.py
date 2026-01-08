@@ -17,6 +17,8 @@ from .emergence import detect_emerging_trends, format_emerging_trend
 from .knowledge import (
     KnowledgeBase,
     extract_insights_from_article,
+    extract_triples_from_article,
+    extract_entity_relationships_from_article,
     detect_connections,
     query_knowledge_base,
 )
@@ -689,6 +691,16 @@ def extract_knowledge(
                             f"  [green]Found {len(relationships)} connections[/green]"
                         )
 
+            # Extract knowledge graph triples
+            triples = extract_triples_from_article(article, provider, kb)
+            if triples:
+                console.print(f"  [cyan]Extracted {len(triples)} triples[/cyan]")
+
+            # Extract entity relationships
+            entity_rels = extract_entity_relationships_from_article(article, provider, kb)
+            if entity_rels:
+                console.print(f"  [cyan]Found {len(entity_rels)} entity relationships[/cyan]")
+
         except Exception as e:
             console.print(f"  [red]Error: {str(e)}[/red]")
 
@@ -790,6 +802,128 @@ def knowledge_stats(
     table.add_row("Contradictions", str(stats["contradictions"]))
 
     console.print(table)
+
+
+@app.command()
+def graph(
+    entity: str = typer.Argument(..., help="Entity name to explore"),
+    depth: int = typer.Option(2, "--depth", "-d", help="Max traversal depth"),
+    kb_path: str = typer.Option(
+        "knowledge.db",
+        "--kb", "-k",
+        help="Path to knowledge database",
+    ),
+):
+    """Explore the knowledge graph around an entity."""
+    kb = KnowledgeBase(kb_path)
+
+    # First, get the entity neighborhood (1-hop)
+    neighborhood = kb.get_entity_neighborhood(entity)
+
+    if not neighborhood["outgoing"] and not neighborhood["incoming"]:
+        console.print(f"[yellow]No relationships found for '{entity}'[/yellow]")
+        console.print("[dim]Try running 'rss update' to extract knowledge from articles.[/dim]")
+        return
+
+    console.print(Panel(f"[bold]Knowledge Graph: {entity}[/bold]", style="blue"))
+    console.print()
+
+    # Show outgoing relationships
+    if neighborhood["outgoing"]:
+        console.print("[bold cyan]Outgoing relationships:[/bold cyan]")
+        for rel in neighborhood["outgoing"][:15]:
+            console.print(f"  {entity} --[{rel['predicate']}]--> {rel['target']}")
+        if len(neighborhood["outgoing"]) > 15:
+            console.print(f"  [dim]... and {len(neighborhood['outgoing']) - 15} more[/dim]")
+        console.print()
+
+    # Show incoming relationships
+    if neighborhood["incoming"]:
+        console.print("[bold magenta]Incoming relationships:[/bold magenta]")
+        for rel in neighborhood["incoming"][:15]:
+            console.print(f"  {rel['source']} --[{rel['predicate']}]--> {entity}")
+        if len(neighborhood["incoming"]) > 15:
+            console.print(f"  [dim]... and {len(neighborhood['incoming']) - 15} more[/dim]")
+        console.print()
+
+    # Get connected entities at depth
+    if depth > 1:
+        connected = kb.get_connected_entities(entity, max_depth=depth)
+        console.print(f"[dim]Found {len(connected['entities'])} connected entities within {depth} hops[/dim]")
+
+
+@app.command(name="graph-path")
+def graph_path(
+    start: str = typer.Argument(..., help="Starting entity"),
+    end: str = typer.Argument(..., help="Ending entity"),
+    kb_path: str = typer.Option(
+        "knowledge.db",
+        "--kb", "-k",
+        help="Path to knowledge database",
+    ),
+):
+    """Find a path between two entities in the knowledge graph."""
+    kb = KnowledgeBase(kb_path)
+
+    path = kb.find_path(start, end)
+
+    if path is None:
+        console.print(f"[yellow]No path found between '{start}' and '{end}'[/yellow]")
+        return
+
+    if not path:
+        console.print(f"[green]'{start}' and '{end}' are the same entity[/green]")
+        return
+
+    console.print(Panel(f"[bold]Path: {start} -> {end}[/bold]", style="green"))
+    console.print()
+
+    for i, step in enumerate(path):
+        console.print(f"  {step['from']} --[{step['predicate']}]--> {step['to']}")
+
+    console.print()
+    console.print(f"[dim]Path length: {len(path)} hop(s)[/dim]")
+
+
+@app.command(name="graph-stats")
+def graph_stats(
+    kb_path: str = typer.Option(
+        "knowledge.db",
+        "--kb", "-k",
+        help="Path to knowledge database",
+    ),
+):
+    """Show knowledge graph statistics."""
+    kb = KnowledgeBase(kb_path)
+    stats = kb.get_graph_stats()
+
+    console.print(Panel("[bold]Knowledge Graph Statistics[/bold]", style="blue"))
+    console.print()
+
+    table = Table(show_header=False)
+    table.add_column("Metric", style="cyan")
+    table.add_column("Count", justify="right", style="green")
+
+    table.add_row("Total Insights", str(stats["total_insights"]))
+    table.add_row("Total Entities", str(stats["total_entities"]))
+    table.add_row("Total Triples", str(stats["total_triples"]))
+    table.add_row("Entity Relationships", str(stats["total_entity_relationships"]))
+    table.add_row("Unique Predicates", str(stats["unique_predicates"]))
+    table.add_row("Embeddings", str(stats["total_embeddings"]))
+
+    console.print(table)
+
+    if stats["predicate_types"]:
+        console.print()
+        console.print("[bold]Predicate types:[/bold]")
+        for pred in stats["predicate_types"][:20]:
+            console.print(f"  - {pred}")
+
+    if stats["top_connected_entities"]:
+        console.print()
+        console.print("[bold]Most connected entities:[/bold]")
+        for ent in stats["top_connected_entities"]:
+            console.print(f"  - {ent['entity']}: {ent['connections']} connections")
 
 
 @app.command()
