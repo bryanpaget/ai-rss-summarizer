@@ -3,24 +3,24 @@
   "spec": "002-001-comprehensive-testing",
   "state": "building",
   "subtasks": {
-    "completed": 17,
+    "completed": 20,
     "total": 47,
     "in_progress": 1,
     "failed": 0
   },
   "phase": {
-    "current": "LLM Provider Tests",
+    "current": "CLI Command Tests",
     "id": null,
-    "total": 10
+    "total": 8
   },
   "workers": {
     "active": 0,
     "max": 1
   },
   "session": {
-    "number": 19,
+    "number": 22,
     "started_at": "2026-01-07T17:09:57.954963"
   },
-  "claude_session_id": "e0387be9-83e4-47c3-9099-7ef34a024b5b",
-  "last_update": "2026-01-07T18:49:55.917662"
+  "claude_session_id": "e8bbe5dd-0ddf-4028-83cd-f335020bd12a",
+  "last_update": "2026-01-07T19:16:40.584549"
 }
