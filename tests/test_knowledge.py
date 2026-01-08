@@ -1902,3 +1902,693 @@ class TestRelationshipIntegration:
 
         assert row["count"] == link_count
         assert row["count"] == len(sample_insights) * len(sample_entities)
+
+
+# =============================================================================
+# Tests for Triple (RDF) Operations (Subtask 1.5)
+# =============================================================================
+
+
+class TestSaveTriple:
+    """Tests for KnowledgeBase.save_triple() method."""
+
+    def test_save_triple_success(self, knowledge_base, sample_triple_developed_by):
+        """Test saving a new triple returns True."""
+        result = knowledge_base.save_triple(sample_triple_developed_by)
+        assert result is True
+
+    def test_save_triple_duplicate_id_fails(self, knowledge_base, sample_triple_developed_by):
+        """Test saving triple with duplicate ID returns False."""
+        knowledge_base.save_triple(sample_triple_developed_by)
+        result = knowledge_base.save_triple(sample_triple_developed_by)
+        assert result is False
+
+    def test_save_triple_persists_all_fields(self, knowledge_base, sample_triple_developed_by):
+        """Test that all triple fields are persisted correctly."""
+        knowledge_base.save_triple(sample_triple_developed_by)
+        triples = knowledge_base.get_triples(subject="GPT-4")
+
+        assert len(triples) == 1
+        retrieved = triples[0]
+        assert retrieved.id == sample_triple_developed_by.id
+        assert retrieved.subject == sample_triple_developed_by.subject
+        assert retrieved.predicate == sample_triple_developed_by.predicate
+        assert retrieved.object == sample_triple_developed_by.object
+        assert retrieved.subject_type == sample_triple_developed_by.subject_type
+        assert retrieved.object_type == sample_triple_developed_by.object_type
+        assert retrieved.source_article_id == sample_triple_developed_by.source_article_id
+        assert retrieved.confidence == sample_triple_developed_by.confidence
+
+    def test_save_triple_without_source_article(self, knowledge_base):
+        """Test saving triple without source_article_id."""
+        triple = Triple(
+            id="triple-no-source",
+            subject="Python",
+            predicate="is_a",
+            object="Programming Language",
+            subject_type="entity",
+            object_type="literal",
+            confidence="high",
+        )
+        result = knowledge_base.save_triple(triple)
+        assert result is True
+
+        triples = knowledge_base.get_triples(subject="Python")
+        assert len(triples) == 1
+        assert triples[0].source_article_id is None
+
+    def test_save_multiple_triples(self, knowledge_base, sample_triples):
+        """Test saving multiple different triples."""
+        results = []
+        for triple in sample_triples:
+            results.append(knowledge_base.save_triple(triple))
+
+        assert all(results), "All unique triples should save successfully"
+
+        triples = knowledge_base.get_triples()
+        assert len(triples) == len(sample_triples)
+
+    def test_save_triple_default_confidence(self, knowledge_base):
+        """Test saving triple with default confidence value."""
+        triple = Triple(
+            id="triple-default-conf",
+            subject="React",
+            predicate="developed_by",
+            object="Facebook",
+            subject_type="entity",
+            object_type="entity",
+        )
+        result = knowledge_base.save_triple(triple)
+        assert result is True
+
+        triples = knowledge_base.get_triples(subject="React")
+        assert len(triples) == 1
+        assert triples[0].confidence == "medium"
+
+    def test_save_triple_with_literal_object(self, knowledge_base, sample_triple_literal):
+        """Test saving triple with literal object type."""
+        result = knowledge_base.save_triple(sample_triple_literal)
+        assert result is True
+
+        triples = knowledge_base.get_triples(subject="Python")
+        assert len(triples) == 1
+        assert triples[0].object_type == "literal"
+        assert triples[0].object == "3.12"
+
+    def test_save_triple_different_subject_types(self, knowledge_base):
+        """Test saving triples with different subject types."""
+        subject_types = ["entity", "article", "insight"]
+
+        for i, subj_type in enumerate(subject_types):
+            triple = Triple(
+                id=f"triple-subj-type-{i}",
+                subject=f"Subject{i}",
+                predicate="relates_to",
+                object="Target",
+                subject_type=subj_type,
+                object_type="entity",
+                confidence="high",
+            )
+            result = knowledge_base.save_triple(triple)
+            assert result is True
+
+        triples = knowledge_base.get_triples()
+        assert len(triples) == len(subject_types)
+
+
+class TestGetTriples:
+    """Tests for KnowledgeBase.get_triples() method."""
+
+    def test_get_triples_empty_database(self, empty_knowledge_base):
+        """Test get_triples on empty database returns empty list."""
+        result = empty_knowledge_base.get_triples()
+        assert result == []
+
+    def test_get_triples_returns_all(self, knowledge_base, sample_triples):
+        """Test get_triples returns all saved triples."""
+        for triple in sample_triples:
+            knowledge_base.save_triple(triple)
+
+        result = knowledge_base.get_triples()
+        assert len(result) == len(sample_triples)
+
+    def test_get_triples_filter_by_subject(self, knowledge_base, sample_triples):
+        """Test filtering triples by subject."""
+        for triple in sample_triples:
+            knowledge_base.save_triple(triple)
+
+        # Filter for subject "OpenAI"
+        result = knowledge_base.get_triples(subject="OpenAI")
+
+        assert len(result) == 1
+        assert result[0].subject == "OpenAI"
+        assert result[0].predicate == "competes_with"
+
+    def test_get_triples_filter_by_predicate(self, knowledge_base, sample_triples):
+        """Test filtering triples by predicate."""
+        for triple in sample_triples:
+            knowledge_base.save_triple(triple)
+
+        # Filter for predicate "developed_by"
+        result = knowledge_base.get_triples(predicate="developed_by")
+
+        assert len(result) == 1
+        assert result[0].predicate == "developed_by"
+        assert result[0].subject == "GPT-4"
+
+    def test_get_triples_filter_by_object(self, knowledge_base, sample_triples):
+        """Test filtering triples by object."""
+        for triple in sample_triples:
+            knowledge_base.save_triple(triple)
+
+        # Filter for object "OpenAI"
+        result = knowledge_base.get_triples(object_val="OpenAI")
+
+        assert len(result) == 1
+        assert result[0].object == "OpenAI"
+        assert result[0].subject == "GPT-4"
+
+    def test_get_triples_filter_by_subject_and_predicate(self, knowledge_base):
+        """Test filtering triples by both subject and predicate."""
+        triples = [
+            Triple(id="t1", subject="OpenAI", predicate="developed", object="GPT-4", subject_type="entity", object_type="entity"),
+            Triple(id="t2", subject="OpenAI", predicate="developed", object="ChatGPT", subject_type="entity", object_type="entity"),
+            Triple(id="t3", subject="OpenAI", predicate="competes_with", object="Google", subject_type="entity", object_type="entity"),
+            Triple(id="t4", subject="Google", predicate="developed", object="Gemini", subject_type="entity", object_type="entity"),
+        ]
+
+        for triple in triples:
+            knowledge_base.save_triple(triple)
+
+        result = knowledge_base.get_triples(subject="OpenAI", predicate="developed")
+
+        assert len(result) == 2
+        for t in result:
+            assert t.subject == "OpenAI"
+            assert t.predicate == "developed"
+
+    def test_get_triples_filter_by_subject_and_object(self, knowledge_base):
+        """Test filtering triples by both subject and object."""
+        triples = [
+            Triple(id="t1", subject="Microsoft", predicate="invested_in", object="OpenAI", subject_type="entity", object_type="entity"),
+            Triple(id="t2", subject="Microsoft", predicate="partnered_with", object="OpenAI", subject_type="entity", object_type="entity"),
+            Triple(id="t3", subject="Microsoft", predicate="acquired", object="GitHub", subject_type="entity", object_type="entity"),
+        ]
+
+        for triple in triples:
+            knowledge_base.save_triple(triple)
+
+        result = knowledge_base.get_triples(subject="Microsoft", object_val="OpenAI")
+
+        assert len(result) == 2
+        for t in result:
+            assert t.subject == "Microsoft"
+            assert t.object == "OpenAI"
+
+    def test_get_triples_filter_by_predicate_and_object(self, knowledge_base):
+        """Test filtering triples by both predicate and object."""
+        triples = [
+            Triple(id="t1", subject="OpenAI", predicate="competes_with", object="Google", subject_type="entity", object_type="entity"),
+            Triple(id="t2", subject="Anthropic", predicate="competes_with", object="Google", subject_type="entity", object_type="entity"),
+            Triple(id="t3", subject="OpenAI", predicate="partnered_with", object="Google", subject_type="entity", object_type="entity"),
+        ]
+
+        for triple in triples:
+            knowledge_base.save_triple(triple)
+
+        result = knowledge_base.get_triples(predicate="competes_with", object_val="Google")
+
+        assert len(result) == 2
+        for t in result:
+            assert t.predicate == "competes_with"
+            assert t.object == "Google"
+
+    def test_get_triples_all_three_filters(self, knowledge_base):
+        """Test filtering triples by subject, predicate, and object."""
+        triples = [
+            Triple(id="t1", subject="OpenAI", predicate="developed", object="GPT-4", subject_type="entity", object_type="entity"),
+            Triple(id="t2", subject="OpenAI", predicate="developed", object="ChatGPT", subject_type="entity", object_type="entity"),
+            Triple(id="t3", subject="Google", predicate="developed", object="GPT-4", subject_type="entity", object_type="entity"),  # Different but possible
+        ]
+
+        for triple in triples:
+            knowledge_base.save_triple(triple)
+
+        result = knowledge_base.get_triples(subject="OpenAI", predicate="developed", object_val="GPT-4")
+
+        assert len(result) == 1
+        assert result[0].subject == "OpenAI"
+        assert result[0].predicate == "developed"
+        assert result[0].object == "GPT-4"
+
+    def test_get_triples_no_matches(self, knowledge_base, sample_triples):
+        """Test get_triples returns empty list when no matches."""
+        for triple in sample_triples:
+            knowledge_base.save_triple(triple)
+
+        result = knowledge_base.get_triples(subject="NonExistentEntity")
+        assert result == []
+
+    def test_get_triples_limit(self, knowledge_base):
+        """Test get_triples respects limit parameter."""
+        # Create 10 triples
+        for i in range(10):
+            triple = Triple(
+                id=f"limit-triple-{i:03d}",
+                subject=f"Subject{i}",
+                predicate="relates_to",
+                object="Target",
+                subject_type="entity",
+                object_type="entity",
+            )
+            knowledge_base.save_triple(triple)
+
+        result = knowledge_base.get_triples(limit=5)
+        assert len(result) == 5
+
+    def test_get_triples_default_limit(self, knowledge_base):
+        """Test get_triples default limit is 100."""
+        # Create 120 triples
+        for i in range(120):
+            triple = Triple(
+                id=f"default-limit-{i:03d}",
+                subject=f"Subject{i}",
+                predicate="relates_to",
+                object="Target",
+                subject_type="entity",
+                object_type="entity",
+            )
+            knowledge_base.save_triple(triple)
+
+        result = knowledge_base.get_triples()
+        assert len(result) == 100
+
+    def test_get_triples_returns_triple_objects(self, knowledge_base, sample_triple_developed_by):
+        """Test that get_triples returns list of Triple objects."""
+        knowledge_base.save_triple(sample_triple_developed_by)
+        result = knowledge_base.get_triples()
+
+        assert all(isinstance(t, Triple) for t in result)
+
+    def test_get_triples_extracted_at_populated(self, knowledge_base, sample_triple_developed_by):
+        """Test that extracted_at is populated after save."""
+        knowledge_base.save_triple(sample_triple_developed_by)
+        result = knowledge_base.get_triples()
+
+        assert len(result) == 1
+        assert result[0].extracted_at is not None
+
+    def test_get_triples_ordered_by_extracted_at(self, knowledge_base):
+        """Test that triples are ordered by extracted_at descending."""
+        for i in range(5):
+            triple = Triple(
+                id=f"order-triple-{i:03d}",
+                subject=f"Subject{i}",
+                predicate="relates_to",
+                object="Target",
+                subject_type="entity",
+                object_type="entity",
+            )
+            knowledge_base.save_triple(triple)
+
+        result = knowledge_base.get_triples()
+
+        assert len(result) == 5
+        for t in result:
+            assert t.extracted_at is not None
+
+
+class TestQueryTriplesPattern:
+    """Tests for KnowledgeBase.query_triples_pattern() method."""
+
+    def test_query_triples_pattern_empty_database(self, empty_knowledge_base):
+        """Test query_triples_pattern on empty database returns empty list."""
+        result = empty_knowledge_base.query_triples_pattern(subject_pattern="test")
+        assert result == []
+
+    def test_query_triples_pattern_subject_like(self, knowledge_base, sample_triples):
+        """Test querying triples with subject LIKE pattern."""
+        for triple in sample_triples:
+            knowledge_base.save_triple(triple)
+
+        # Pattern matching partial subject name
+        result = knowledge_base.query_triples_pattern(subject_pattern="Open")
+
+        assert len(result) == 1
+        assert "Open" in result[0].subject
+
+    def test_query_triples_pattern_predicate_like(self, knowledge_base, sample_triples):
+        """Test querying triples with predicate LIKE pattern."""
+        for triple in sample_triples:
+            knowledge_base.save_triple(triple)
+
+        # Pattern matching predicates containing "by"
+        result = knowledge_base.query_triples_pattern(predicate_pattern="by")
+
+        # "developed_by" should match
+        assert len(result) >= 1
+        for t in result:
+            assert "by" in t.predicate
+
+    def test_query_triples_pattern_both_patterns(self, knowledge_base):
+        """Test querying triples with both subject and predicate patterns."""
+        triples = [
+            Triple(id="t1", subject="OpenAI Company", predicate="developed_product", object="GPT-4", subject_type="entity", object_type="entity"),
+            Triple(id="t2", subject="OpenAI Company", predicate="released_version", object="1.0", subject_type="entity", object_type="literal"),
+            Triple(id="t3", subject="Google Cloud", predicate="developed_service", object="BigQuery", subject_type="entity", object_type="entity"),
+            Triple(id="t4", subject="Microsoft Corp", predicate="developed_product", object="Azure", subject_type="entity", object_type="entity"),
+        ]
+
+        for triple in triples:
+            knowledge_base.save_triple(triple)
+
+        result = knowledge_base.query_triples_pattern(
+            subject_pattern="Open",
+            predicate_pattern="developed"
+        )
+
+        assert len(result) == 1
+        assert "Open" in result[0].subject
+        assert "developed" in result[0].predicate
+
+    def test_query_triples_pattern_partial_match(self, knowledge_base):
+        """Test that pattern matching works with partial strings."""
+        triples = [
+            Triple(id="t1", subject="GPT-4-Turbo", predicate="is_version_of", object="GPT-4", subject_type="entity", object_type="entity"),
+            Triple(id="t2", subject="GPT-3.5", predicate="is_predecessor_of", object="GPT-4", subject_type="entity", object_type="entity"),
+            Triple(id="t3", subject="Claude-2", predicate="competes_with", object="GPT-4", subject_type="entity", object_type="entity"),
+        ]
+
+        for triple in triples:
+            knowledge_base.save_triple(triple)
+
+        # Pattern "GPT" should match GPT-4-Turbo and GPT-3.5
+        result = knowledge_base.query_triples_pattern(subject_pattern="GPT")
+
+        assert len(result) == 2
+        for t in result:
+            assert "GPT" in t.subject
+
+    def test_query_triples_pattern_case_sensitivity(self, knowledge_base):
+        """Test pattern matching case sensitivity (SQLite LIKE is case-insensitive for ASCII)."""
+        triples = [
+            Triple(id="t1", subject="OpenAI", predicate="developed", object="GPT", subject_type="entity", object_type="entity"),
+            Triple(id="t2", subject="openai", predicate="created", object="DALL-E", subject_type="entity", object_type="entity"),
+        ]
+
+        for triple in triples:
+            knowledge_base.save_triple(triple)
+
+        # SQLite LIKE is case-insensitive for ASCII by default
+        result = knowledge_base.query_triples_pattern(subject_pattern="openai")
+
+        # Both should match due to case-insensitivity
+        assert len(result) == 2
+
+    def test_query_triples_pattern_no_matches(self, knowledge_base, sample_triples):
+        """Test query_triples_pattern returns empty when no matches."""
+        for triple in sample_triples:
+            knowledge_base.save_triple(triple)
+
+        result = knowledge_base.query_triples_pattern(subject_pattern="NonExistent123")
+        assert result == []
+
+    def test_query_triples_pattern_returns_triple_objects(self, knowledge_base, sample_triple_developed_by):
+        """Test that query_triples_pattern returns list of Triple objects."""
+        knowledge_base.save_triple(sample_triple_developed_by)
+        result = knowledge_base.query_triples_pattern(subject_pattern="GPT")
+
+        assert all(isinstance(t, Triple) for t in result)
+
+    def test_query_triples_pattern_subject_only(self, knowledge_base):
+        """Test query with only subject pattern specified."""
+        triples = [
+            Triple(id="t1", subject="Microsoft Azure", predicate="hosts", object="OpenAI API", subject_type="entity", object_type="entity"),
+            Triple(id="t2", subject="Microsoft 365", predicate="includes", object="Teams", subject_type="entity", object_type="entity"),
+            Triple(id="t3", subject="Google Cloud", predicate="hosts", object="Gemini API", subject_type="entity", object_type="entity"),
+        ]
+
+        for triple in triples:
+            knowledge_base.save_triple(triple)
+
+        result = knowledge_base.query_triples_pattern(subject_pattern="Microsoft")
+
+        assert len(result) == 2
+        for t in result:
+            assert "Microsoft" in t.subject
+
+    def test_query_triples_pattern_predicate_only(self, knowledge_base):
+        """Test query with only predicate pattern specified."""
+        triples = [
+            Triple(id="t1", subject="OpenAI", predicate="partnered_with", object="Microsoft", subject_type="entity", object_type="entity"),
+            Triple(id="t2", subject="Google", predicate="competes_with", object="OpenAI", subject_type="entity", object_type="entity"),
+            Triple(id="t3", subject="Anthropic", predicate="partnered_with", object="Google", subject_type="entity", object_type="entity"),
+        ]
+
+        for triple in triples:
+            knowledge_base.save_triple(triple)
+
+        result = knowledge_base.query_triples_pattern(predicate_pattern="partner")
+
+        assert len(result) == 2
+        for t in result:
+            assert "partner" in t.predicate.lower()
+
+    def test_query_triples_pattern_with_underscore(self, knowledge_base):
+        """Test pattern matching with underscore in predicate."""
+        triples = [
+            Triple(id="t1", subject="A", predicate="developed_by", object="B", subject_type="entity", object_type="entity"),
+            Triple(id="t2", subject="C", predicate="created_by", object="D", subject_type="entity", object_type="entity"),
+            Triple(id="t3", subject="E", predicate="used_by", object="F", subject_type="entity", object_type="entity"),
+        ]
+
+        for triple in triples:
+            knowledge_base.save_triple(triple)
+
+        result = knowledge_base.query_triples_pattern(predicate_pattern="_by")
+
+        assert len(result) == 3
+        for t in result:
+            assert "_by" in t.predicate
+
+    def test_query_triples_pattern_limit(self, knowledge_base):
+        """Test that query_triples_pattern has a limit of 200."""
+        # Create 250 matching triples
+        for i in range(250):
+            triple = Triple(
+                id=f"pattern-limit-{i:03d}",
+                subject=f"MatchingSubject{i}",
+                predicate="relates_to",
+                object="Target",
+                subject_type="entity",
+                object_type="entity",
+            )
+            knowledge_base.save_triple(triple)
+
+        result = knowledge_base.query_triples_pattern(subject_pattern="MatchingSubject")
+
+        # Default limit in query_triples_pattern is 200
+        assert len(result) == 200
+
+    def test_query_triples_pattern_no_patterns(self, knowledge_base, sample_triples):
+        """Test query with no patterns returns all triples (up to limit)."""
+        for triple in sample_triples:
+            knowledge_base.save_triple(triple)
+
+        result = knowledge_base.query_triples_pattern()
+
+        assert len(result) == len(sample_triples)
+
+
+class TestTripleIntegration:
+    """Integration tests for triple operations."""
+
+    def test_triple_lifecycle(self, knowledge_base):
+        """Test complete triple lifecycle: create, retrieve, query."""
+        # Create
+        triple = Triple(
+            id="lifecycle-triple",
+            subject="Anthropic",
+            predicate="developed",
+            object="Claude",
+            subject_type="entity",
+            object_type="entity",
+            source_article_id="article-001",
+            confidence="high",
+        )
+        assert knowledge_base.save_triple(triple) is True
+
+        # Retrieve by exact filter
+        triples = knowledge_base.get_triples(subject="Anthropic")
+        assert len(triples) == 1
+        assert triples[0].object == "Claude"
+
+        # Query by pattern
+        pattern_results = knowledge_base.query_triples_pattern(subject_pattern="Anthrop")
+        assert len(pattern_results) == 1
+        assert pattern_results[0].predicate == "developed"
+
+    def test_complex_graph_scenario(self, knowledge_base, graph_triples):
+        """Test complex graph with multiple interconnected triples."""
+        for triple in graph_triples:
+            knowledge_base.save_triple(triple)
+
+        # Query all OpenAI relationships
+        openai_triples = knowledge_base.get_triples(subject="OpenAI")
+        assert len(openai_triples) == 2  # developed GPT-4, competes_with Anthropic
+
+        # Query what Google developed
+        google_dev = knowledge_base.get_triples(subject="Google", predicate="developed")
+        assert len(google_dev) == 1
+        assert google_dev[0].object == "Gemini"
+
+        # Query who developed what
+        all_developed = knowledge_base.get_triples(predicate="developed")
+        assert len(all_developed) == 3  # OpenAI->GPT-4, Anthropic->Claude, Google->Gemini
+
+        # Query pattern for competition
+        competition = knowledge_base.query_triples_pattern(predicate_pattern="competes")
+        assert len(competition) == 2
+
+    def test_triple_with_all_confidence_levels(self, knowledge_base):
+        """Test saving and retrieving triples with different confidence levels."""
+        levels = ["high", "medium", "low"]
+
+        for i, level in enumerate(levels):
+            triple = Triple(
+                id=f"conf-level-{i}",
+                subject=f"Entity{i}",
+                predicate="relates_to",
+                object="Target",
+                subject_type="entity",
+                object_type="entity",
+                confidence=level,
+            )
+            knowledge_base.save_triple(triple)
+
+        triples = knowledge_base.get_triples()
+        assert len(triples) == len(levels)
+
+        retrieved_confidences = {t.confidence for t in triples}
+        assert retrieved_confidences == set(levels)
+
+    def test_triple_with_special_characters(self, knowledge_base):
+        """Test triples with special characters in values."""
+        triple = Triple(
+            id="special-chars",
+            subject="C++",
+            predicate="is_faster_than",
+            object="Python (in most cases)",
+            subject_type="entity",
+            object_type="literal",
+            confidence="medium",
+        )
+
+        result = knowledge_base.save_triple(triple)
+        assert result is True
+
+        triples = knowledge_base.get_triples(subject="C++")
+        assert len(triples) == 1
+        assert triples[0].object == "Python (in most cases)"
+
+    def test_triple_with_unicode(self, knowledge_base):
+        """Test triples with unicode characters."""
+        triple = Triple(
+            id="unicode-triple",
+            subject="日本語",
+            predicate="translates_to",
+            object="Japanese",
+            subject_type="literal",
+            object_type="literal",
+            confidence="high",
+        )
+
+        result = knowledge_base.save_triple(triple)
+        assert result is True
+
+        triples = knowledge_base.get_triples(subject="日本語")
+        assert len(triples) == 1
+        assert triples[0].predicate == "translates_to"
+
+    def test_triple_query_combined_with_pattern(self, knowledge_base):
+        """Test using both exact filters and pattern matching."""
+        triples = [
+            Triple(id="t1", subject="OpenAI", predicate="developed_product", object="GPT-4", subject_type="entity", object_type="entity"),
+            Triple(id="t2", subject="OpenAI", predicate="developed_service", object="ChatGPT", subject_type="entity", object_type="entity"),
+            Triple(id="t3", subject="Anthropic", predicate="developed_product", object="Claude", subject_type="entity", object_type="entity"),
+        ]
+
+        for triple in triples:
+            knowledge_base.save_triple(triple)
+
+        # Exact filter: OpenAI only
+        exact_results = knowledge_base.get_triples(subject="OpenAI")
+        assert len(exact_results) == 2
+
+        # Pattern filter: anything with "developed"
+        pattern_results = knowledge_base.query_triples_pattern(predicate_pattern="developed")
+        assert len(pattern_results) == 3
+
+    def test_triple_with_long_content(self, knowledge_base):
+        """Test triple with very long content strings."""
+        long_subject = "A" * 500
+        long_predicate = "describes_in_detail"
+        long_object = "B" * 500
+
+        triple = Triple(
+            id="long-content",
+            subject=long_subject,
+            predicate=long_predicate,
+            object=long_object,
+            subject_type="entity",
+            object_type="literal",
+            confidence="low",
+        )
+
+        result = knowledge_base.save_triple(triple)
+        assert result is True
+
+        triples = knowledge_base.get_triples()
+        assert len(triples) == 1
+        assert len(triples[0].subject) == 500
+        assert len(triples[0].object) == 500
+
+    def test_multiple_triples_same_subject(self, knowledge_base):
+        """Test retrieving multiple triples with the same subject."""
+        subject = "TechCompany"
+        predicates = ["founded_in", "headquartered_in", "employs", "revenue_is", "ceo_is"]
+
+        for i, pred in enumerate(predicates):
+            triple = Triple(
+                id=f"same-subj-{i}",
+                subject=subject,
+                predicate=pred,
+                object=f"Value{i}",
+                subject_type="entity",
+                object_type="literal",
+            )
+            knowledge_base.save_triple(triple)
+
+        triples = knowledge_base.get_triples(subject=subject)
+        assert len(triples) == len(predicates)
+
+    def test_triple_filtering_accuracy(self, knowledge_base):
+        """Test that filters are accurate and don't return false positives."""
+        triples = [
+            Triple(id="t1", subject="Apple", predicate="makes", object="iPhone", subject_type="entity", object_type="entity"),
+            Triple(id="t2", subject="Apple", predicate="makes", object="MacBook", subject_type="entity", object_type="entity"),
+            Triple(id="t3", subject="Pineapple", predicate="is_a", object="Fruit", subject_type="entity", object_type="entity"),
+        ]
+
+        for triple in triples:
+            knowledge_base.save_triple(triple)
+
+        # Exact filter should not match "Pineapple" when searching for "Apple"
+        apple_triples = knowledge_base.get_triples(subject="Apple")
+        assert len(apple_triples) == 2
+        for t in apple_triples:
+            assert t.subject == "Apple"  # Exact match only
+
+        # Pattern should match both Apple and Pineapple
+        pattern_triples = knowledge_base.query_triples_pattern(subject_pattern="Apple")
+        assert len(pattern_triples) == 3  # Both Apple and Pineapple contain "Apple"
