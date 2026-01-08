@@ -1630,3 +1630,752 @@ class TestLLMConfigIntegration:
         assert config.provider == ProviderType.OPENAI
         assert config.model == "gpt-4"
         # Extra fields should not cause errors
+
+
+# =============================================================================
+# Tests for OpenAICompatibleProvider
+# =============================================================================
+
+
+class TestOpenAICompatibleProviderIsAvailable:
+    """Tests for OpenAICompatibleProvider.is_available() method."""
+
+    def test_is_available_returns_true_when_endpoint_reachable(self):
+        """Test is_available returns True when endpoint returns 200."""
+        with patch("httpx.get") as mock_get:
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_get.return_value = mock_response
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                model="test-model",
+            )
+            assert provider.is_available() is True
+            mock_get.assert_called_once_with(
+                "http://localhost:1234/v1/models", timeout=5.0
+            )
+
+    def test_is_available_returns_false_when_endpoint_returns_error(self):
+        """Test is_available returns False when endpoint returns non-200."""
+        with patch("httpx.get") as mock_get:
+            mock_response = MagicMock()
+            mock_response.status_code = 500
+            mock_get.return_value = mock_response
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                model="test-model",
+            )
+            assert provider.is_available() is False
+
+    def test_is_available_returns_false_when_connection_refused(self):
+        """Test is_available returns False when connection is refused."""
+        with patch("httpx.get") as mock_get:
+            mock_get.side_effect = Exception("Connection refused")
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                model="test-model",
+            )
+            assert provider.is_available() is False
+
+    def test_is_available_returns_false_on_timeout(self):
+        """Test is_available returns False on timeout."""
+        with patch("httpx.get") as mock_get:
+            import httpx
+            mock_get.side_effect = httpx.TimeoutException("Connection timed out")
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                model="test-model",
+            )
+            assert provider.is_available() is False
+
+    def test_is_available_returns_false_on_network_error(self):
+        """Test is_available returns False on network error."""
+        with patch("httpx.get") as mock_get:
+            mock_get.side_effect = ConnectionError("Network unreachable")
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                model="test-model",
+            )
+            assert provider.is_available() is False
+
+    def test_is_available_strips_trailing_slash_from_base_url(self):
+        """Test that trailing slash is stripped from base_url."""
+        with patch("httpx.get") as mock_get:
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_get.return_value = mock_response
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1/",
+                model="test-model",
+            )
+            provider.is_available()
+            mock_get.assert_called_once_with(
+                "http://localhost:1234/v1/models", timeout=5.0
+            )
+
+    def test_is_available_with_various_base_urls(self):
+        """Test is_available with various base URL formats."""
+        test_urls = [
+            ("http://localhost:1234/v1", "http://localhost:1234/v1/models"),
+            ("https://api.openai.com/v1", "https://api.openai.com/v1/models"),
+            ("http://192.168.1.100:8080/api", "http://192.168.1.100:8080/api/models"),
+        ]
+
+        for base_url, expected_call in test_urls:
+            with patch("httpx.get") as mock_get:
+                mock_response = MagicMock()
+                mock_response.status_code = 200
+                mock_get.return_value = mock_response
+
+                provider = OpenAICompatibleProvider(
+                    base_url=base_url,
+                    model="test-model",
+                )
+                provider.is_available()
+                mock_get.assert_called_once_with(expected_call, timeout=5.0)
+
+
+class TestOpenAICompatibleProviderSummarize:
+    """Tests for OpenAICompatibleProvider.summarize() method."""
+
+    def test_summarize_returns_empty_string_for_empty_input(self):
+        """Test summarize returns empty string for empty input."""
+        provider = OpenAICompatibleProvider(
+            base_url="http://localhost:1234/v1",
+            model="test-model",
+        )
+        result = provider.summarize("")
+        assert result == ""
+
+    def test_summarize_makes_correct_api_call(self):
+        """Test summarize makes correct API call with proper payload."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            # Mock models endpoint
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "test-model"}]}
+            mock_get.return_value = models_response
+
+            # Mock completion endpoint
+            completion_response = MagicMock()
+            completion_response.status_code = 200
+            completion_response.json.return_value = {
+                "choices": [{"message": {"content": "Test summary"}}],
+                "usage": {
+                    "prompt_tokens": 100,
+                    "completion_tokens": 20,
+                    "total_tokens": 120,
+                },
+            }
+            completion_response.raise_for_status = MagicMock()
+            mock_post.return_value = completion_response
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                api_key="test-key",
+                model="test-model",
+            )
+            result = provider.summarize("Test article content", max_length=150)
+
+            assert result == "Test summary"
+            mock_post.assert_called_once()
+            call_args = mock_post.call_args
+            assert call_args[0][0] == "http://localhost:1234/v1/chat/completions"
+            assert call_args[1]["json"]["model"] == "test-model"
+            assert call_args[1]["json"]["temperature"] == 0.3
+            assert "Bearer test-key" in str(call_args[1]["headers"])
+
+    def test_summarize_records_usage_from_api_response(self):
+        """Test that summarize records usage stats from API response."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "test-model"}]}
+            mock_get.return_value = models_response
+
+            completion_response = MagicMock()
+            completion_response.status_code = 200
+            completion_response.json.return_value = {
+                "choices": [{"message": {"content": "Summary"}}],
+                "usage": {
+                    "prompt_tokens": 100,
+                    "completion_tokens": 20,
+                    "total_tokens": 120,
+                },
+            }
+            completion_response.raise_for_status = MagicMock()
+            mock_post.return_value = completion_response
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                model="test-model",
+            )
+            provider.summarize("Test text")
+
+            assert provider.last_usage is not None
+            assert provider.last_usage.input_tokens == 100
+            assert provider.last_usage.output_tokens == 20
+            assert provider.last_usage.total_tokens == 120
+            assert provider.session_usage["calls"] == 1
+            assert provider.session_usage["total_tokens"] == 120
+
+    def test_summarize_estimates_tokens_when_usage_not_in_response(self):
+        """Test that summarize estimates tokens when usage not provided."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "test-model"}]}
+            mock_get.return_value = models_response
+
+            completion_response = MagicMock()
+            completion_response.status_code = 200
+            completion_response.json.return_value = {
+                "choices": [{"message": {"content": "Summary result"}}],
+                # No usage field
+            }
+            completion_response.raise_for_status = MagicMock()
+            mock_post.return_value = completion_response
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                model="test-model",
+            )
+            provider.summarize("Test text for summarization")
+
+            assert provider.last_usage is not None
+            # Should have estimated tokens (roughly 4 chars per token)
+            assert provider.last_usage.input_tokens > 0
+            assert provider.last_usage.output_tokens > 0
+
+    def test_summarize_truncates_long_summaries(self):
+        """Test that summarize truncates summaries exceeding max_length * 2."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "test-model"}]}
+            mock_get.return_value = models_response
+
+            # Return very long summary
+            long_summary = "A" * 500
+            completion_response = MagicMock()
+            completion_response.status_code = 200
+            completion_response.json.return_value = {
+                "choices": [{"message": {"content": long_summary}}],
+                "usage": {"prompt_tokens": 100, "completion_tokens": 500, "total_tokens": 600},
+            }
+            completion_response.raise_for_status = MagicMock()
+            mock_post.return_value = completion_response
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                model="test-model",
+            )
+            result = provider.summarize("Test text", max_length=150)
+
+            # Should be truncated to max_length (150)
+            assert len(result) == 150
+
+    def test_summarize_strips_whitespace_from_response(self):
+        """Test that summarize strips whitespace from response."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "test-model"}]}
+            mock_get.return_value = models_response
+
+            completion_response = MagicMock()
+            completion_response.status_code = 200
+            completion_response.json.return_value = {
+                "choices": [{"message": {"content": "  Summary with whitespace  \n"}}],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+            }
+            completion_response.raise_for_status = MagicMock()
+            mock_post.return_value = completion_response
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                model="test-model",
+            )
+            result = provider.summarize("Test text")
+
+            assert result == "Summary with whitespace"
+
+    def test_summarize_uses_default_api_key(self):
+        """Test that summarize uses 'not-needed' as default API key."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "test-model"}]}
+            mock_get.return_value = models_response
+
+            completion_response = MagicMock()
+            completion_response.status_code = 200
+            completion_response.json.return_value = {
+                "choices": [{"message": {"content": "Summary"}}],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+            }
+            completion_response.raise_for_status = MagicMock()
+            mock_post.return_value = completion_response
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                model="test-model",
+            )
+            provider.summarize("Test text")
+
+            call_args = mock_post.call_args
+            assert "Bearer not-needed" in str(call_args[1]["headers"])
+
+
+class TestOpenAICompatibleProviderModelDiscovery:
+    """Tests for OpenAICompatibleProvider._get_model() method."""
+
+    def test_get_model_returns_configured_model(self):
+        """Test _get_model returns configured model when set."""
+        provider = OpenAICompatibleProvider(
+            base_url="http://localhost:1234/v1",
+            model="configured-model",
+        )
+        assert provider._get_model() == "configured-model"
+
+    def test_get_model_discovers_from_api_when_not_configured(self):
+        """Test _get_model discovers model from API when not configured."""
+        with patch("httpx.get") as mock_get:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {
+                "data": [{"id": "discovered-model"}, {"id": "another-model"}]
+            }
+            mock_get.return_value = models_response
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                model=None,
+            )
+            result = provider._get_model()
+
+            assert result == "discovered-model"
+
+    def test_get_model_returns_default_when_discovery_fails(self):
+        """Test _get_model returns 'default' when discovery fails."""
+        with patch("httpx.get") as mock_get:
+            mock_get.side_effect = Exception("Connection failed")
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                model=None,
+            )
+            result = provider._get_model()
+
+            assert result == "default"
+
+    def test_get_model_returns_default_when_no_models_available(self):
+        """Test _get_model returns 'default' when no models in response."""
+        with patch("httpx.get") as mock_get:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": []}
+            mock_get.return_value = models_response
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                model=None,
+            )
+            result = provider._get_model()
+
+            assert result == "default"
+
+    def test_get_model_returns_default_when_api_returns_error(self):
+        """Test _get_model returns 'default' when API returns error status."""
+        with patch("httpx.get") as mock_get:
+            models_response = MagicMock()
+            models_response.status_code = 500
+            mock_get.return_value = models_response
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                model=None,
+            )
+            result = provider._get_model()
+
+            assert result == "default"
+
+    def test_get_model_handles_malformed_response(self):
+        """Test _get_model handles malformed API response."""
+        with patch("httpx.get") as mock_get:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"unexpected": "format"}
+            mock_get.return_value = models_response
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                model=None,
+            )
+            result = provider._get_model()
+
+            assert result == "default"
+
+    def test_get_model_uses_first_model_from_list(self):
+        """Test _get_model uses first model from discovered list."""
+        with patch("httpx.get") as mock_get:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {
+                "data": [
+                    {"id": "first-model"},
+                    {"id": "second-model"},
+                    {"id": "third-model"},
+                ]
+            }
+            mock_get.return_value = models_response
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                model=None,
+            )
+            result = provider._get_model()
+
+            assert result == "first-model"
+
+
+class TestOpenAICompatibleProviderErrorHandling:
+    """Tests for OpenAICompatibleProvider error handling."""
+
+    def test_summarize_raises_on_api_error(self):
+        """Test summarize raises when API returns error."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "test-model"}]}
+            mock_get.return_value = models_response
+
+            error_response = MagicMock()
+            error_response.status_code = 500
+            error_response.raise_for_status.side_effect = Exception("Internal Server Error")
+            mock_post.return_value = error_response
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                model="test-model",
+            )
+
+            with pytest.raises(Exception, match="Internal Server Error"):
+                provider.summarize("Test text")
+
+    def test_summarize_raises_on_connection_error(self):
+        """Test summarize raises on connection error during POST."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "test-model"}]}
+            mock_get.return_value = models_response
+
+            mock_post.side_effect = Exception("Connection refused")
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                model="test-model",
+            )
+
+            with pytest.raises(Exception, match="Connection refused"):
+                provider.summarize("Test text")
+
+    def test_summarize_raises_on_timeout(self):
+        """Test summarize raises on timeout during POST."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            import httpx
+
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "test-model"}]}
+            mock_get.return_value = models_response
+
+            mock_post.side_effect = httpx.TimeoutException("Request timed out")
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                model="test-model",
+            )
+
+            with pytest.raises(httpx.TimeoutException):
+                provider.summarize("Test text")
+
+    def test_summarize_raises_on_rate_limit(self):
+        """Test summarize raises when API returns rate limit error."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "test-model"}]}
+            mock_get.return_value = models_response
+
+            rate_limit_response = MagicMock()
+            rate_limit_response.status_code = 429
+            rate_limit_response.raise_for_status.side_effect = Exception("Rate limit exceeded")
+            mock_post.return_value = rate_limit_response
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                model="test-model",
+            )
+
+            with pytest.raises(Exception, match="Rate limit exceeded"):
+                provider.summarize("Test text")
+
+    def test_summarize_raises_on_unauthorized(self):
+        """Test summarize raises when API returns unauthorized error."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "test-model"}]}
+            mock_get.return_value = models_response
+
+            unauthorized_response = MagicMock()
+            unauthorized_response.status_code = 401
+            unauthorized_response.raise_for_status.side_effect = Exception("Unauthorized")
+            mock_post.return_value = unauthorized_response
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                model="test-model",
+            )
+
+            with pytest.raises(Exception, match="Unauthorized"):
+                provider.summarize("Test text")
+
+
+class TestOpenAICompatibleProviderGenerate:
+    """Tests for OpenAICompatibleProvider.generate() method."""
+
+    def test_generate_returns_empty_string_for_empty_input(self):
+        """Test generate returns empty string for empty input."""
+        provider = OpenAICompatibleProvider(
+            base_url="http://localhost:1234/v1",
+            model="test-model",
+        )
+        result = provider.generate("")
+        assert result == ""
+
+    def test_generate_makes_correct_api_call(self):
+        """Test generate makes correct API call with proper payload."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "test-model"}]}
+            mock_get.return_value = models_response
+
+            completion_response = MagicMock()
+            completion_response.status_code = 200
+            completion_response.json.return_value = {
+                "choices": [{"message": {"content": "Generated response"}}],
+                "usage": {
+                    "prompt_tokens": 50,
+                    "completion_tokens": 30,
+                    "total_tokens": 80,
+                },
+            }
+            completion_response.raise_for_status = MagicMock()
+            mock_post.return_value = completion_response
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                api_key="test-key",
+                model="test-model",
+            )
+            result = provider.generate("Custom prompt", max_tokens=500)
+
+            assert result == "Generated response"
+            call_args = mock_post.call_args
+            assert call_args[1]["json"]["max_tokens"] == 500
+
+    def test_generate_records_usage_stats(self):
+        """Test generate records usage stats from API response."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "test-model"}]}
+            mock_get.return_value = models_response
+
+            completion_response = MagicMock()
+            completion_response.status_code = 200
+            completion_response.json.return_value = {
+                "choices": [{"message": {"content": "Response"}}],
+                "usage": {
+                    "prompt_tokens": 50,
+                    "completion_tokens": 30,
+                    "total_tokens": 80,
+                },
+            }
+            completion_response.raise_for_status = MagicMock()
+            mock_post.return_value = completion_response
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                model="test-model",
+            )
+            provider.generate("Test prompt")
+
+            assert provider.last_usage is not None
+            assert provider.last_usage.input_tokens == 50
+            assert provider.last_usage.output_tokens == 30
+            assert provider.last_usage.total_tokens == 80
+
+
+class TestOpenAICompatibleProviderProperties:
+    """Tests for OpenAICompatibleProvider properties."""
+
+    def test_name_returns_provider_name(self):
+        """Test name property returns provider name."""
+        provider = OpenAICompatibleProvider(
+            base_url="http://localhost:1234/v1",
+            model="test-model",
+            provider_name="Custom Provider",
+        )
+        assert provider.name == "Custom Provider"
+
+    def test_name_returns_default_name(self):
+        """Test name property returns default when not specified."""
+        provider = OpenAICompatibleProvider(
+            base_url="http://localhost:1234/v1",
+            model="test-model",
+        )
+        assert provider.name == "OpenAI-compatible"
+
+    def test_model_name_returns_configured_model(self):
+        """Test model_name returns configured model."""
+        provider = OpenAICompatibleProvider(
+            base_url="http://localhost:1234/v1",
+            model="my-model",
+        )
+        assert provider.model_name == "my-model"
+
+    def test_model_name_returns_discovered_model(self):
+        """Test model_name returns discovered model after API call."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "discovered-model"}]}
+            mock_get.return_value = models_response
+
+            completion_response = MagicMock()
+            completion_response.status_code = 200
+            completion_response.json.return_value = {
+                "choices": [{"message": {"content": "Summary"}}],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+            }
+            completion_response.raise_for_status = MagicMock()
+            mock_post.return_value = completion_response
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                model=None,
+            )
+            # Before summarize call
+            assert provider.model_name == "auto"
+
+            # After summarize call (model discovered)
+            provider.summarize("Test")
+            assert provider.model_name == "discovered-model"
+
+    def test_model_name_returns_auto_when_no_model(self):
+        """Test model_name returns 'auto' when no model configured."""
+        provider = OpenAICompatibleProvider(
+            base_url="http://localhost:1234/v1",
+            model=None,
+        )
+        assert provider.model_name == "auto"
+
+
+class TestOpenAICompatibleProviderIntegration:
+    """Integration tests for OpenAICompatibleProvider."""
+
+    def test_multiple_summarize_calls_accumulate_usage(self):
+        """Test multiple summarize calls accumulate session usage."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "test-model"}]}
+            mock_get.return_value = models_response
+
+            completion_response = MagicMock()
+            completion_response.status_code = 200
+            completion_response.json.return_value = {
+                "choices": [{"message": {"content": "Summary"}}],
+                "usage": {"prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 120},
+            }
+            completion_response.raise_for_status = MagicMock()
+            mock_post.return_value = completion_response
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                model="test-model",
+            )
+
+            provider.summarize("First text")
+            provider.summarize("Second text")
+            provider.summarize("Third text")
+
+            assert provider.session_usage["calls"] == 3
+            assert provider.session_usage["total_tokens"] == 360  # 120 * 3
+
+    def test_provider_initialization_with_all_parameters(self):
+        """Test provider initialization with all parameters."""
+        provider = OpenAICompatibleProvider(
+            base_url="https://api.custom.com/v1",
+            api_key="custom-api-key",
+            model="custom-model",
+            provider_name="My Custom API",
+        )
+
+        assert provider.base_url == "https://api.custom.com/v1"
+        assert provider.api_key == "custom-api-key"
+        assert provider.model == "custom-model"
+        assert provider.name == "My Custom API"
+        assert provider.last_usage is None
+        assert provider.session_usage == {"calls": 0, "total_tokens": 0}
+
+    def test_provider_initialization_with_minimal_parameters(self):
+        """Test provider initialization with minimal parameters."""
+        provider = OpenAICompatibleProvider(
+            base_url="http://localhost:1234/v1",
+        )
+
+        assert provider.base_url == "http://localhost:1234/v1"
+        assert provider.api_key == "not-needed"
+        assert provider.model is None
+        assert provider.name == "OpenAI-compatible"
+
+    def test_estimate_tokens_method(self):
+        """Test _estimate_tokens method."""
+        provider = OpenAICompatibleProvider(
+            base_url="http://localhost:1234/v1",
+            model="test-model",
+        )
+
+        # 4 chars per token estimation
+        assert provider._estimate_tokens("") == 0
+        assert provider._estimate_tokens("1234") == 1
+        assert provider._estimate_tokens("12345678") == 2
+        assert provider._estimate_tokens("a" * 100) == 25
+
+    def test_record_usage_method(self):
+        """Test _record_usage method updates stats correctly."""
+        provider = OpenAICompatibleProvider(
+            base_url="http://localhost:1234/v1",
+            model="test-model",
+            provider_name="Test Provider",
+        )
+
+        provider._record_usage("input text", "output", "my-model")
+
+        assert provider.last_usage is not None
+        assert provider.last_usage.model == "my-model"
+        assert provider.last_usage.provider == "Test Provider"
+        assert provider.session_usage["calls"] == 1
+        assert provider.session_usage["total_tokens"] > 0
