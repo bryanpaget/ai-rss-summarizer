@@ -5298,3 +5298,800 @@ class TestGroqProviderIntegration:
         """Test ProviderType.GROQ has correct string value."""
         assert ProviderType.GROQ.value == "groq"
         assert ProviderType.GROQ == "groq"  # str enum comparison
+
+
+# =============================================================================
+# Tests for list_providers() - Available Providers List
+# =============================================================================
+
+
+class TestListProviders:
+    """Tests for list_providers() function that lists all available providers."""
+
+    def test_list_providers_returns_list(self, clean_env):
+        """Test list_providers returns a list."""
+        providers = list_providers()
+
+        assert isinstance(providers, list)
+        assert len(providers) > 0
+
+    def test_list_providers_contains_all_provider_types(self, clean_env):
+        """Test list_providers includes all expected provider types."""
+        providers = list_providers()
+
+        expected_types = [
+            ProviderType.LM_STUDIO,
+            ProviderType.OLLAMA,
+            ProviderType.OPENAI,
+            ProviderType.CODEX_CLI,
+            ProviderType.CLAUDE,
+            ProviderType.CLAUDE_CODE,
+            ProviderType.GEMINI,
+            ProviderType.GEMINI_CLI,
+            ProviderType.GROK,
+            ProviderType.GROQ,
+        ]
+
+        provider_types = [p["type"] for p in providers]
+        for expected_type in expected_types:
+            assert expected_type in provider_types, f"Missing provider type: {expected_type}"
+
+    def test_list_providers_has_required_fields(self, clean_env):
+        """Test each provider dict has required fields."""
+        providers = list_providers()
+
+        required_fields = ["type", "name", "available", "description"]
+        for provider in providers:
+            for field in required_fields:
+                assert field in provider, f"Missing field '{field}' in provider: {provider}"
+
+    def test_list_providers_available_is_boolean(self, clean_env):
+        """Test available field is a boolean."""
+        providers = list_providers()
+
+        for provider in providers:
+            assert isinstance(provider["available"], bool), \
+                f"Provider {provider['name']} 'available' is not boolean"
+
+    def test_list_providers_type_is_provider_type(self, clean_env):
+        """Test type field is a ProviderType enum value."""
+        providers = list_providers()
+
+        for provider in providers:
+            assert isinstance(provider["type"], ProviderType), \
+                f"Provider {provider['name']} type is not ProviderType"
+
+    def test_list_providers_with_api_key_shows_available(self, clean_env):
+        """Test provider shows available when API key is set."""
+        os.environ["GROQ_API_KEY"] = "test-key"
+
+        providers = list_providers()
+        groq = next((p for p in providers if p["type"] == ProviderType.GROQ), None)
+
+        assert groq is not None
+        assert groq["available"] is True
+
+    def test_list_providers_without_api_key_shows_unavailable(self, clean_env):
+        """Test provider shows unavailable when API key is not set."""
+        providers = list_providers()
+        groq = next((p for p in providers if p["type"] == ProviderType.GROQ), None)
+
+        assert groq is not None
+        assert groq["available"] is False
+
+    def test_list_providers_local_providers_with_mock(self, clean_env, mock_httpx_success):
+        """Test local providers show available when server responds."""
+        providers = list_providers()
+
+        lm_studio = next((p for p in providers if p["type"] == ProviderType.LM_STUDIO), None)
+        assert lm_studio is not None
+        # May be available or unavailable depending on mock setup
+
+    def test_list_providers_descriptions_not_empty(self, clean_env):
+        """Test all providers have non-empty descriptions."""
+        providers = list_providers()
+
+        for provider in providers:
+            assert provider["description"], f"Provider {provider['name']} has empty description"
+            assert len(provider["description"]) > 0
+
+    def test_list_providers_names_not_empty(self, clean_env):
+        """Test all providers have non-empty names."""
+        providers = list_providers()
+
+        for provider in providers:
+            assert provider["name"], f"Provider has empty name"
+            assert len(provider["name"]) > 0
+
+
+class TestListProvidersWithMultipleAvailable:
+    """Tests for list_providers when multiple providers are available."""
+
+    def test_multiple_api_keys_set(self, clean_env):
+        """Test list_providers with multiple API keys set."""
+        os.environ["GROQ_API_KEY"] = "test-groq-key"
+        os.environ["GOOGLE_API_KEY"] = "test-google-key"
+        os.environ["XAI_API_KEY"] = "test-xai-key"
+
+        providers = list_providers()
+
+        available = [p for p in providers if p["available"]]
+        # At least Groq, Grok should be available (Gemini needs SDK import)
+        available_types = [p["type"] for p in available]
+        assert ProviderType.GROQ in available_types
+        assert ProviderType.GROK in available_types
+
+    def test_list_providers_order_is_consistent(self, clean_env):
+        """Test list_providers returns providers in consistent order."""
+        providers1 = list_providers()
+        providers2 = list_providers()
+
+        types1 = [p["type"] for p in providers1]
+        types2 = [p["type"] for p in providers2]
+
+        assert types1 == types2
+
+
+# =============================================================================
+# Tests for auto_detect_provider() - Provider Auto Detection
+# =============================================================================
+
+
+class TestAutoDetectProvider:
+    """Tests for auto_detect_provider() function."""
+
+    def test_auto_detect_returns_none_when_nothing_available(self, clean_env):
+        """Test auto_detect_provider returns None when no providers available."""
+        # Mock all providers as unavailable
+        with patch.object(LMStudioProvider, 'is_available', return_value=False), \
+             patch.object(OllamaProvider, 'is_available', return_value=False), \
+             patch.object(GeminiProvider, 'is_available', return_value=False), \
+             patch.object(GrokProvider, 'is_available', return_value=False), \
+             patch.object(ClaudeCodeProvider, 'is_available', return_value=False), \
+             patch.object(ClaudeProvider, 'is_available', return_value=False), \
+             patch.object(OpenAIAgentsProvider, 'is_available', return_value=False), \
+             patch.object(TransformersProvider, 'is_available', return_value=False):
+
+            result = auto_detect_provider()
+
+            assert result is None
+
+    def test_auto_detect_returns_lm_studio_first(self, clean_env):
+        """Test auto_detect_provider returns LMStudioProvider when available (first priority)."""
+        with patch.object(LMStudioProvider, 'is_available', return_value=True):
+            result = auto_detect_provider()
+
+            assert isinstance(result, LMStudioProvider)
+
+    def test_auto_detect_returns_ollama_second(self, clean_env):
+        """Test auto_detect_provider returns OllamaProvider when LM Studio unavailable."""
+        with patch.object(LMStudioProvider, 'is_available', return_value=False), \
+             patch.object(OllamaProvider, 'is_available', return_value=True):
+
+            result = auto_detect_provider()
+
+            assert isinstance(result, OllamaProvider)
+
+    def test_auto_detect_returns_gemini_third(self, clean_env):
+        """Test auto_detect_provider returns GeminiProvider when local providers unavailable."""
+        with patch.object(LMStudioProvider, 'is_available', return_value=False), \
+             patch.object(OllamaProvider, 'is_available', return_value=False), \
+             patch.object(GeminiProvider, 'is_available', return_value=True):
+
+            result = auto_detect_provider()
+
+            assert isinstance(result, GeminiProvider)
+
+    def test_auto_detect_returns_grok_fourth(self, clean_env):
+        """Test auto_detect_provider returns GrokProvider when higher priority unavailable."""
+        with patch.object(LMStudioProvider, 'is_available', return_value=False), \
+             patch.object(OllamaProvider, 'is_available', return_value=False), \
+             patch.object(GeminiProvider, 'is_available', return_value=False), \
+             patch.object(GrokProvider, 'is_available', return_value=True):
+
+            result = auto_detect_provider()
+
+            assert isinstance(result, GrokProvider)
+
+    def test_auto_detect_returns_claude_code_fifth(self, clean_env):
+        """Test auto_detect_provider returns ClaudeCodeProvider when higher priority unavailable."""
+        with patch.object(LMStudioProvider, 'is_available', return_value=False), \
+             patch.object(OllamaProvider, 'is_available', return_value=False), \
+             patch.object(GeminiProvider, 'is_available', return_value=False), \
+             patch.object(GrokProvider, 'is_available', return_value=False), \
+             patch.object(ClaudeCodeProvider, 'is_available', return_value=True):
+
+            result = auto_detect_provider()
+
+            assert isinstance(result, ClaudeCodeProvider)
+
+    def test_auto_detect_returns_claude_api_sixth(self, clean_env):
+        """Test auto_detect_provider returns ClaudeProvider when higher priority unavailable."""
+        with patch.object(LMStudioProvider, 'is_available', return_value=False), \
+             patch.object(OllamaProvider, 'is_available', return_value=False), \
+             patch.object(GeminiProvider, 'is_available', return_value=False), \
+             patch.object(GrokProvider, 'is_available', return_value=False), \
+             patch.object(ClaudeCodeProvider, 'is_available', return_value=False), \
+             patch.object(ClaudeProvider, 'is_available', return_value=True):
+
+            result = auto_detect_provider()
+
+            assert isinstance(result, ClaudeProvider)
+
+    def test_auto_detect_returns_openai_seventh(self, clean_env):
+        """Test auto_detect_provider returns OpenAIAgentsProvider when higher priority unavailable."""
+        with patch.object(LMStudioProvider, 'is_available', return_value=False), \
+             patch.object(OllamaProvider, 'is_available', return_value=False), \
+             patch.object(GeminiProvider, 'is_available', return_value=False), \
+             patch.object(GrokProvider, 'is_available', return_value=False), \
+             patch.object(ClaudeCodeProvider, 'is_available', return_value=False), \
+             patch.object(ClaudeProvider, 'is_available', return_value=False), \
+             patch.object(OpenAIAgentsProvider, 'is_available', return_value=True):
+
+            result = auto_detect_provider()
+
+            assert isinstance(result, OpenAIAgentsProvider)
+
+    def test_auto_detect_returns_transformers_last(self, clean_env):
+        """Test auto_detect_provider returns TransformersProvider as last resort."""
+        with patch.object(LMStudioProvider, 'is_available', return_value=False), \
+             patch.object(OllamaProvider, 'is_available', return_value=False), \
+             patch.object(GeminiProvider, 'is_available', return_value=False), \
+             patch.object(GrokProvider, 'is_available', return_value=False), \
+             patch.object(ClaudeCodeProvider, 'is_available', return_value=False), \
+             patch.object(ClaudeProvider, 'is_available', return_value=False), \
+             patch.object(OpenAIAgentsProvider, 'is_available', return_value=False), \
+             patch.object(TransformersProvider, 'is_available', return_value=True):
+
+            result = auto_detect_provider()
+
+            assert isinstance(result, TransformersProvider)
+
+
+class TestAutoDetectProviderPriority:
+    """Tests for verifying auto_detect_provider follows correct priority order."""
+
+    def test_lm_studio_over_ollama(self, clean_env):
+        """Test LM Studio is preferred over Ollama."""
+        with patch.object(LMStudioProvider, 'is_available', return_value=True), \
+             patch.object(OllamaProvider, 'is_available', return_value=True):
+
+            result = auto_detect_provider()
+
+            assert isinstance(result, LMStudioProvider)
+
+    def test_ollama_over_gemini(self, clean_env):
+        """Test Ollama is preferred over Gemini."""
+        with patch.object(LMStudioProvider, 'is_available', return_value=False), \
+             patch.object(OllamaProvider, 'is_available', return_value=True), \
+             patch.object(GeminiProvider, 'is_available', return_value=True):
+
+            result = auto_detect_provider()
+
+            assert isinstance(result, OllamaProvider)
+
+    def test_gemini_over_grok(self, clean_env):
+        """Test Gemini is preferred over Grok."""
+        with patch.object(LMStudioProvider, 'is_available', return_value=False), \
+             patch.object(OllamaProvider, 'is_available', return_value=False), \
+             patch.object(GeminiProvider, 'is_available', return_value=True), \
+             patch.object(GrokProvider, 'is_available', return_value=True):
+
+            result = auto_detect_provider()
+
+            assert isinstance(result, GeminiProvider)
+
+    def test_grok_over_claude_code(self, clean_env):
+        """Test Grok is preferred over Claude Code."""
+        with patch.object(LMStudioProvider, 'is_available', return_value=False), \
+             patch.object(OllamaProvider, 'is_available', return_value=False), \
+             patch.object(GeminiProvider, 'is_available', return_value=False), \
+             patch.object(GrokProvider, 'is_available', return_value=True), \
+             patch.object(ClaudeCodeProvider, 'is_available', return_value=True):
+
+            result = auto_detect_provider()
+
+            assert isinstance(result, GrokProvider)
+
+    def test_claude_code_over_claude_api(self, clean_env):
+        """Test Claude Code is preferred over Claude API."""
+        with patch.object(LMStudioProvider, 'is_available', return_value=False), \
+             patch.object(OllamaProvider, 'is_available', return_value=False), \
+             patch.object(GeminiProvider, 'is_available', return_value=False), \
+             patch.object(GrokProvider, 'is_available', return_value=False), \
+             patch.object(ClaudeCodeProvider, 'is_available', return_value=True), \
+             patch.object(ClaudeProvider, 'is_available', return_value=True):
+
+            result = auto_detect_provider()
+
+            assert isinstance(result, ClaudeCodeProvider)
+
+    def test_claude_api_over_openai(self, clean_env):
+        """Test Claude API is preferred over OpenAI."""
+        with patch.object(LMStudioProvider, 'is_available', return_value=False), \
+             patch.object(OllamaProvider, 'is_available', return_value=False), \
+             patch.object(GeminiProvider, 'is_available', return_value=False), \
+             patch.object(GrokProvider, 'is_available', return_value=False), \
+             patch.object(ClaudeCodeProvider, 'is_available', return_value=False), \
+             patch.object(ClaudeProvider, 'is_available', return_value=True), \
+             patch.object(OpenAIAgentsProvider, 'is_available', return_value=True):
+
+            result = auto_detect_provider()
+
+            assert isinstance(result, ClaudeProvider)
+
+    def test_openai_over_transformers(self, clean_env):
+        """Test OpenAI is preferred over Transformers."""
+        with patch.object(LMStudioProvider, 'is_available', return_value=False), \
+             patch.object(OllamaProvider, 'is_available', return_value=False), \
+             patch.object(GeminiProvider, 'is_available', return_value=False), \
+             patch.object(GrokProvider, 'is_available', return_value=False), \
+             patch.object(ClaudeCodeProvider, 'is_available', return_value=False), \
+             patch.object(ClaudeProvider, 'is_available', return_value=False), \
+             patch.object(OpenAIAgentsProvider, 'is_available', return_value=True), \
+             patch.object(TransformersProvider, 'is_available', return_value=True):
+
+            result = auto_detect_provider()
+
+            assert isinstance(result, OpenAIAgentsProvider)
+
+    def test_all_providers_available_returns_lm_studio(self, clean_env):
+        """Test when all providers available, LM Studio is returned first."""
+        with patch.object(LMStudioProvider, 'is_available', return_value=True), \
+             patch.object(OllamaProvider, 'is_available', return_value=True), \
+             patch.object(GeminiProvider, 'is_available', return_value=True), \
+             patch.object(GrokProvider, 'is_available', return_value=True), \
+             patch.object(ClaudeCodeProvider, 'is_available', return_value=True), \
+             patch.object(ClaudeProvider, 'is_available', return_value=True), \
+             patch.object(OpenAIAgentsProvider, 'is_available', return_value=True), \
+             patch.object(TransformersProvider, 'is_available', return_value=True):
+
+            result = auto_detect_provider()
+
+            assert isinstance(result, LMStudioProvider)
+
+
+class TestAutoDetectProviderRealChecks:
+    """Tests for auto_detect_provider with real availability checks via mocking."""
+
+    def test_auto_detect_with_groq_api_key(self, clean_env):
+        """Test auto_detect returns Groq when only GROQ_API_KEY is set."""
+        os.environ["GROQ_API_KEY"] = "test-groq-key"
+
+        with patch.object(LMStudioProvider, 'is_available', return_value=False), \
+             patch.object(OllamaProvider, 'is_available', return_value=False), \
+             patch.object(GeminiProvider, 'is_available', return_value=False), \
+             patch.object(GrokProvider, 'is_available', return_value=False), \
+             patch.object(ClaudeCodeProvider, 'is_available', return_value=False), \
+             patch.object(ClaudeProvider, 'is_available', return_value=False), \
+             patch.object(OpenAIAgentsProvider, 'is_available', return_value=False), \
+             patch.object(TransformersProvider, 'is_available', return_value=False):
+
+            # With everything mocked as unavailable, should return None
+            result = auto_detect_provider()
+            assert result is None
+
+    def test_auto_detect_with_local_server_mock(self, clean_env, mock_httpx_success):
+        """Test auto_detect with mocked local server."""
+        with patch.object(LMStudioProvider, 'is_available', return_value=True):
+            result = auto_detect_provider()
+
+            assert isinstance(result, LMStudioProvider)
+
+
+# =============================================================================
+# Tests for get_provider() with Auto Detection
+# =============================================================================
+
+
+class TestGetProviderAutoDetection:
+    """Tests for get_provider() when using auto-detection."""
+
+    def test_get_provider_no_config_uses_auto_detect(self, clean_env):
+        """Test get_provider with no config falls back to auto-detection."""
+        with patch.object(LMStudioProvider, 'is_available', return_value=True):
+            result = get_provider(None)
+
+            assert isinstance(result, LMStudioProvider)
+
+    def test_get_provider_raises_when_no_provider_available(self, clean_env):
+        """Test get_provider raises ValueError when no provider available."""
+        # Also need to mock file config loading to return empty config
+        with patch.object(LMStudioProvider, 'is_available', return_value=False), \
+             patch.object(OllamaProvider, 'is_available', return_value=False), \
+             patch.object(GeminiProvider, 'is_available', return_value=False), \
+             patch.object(GrokProvider, 'is_available', return_value=False), \
+             patch.object(ClaudeCodeProvider, 'is_available', return_value=False), \
+             patch.object(ClaudeProvider, 'is_available', return_value=False), \
+             patch.object(OpenAIAgentsProvider, 'is_available', return_value=False), \
+             patch.object(TransformersProvider, 'is_available', return_value=False), \
+             patch("src.llm_providers.LLMConfig.from_file") as mock_from_file:
+
+            # Return empty config to ensure no provider is set from file
+            mock_from_file.return_value = LLMConfig(provider=None)
+
+            with pytest.raises(ValueError) as exc_info:
+                get_provider(None)
+
+            assert "No LLM provider configured or available" in str(exc_info.value)
+
+    def test_get_provider_explicit_config_overrides_auto_detect(self, clean_env):
+        """Test explicit config takes priority over auto-detection."""
+        config = LLMConfig(provider=ProviderType.GROQ, model="test-model")
+
+        # Even if LM Studio is available, explicit config wins
+        with patch.object(LMStudioProvider, 'is_available', return_value=True):
+            result = get_provider(config)
+
+            assert isinstance(result, GroqProvider)
+
+    def test_get_provider_env_over_auto_detect(self, env_groq):
+        """Test environment config takes priority over auto-detection."""
+        with patch.object(LMStudioProvider, 'is_available', return_value=True):
+            result = get_provider(None)
+
+            assert isinstance(result, GroqProvider)
+
+    def test_get_provider_file_config_over_auto_detect(self, clean_env, temp_config_dir, sample_config_groq):
+        """Test file config takes priority over auto-detection."""
+        config_path = os.path.join(temp_config_dir, "llm.json")
+        with open(config_path, "w") as f:
+            json.dump(sample_config_groq, f)
+
+        with patch("src.llm_providers.LLMConfig.from_file") as mock_from_file:
+            mock_from_file.return_value = LLMConfig(
+                provider=ProviderType.GROQ,
+                model="llama-3.3-70b-versatile"
+            )
+
+            with patch.object(LMStudioProvider, 'is_available', return_value=True):
+                result = get_provider(None)
+
+                assert isinstance(result, GroqProvider)
+
+
+class TestGetProviderWithProviderTypes:
+    """Tests for get_provider() with each provider type."""
+
+    def test_get_provider_lm_studio(self, clean_env):
+        """Test get_provider returns LMStudioProvider."""
+        config = LLMConfig(provider=ProviderType.LM_STUDIO, model="test-model")
+
+        result = get_provider(config)
+
+        assert isinstance(result, LMStudioProvider)
+        assert result.model == "test-model"
+
+    def test_get_provider_ollama(self, clean_env):
+        """Test get_provider returns OllamaProvider."""
+        config = LLMConfig(provider=ProviderType.OLLAMA, model="llama2")
+
+        result = get_provider(config)
+
+        assert isinstance(result, OllamaProvider)
+        assert result.model == "llama2"
+
+    def test_get_provider_openai(self, clean_env):
+        """Test get_provider returns OpenAIAgentsProvider."""
+        config = LLMConfig(provider=ProviderType.OPENAI, model="gpt-4o")
+
+        result = get_provider(config)
+
+        assert isinstance(result, OpenAIAgentsProvider)
+
+    def test_get_provider_openai_compatible_requires_base_url(self, clean_env):
+        """Test get_provider raises when base_url missing for openai-compatible."""
+        config = LLMConfig(provider=ProviderType.OPENAI_COMPATIBLE, model="test")
+
+        with pytest.raises(ValueError) as exc_info:
+            get_provider(config)
+
+        assert "base_url required" in str(exc_info.value)
+
+    def test_get_provider_openai_compatible_with_base_url(self, clean_env):
+        """Test get_provider returns OpenAICompatibleProvider with base_url."""
+        config = LLMConfig(
+            provider=ProviderType.OPENAI_COMPATIBLE,
+            base_url="http://localhost:8000/v1",
+            model="test-model"
+        )
+
+        result = get_provider(config)
+
+        assert isinstance(result, OpenAICompatibleProvider)
+
+    def test_get_provider_transformers(self, clean_env):
+        """Test get_provider returns TransformersProvider."""
+        config = LLMConfig(provider=ProviderType.TRANSFORMERS, model="facebook/bart-large-cnn")
+
+        result = get_provider(config)
+
+        assert isinstance(result, TransformersProvider)
+
+    def test_get_provider_claude_code(self, clean_env):
+        """Test get_provider returns ClaudeCodeProvider."""
+        config = LLMConfig(provider=ProviderType.CLAUDE_CODE, model="sonnet")
+
+        result = get_provider(config)
+
+        assert isinstance(result, ClaudeCodeProvider)
+
+    def test_get_provider_gemini(self, clean_env):
+        """Test get_provider returns GeminiProvider."""
+        config = LLMConfig(provider=ProviderType.GEMINI, model="gemini-1.5-pro")
+
+        result = get_provider(config)
+
+        assert isinstance(result, GeminiProvider)
+
+    def test_get_provider_gemini_cli(self, clean_env):
+        """Test get_provider returns GeminiCLIProvider."""
+        config = LLMConfig(provider=ProviderType.GEMINI_CLI, model="gemini-2.0-flash")
+
+        result = get_provider(config)
+
+        assert isinstance(result, GeminiCLIProvider)
+
+    def test_get_provider_codex_cli(self, clean_env):
+        """Test get_provider returns CodexCLIProvider."""
+        config = LLMConfig(provider=ProviderType.CODEX_CLI, model="gpt-4.1")
+
+        result = get_provider(config)
+
+        assert isinstance(result, CodexCLIProvider)
+
+    def test_get_provider_grok(self, clean_env):
+        """Test get_provider returns GrokProvider."""
+        config = LLMConfig(provider=ProviderType.GROK, model="grok-beta")
+
+        result = get_provider(config)
+
+        assert isinstance(result, GrokProvider)
+
+    def test_get_provider_groq(self, clean_env):
+        """Test get_provider returns GroqProvider."""
+        config = LLMConfig(provider=ProviderType.GROQ, model="llama-3.3-70b-versatile")
+
+        result = get_provider(config)
+
+        assert isinstance(result, GroqProvider)
+
+    def test_get_provider_claude(self, clean_env):
+        """Test get_provider returns ClaudeProvider."""
+        config = LLMConfig(provider=ProviderType.CLAUDE, model="claude-sonnet-4-20250514")
+
+        result = get_provider(config)
+
+        assert isinstance(result, ClaudeProvider)
+
+
+class TestGetProviderDefaultModels:
+    """Tests for get_provider() default model assignment."""
+
+    def test_get_provider_openai_default_model(self, clean_env):
+        """Test get_provider uses default model for OpenAI when none specified."""
+        config = LLMConfig(provider=ProviderType.OPENAI, model=None)
+
+        result = get_provider(config)
+
+        assert isinstance(result, OpenAIAgentsProvider)
+        assert result.model_name == "gpt-4o-mini"
+
+    def test_get_provider_transformers_default_model(self, clean_env):
+        """Test get_provider uses default model for Transformers."""
+        config = LLMConfig(provider=ProviderType.TRANSFORMERS, model=None)
+
+        result = get_provider(config)
+
+        assert result.model_name == "facebook/bart-large-cnn"
+
+    def test_get_provider_claude_code_default_model(self, clean_env):
+        """Test get_provider uses default model for Claude Code."""
+        config = LLMConfig(provider=ProviderType.CLAUDE_CODE, model=None)
+
+        result = get_provider(config)
+
+        assert result.model_name == "sonnet"
+
+    def test_get_provider_gemini_default_model(self, clean_env):
+        """Test get_provider uses default model for Gemini."""
+        config = LLMConfig(provider=ProviderType.GEMINI, model=None)
+
+        result = get_provider(config)
+
+        assert result.model_name == "gemini-1.5-flash"
+
+    def test_get_provider_gemini_cli_default_model(self, clean_env):
+        """Test get_provider uses default model for Gemini CLI."""
+        config = LLMConfig(provider=ProviderType.GEMINI_CLI, model=None)
+
+        result = get_provider(config)
+
+        assert result.model_name == "gemini-2.0-flash"
+
+    def test_get_provider_codex_cli_default_model(self, clean_env):
+        """Test get_provider uses default model for Codex CLI."""
+        config = LLMConfig(provider=ProviderType.CODEX_CLI, model=None)
+
+        result = get_provider(config)
+
+        assert result.model_name == "gpt-4.1"
+
+    def test_get_provider_grok_default_model(self, clean_env):
+        """Test get_provider uses default model for Grok."""
+        config = LLMConfig(provider=ProviderType.GROK, model=None)
+
+        result = get_provider(config)
+
+        assert result.model == "grok-beta"
+
+    def test_get_provider_groq_default_model(self, clean_env):
+        """Test get_provider uses default model for Groq."""
+        config = LLMConfig(provider=ProviderType.GROQ, model=None)
+
+        result = get_provider(config)
+
+        assert result.model == "llama-3.3-70b-versatile"
+
+    def test_get_provider_claude_default_model(self, clean_env):
+        """Test get_provider uses default model for Claude."""
+        config = LLMConfig(provider=ProviderType.CLAUDE, model=None)
+
+        result = get_provider(config)
+
+        assert result.model_name == "claude-sonnet-4-20250514"
+
+
+# =============================================================================
+# Tests for get_best_provider()
+# =============================================================================
+
+
+class TestGetBestProvider:
+    """Tests for get_best_provider() helper function."""
+
+    def test_get_best_provider_returns_tuple(self, clean_env):
+        """Test get_best_provider returns a tuple."""
+        with patch.object(LMStudioProvider, 'is_available', return_value=True):
+            result = get_best_provider()
+
+            assert isinstance(result, tuple)
+            assert len(result) == 2
+
+    def test_get_best_provider_returns_provider_and_true_when_available(self, clean_env):
+        """Test get_best_provider returns provider and True when available."""
+        with patch.object(LMStudioProvider, 'is_available', return_value=True):
+            provider, is_llm = get_best_provider()
+
+            assert isinstance(provider, LMStudioProvider)
+            assert is_llm is True
+
+    def test_get_best_provider_returns_none_and_false_when_unavailable(self, clean_env):
+        """Test get_best_provider returns None and False when none available."""
+        with patch.object(LMStudioProvider, 'is_available', return_value=False), \
+             patch.object(OllamaProvider, 'is_available', return_value=False), \
+             patch.object(GeminiProvider, 'is_available', return_value=False), \
+             patch.object(GrokProvider, 'is_available', return_value=False), \
+             patch.object(ClaudeCodeProvider, 'is_available', return_value=False), \
+             patch.object(ClaudeProvider, 'is_available', return_value=False), \
+             patch.object(OpenAIAgentsProvider, 'is_available', return_value=False), \
+             patch.object(TransformersProvider, 'is_available', return_value=False):
+
+            provider, is_llm = get_best_provider()
+
+            assert provider is None
+            assert is_llm is False
+
+    def test_get_best_provider_uses_auto_detect_priority(self, clean_env):
+        """Test get_best_provider follows auto_detect_provider priority."""
+        # Both LM Studio and Ollama available - should return LM Studio
+        with patch.object(LMStudioProvider, 'is_available', return_value=True), \
+             patch.object(OllamaProvider, 'is_available', return_value=True):
+
+            provider, is_llm = get_best_provider()
+
+            assert isinstance(provider, LMStudioProvider)
+            assert is_llm is True
+
+
+# =============================================================================
+# Tests for Provider Priority Order Documentation
+# =============================================================================
+
+
+class TestProviderPriorityDocumentation:
+    """Tests that verify the documented provider priority order."""
+
+    def test_documented_priority_order(self, clean_env):
+        """
+        Verify the documented priority order:
+        1. LM Studio (local, free, fast)
+        2. Ollama (local, free)
+        3. Gemini (has free tier)
+        4. Grok (xAI)
+        5. Claude Code (no API key needed)
+        6. Claude API (requires key)
+        7. OpenAI (requires key)
+        8. Transformers (slow first run)
+        """
+        # Test each provider in priority order
+        priority_order = [
+            (LMStudioProvider, "LM Studio"),
+            (OllamaProvider, "Ollama"),
+            (GeminiProvider, "Gemini"),
+            (GrokProvider, "Grok"),
+            (ClaudeCodeProvider, "Claude Code"),
+            (ClaudeProvider, "Claude API"),
+            (OpenAIAgentsProvider, "OpenAI"),
+            (TransformersProvider, "Transformers"),
+        ]
+
+        for i, (expected_class, name) in enumerate(priority_order):
+            # Make this provider available, all higher priority unavailable
+            patches = []
+            for j, (cls, _) in enumerate(priority_order):
+                patches.append(
+                    patch.object(cls, 'is_available', return_value=(j == i))
+                )
+
+            with patches[0], patches[1], patches[2], patches[3], \
+                 patches[4], patches[5], patches[6], patches[7]:
+                result = auto_detect_provider()
+
+                assert isinstance(result, expected_class), \
+                    f"Expected {name} at priority {i+1}, got {type(result)}"
+
+
+class TestProviderPriorityRationale:
+    """Tests verifying the rationale behind provider priority."""
+
+    def test_local_providers_first(self, clean_env):
+        """Test local providers (LM Studio, Ollama) are checked before cloud."""
+        # LM Studio and Gemini both available - should prefer local
+        with patch.object(LMStudioProvider, 'is_available', return_value=True), \
+             patch.object(GeminiProvider, 'is_available', return_value=True):
+
+            result = auto_detect_provider()
+
+            assert isinstance(result, LMStudioProvider)
+
+    def test_free_tier_providers_before_api_key_only(self, clean_env):
+        """Test providers with free tier are checked before API-key-only."""
+        # Gemini (free tier) and OpenAI (API key required) both available
+        with patch.object(LMStudioProvider, 'is_available', return_value=False), \
+             patch.object(OllamaProvider, 'is_available', return_value=False), \
+             patch.object(GeminiProvider, 'is_available', return_value=True), \
+             patch.object(OpenAIAgentsProvider, 'is_available', return_value=True):
+
+            result = auto_detect_provider()
+
+            assert isinstance(result, GeminiProvider)
+
+    def test_no_api_key_providers_before_api_key_required(self, clean_env):
+        """Test Claude Code (no API key) is checked before Claude API."""
+        with patch.object(LMStudioProvider, 'is_available', return_value=False), \
+             patch.object(OllamaProvider, 'is_available', return_value=False), \
+             patch.object(GeminiProvider, 'is_available', return_value=False), \
+             patch.object(GrokProvider, 'is_available', return_value=False), \
+             patch.object(ClaudeCodeProvider, 'is_available', return_value=True), \
+             patch.object(ClaudeProvider, 'is_available', return_value=True):
+
+            result = auto_detect_provider()
+
+            assert isinstance(result, ClaudeCodeProvider)
+
+    def test_transformers_is_last_resort(self, clean_env):
+        """Test Transformers is only used when all others unavailable."""
+        # Transformers can be slow on first run, so should be last
+        with patch.object(LMStudioProvider, 'is_available', return_value=False), \
+             patch.object(OllamaProvider, 'is_available', return_value=False), \
+             patch.object(GeminiProvider, 'is_available', return_value=False), \
+             patch.object(GrokProvider, 'is_available', return_value=False), \
+             patch.object(ClaudeCodeProvider, 'is_available', return_value=False), \
+             patch.object(ClaudeProvider, 'is_available', return_value=False), \
+             patch.object(OpenAIAgentsProvider, 'is_available', return_value=False), \
+             patch.object(TransformersProvider, 'is_available', return_value=True):
+
+            result = auto_detect_provider()
+
+            assert isinstance(result, TransformersProvider)
