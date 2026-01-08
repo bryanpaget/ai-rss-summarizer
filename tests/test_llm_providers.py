@@ -2379,3 +2379,681 @@ class TestOpenAICompatibleProviderIntegration:
         assert provider.last_usage.provider == "Test Provider"
         assert provider.session_usage["calls"] == 1
         assert provider.session_usage["total_tokens"] > 0
+
+
+# =============================================================================
+# Tests for OllamaProvider
+# =============================================================================
+
+
+class TestOllamaProviderInitialization:
+    """Tests for OllamaProvider initialization."""
+
+    def test_initialization_with_default_model(self):
+        """Test OllamaProvider initializes with default llama2 model."""
+        provider = OllamaProvider()
+
+        assert provider.model == "llama2"
+        assert provider.base_url == "http://localhost:11434/v1"
+        assert provider.name == "Ollama"
+        assert provider.api_key == "not-needed"
+
+    def test_initialization_with_custom_model(self):
+        """Test OllamaProvider initializes with custom model."""
+        provider = OllamaProvider(model="mistral")
+
+        assert provider.model == "mistral"
+        assert provider.base_url == "http://localhost:11434/v1"
+        assert provider.name == "Ollama"
+
+    def test_initialization_with_none_model_uses_default(self):
+        """Test OllamaProvider uses llama2 when model is None."""
+        provider = OllamaProvider(model=None)
+
+        assert provider.model == "llama2"
+
+    def test_model_name_property(self):
+        """Test model_name property returns configured model."""
+        provider = OllamaProvider(model="phi3")
+        assert provider.model_name == "phi3"
+
+    def test_model_name_property_default(self):
+        """Test model_name property returns llama2 for default."""
+        provider = OllamaProvider()
+        assert provider.model_name == "llama2"
+
+    def test_inherits_from_openai_compatible_provider(self):
+        """Test OllamaProvider inherits from OpenAICompatibleProvider."""
+        provider = OllamaProvider()
+        assert isinstance(provider, OpenAICompatibleProvider)
+
+    def test_session_usage_initialized(self):
+        """Test session usage is initialized correctly."""
+        provider = OllamaProvider()
+        assert provider.session_usage == {"calls": 0, "total_tokens": 0}
+        assert provider.last_usage is None
+
+
+class TestOllamaProviderIsAvailable:
+    """Tests for OllamaProvider.is_available() method."""
+
+    def test_is_available_returns_true_when_ollama_running(self):
+        """Test is_available returns True when Ollama is running."""
+        with patch("httpx.get") as mock_get:
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_get.return_value = mock_response
+
+            provider = OllamaProvider()
+            assert provider.is_available() is True
+            mock_get.assert_called_once_with(
+                "http://localhost:11434/v1/models", timeout=5.0
+            )
+
+    def test_is_available_returns_false_when_ollama_not_running(self):
+        """Test is_available returns False when Ollama is not running."""
+        with patch("httpx.get") as mock_get:
+            mock_get.side_effect = Exception("Connection refused")
+
+            provider = OllamaProvider()
+            assert provider.is_available() is False
+
+    def test_is_available_returns_false_on_non_200_response(self):
+        """Test is_available returns False when endpoint returns non-200."""
+        with patch("httpx.get") as mock_get:
+            mock_response = MagicMock()
+            mock_response.status_code = 500
+            mock_get.return_value = mock_response
+
+            provider = OllamaProvider()
+            assert provider.is_available() is False
+
+    def test_is_available_returns_false_on_timeout(self):
+        """Test is_available returns False on timeout."""
+        with patch("httpx.get") as mock_get:
+            import httpx
+            mock_get.side_effect = httpx.TimeoutException("Connection timed out")
+
+            provider = OllamaProvider()
+            assert provider.is_available() is False
+
+    def test_is_available_returns_false_on_connection_error(self):
+        """Test is_available returns False on connection error."""
+        with patch("httpx.get") as mock_get:
+            mock_get.side_effect = ConnectionError("Network unreachable")
+
+            provider = OllamaProvider()
+            assert provider.is_available() is False
+
+    def test_is_available_calls_correct_endpoint(self):
+        """Test is_available calls the correct Ollama endpoint."""
+        with patch("httpx.get") as mock_get:
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_get.return_value = mock_response
+
+            provider = OllamaProvider()
+            provider.is_available()
+
+            # Verify the correct URL is called
+            args, kwargs = mock_get.call_args
+            assert args[0] == "http://localhost:11434/v1/models"
+            assert kwargs["timeout"] == 5.0
+
+    def test_is_available_with_custom_model_same_endpoint(self):
+        """Test is_available uses same endpoint regardless of model."""
+        with patch("httpx.get") as mock_get:
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_get.return_value = mock_response
+
+            provider = OllamaProvider(model="codellama")
+            provider.is_available()
+
+            args, _ = mock_get.call_args
+            assert args[0] == "http://localhost:11434/v1/models"
+
+
+class TestOllamaProviderModelListing:
+    """Tests for OllamaProvider model listing via _get_model()."""
+
+    def test_get_model_returns_configured_model(self):
+        """Test _get_model returns configured model when set."""
+        provider = OllamaProvider(model="mistral")
+        assert provider._get_model() == "mistral"
+
+    def test_get_model_returns_default_model_when_not_set(self):
+        """Test _get_model returns llama2 as default."""
+        provider = OllamaProvider()
+        # Since model is "llama2" by default, it should return that
+        assert provider._get_model() == "llama2"
+
+    def test_get_model_discovers_from_api_when_model_none(self):
+        """Test _get_model discovers model from API when configured model is None."""
+        with patch("httpx.get") as mock_get:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {
+                "data": [{"id": "mistral"}, {"id": "llama2"}]
+            }
+            mock_get.return_value = models_response
+
+            # Create provider and manually set model to None to test discovery
+            provider = OllamaProvider()
+            provider.model = None  # Override default to test discovery
+            result = provider._get_model()
+
+            assert result == "mistral"  # First model from list
+            mock_get.assert_called_with(
+                "http://localhost:11434/v1/models", timeout=5.0
+            )
+
+    def test_get_model_returns_default_when_discovery_fails(self):
+        """Test _get_model returns 'default' when discovery fails."""
+        with patch("httpx.get") as mock_get:
+            mock_get.side_effect = Exception("Connection failed")
+
+            provider = OllamaProvider()
+            provider.model = None  # Override to test discovery path
+            result = provider._get_model()
+
+            assert result == "default"
+
+    def test_get_model_returns_default_when_no_models_loaded(self):
+        """Test _get_model returns 'default' when no models are loaded."""
+        with patch("httpx.get") as mock_get:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": []}
+            mock_get.return_value = models_response
+
+            provider = OllamaProvider()
+            provider.model = None
+            result = provider._get_model()
+
+            assert result == "default"
+
+    def test_get_model_returns_default_on_api_error(self):
+        """Test _get_model returns 'default' when API returns error."""
+        with patch("httpx.get") as mock_get:
+            models_response = MagicMock()
+            models_response.status_code = 500
+            mock_get.return_value = models_response
+
+            provider = OllamaProvider()
+            provider.model = None
+            result = provider._get_model()
+
+            assert result == "default"
+
+    def test_get_model_handles_malformed_response(self):
+        """Test _get_model handles malformed API response gracefully."""
+        with patch("httpx.get") as mock_get:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"unexpected": "format"}
+            mock_get.return_value = models_response
+
+            provider = OllamaProvider()
+            provider.model = None
+            result = provider._get_model()
+
+            assert result == "default"
+
+    def test_get_model_uses_first_available_model(self):
+        """Test _get_model uses first model from discovered list."""
+        with patch("httpx.get") as mock_get:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {
+                "data": [
+                    {"id": "phi3"},
+                    {"id": "llama2"},
+                    {"id": "mistral"},
+                ]
+            }
+            mock_get.return_value = models_response
+
+            provider = OllamaProvider()
+            provider.model = None
+            result = provider._get_model()
+
+            assert result == "phi3"
+
+
+class TestOllamaProviderSummarize:
+    """Tests for OllamaProvider.summarize() method with mocked responses."""
+
+    def test_summarize_returns_empty_for_empty_input(self):
+        """Test summarize returns empty string for empty input."""
+        provider = OllamaProvider()
+        result = provider.summarize("")
+        assert result == ""
+
+    def test_summarize_makes_correct_api_call(self):
+        """Test summarize makes correct API call to Ollama."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            # Mock models endpoint
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "llama2"}]}
+            mock_get.return_value = models_response
+
+            # Mock completion endpoint
+            completion_response = MagicMock()
+            completion_response.status_code = 200
+            completion_response.json.return_value = {
+                "choices": [{"message": {"content": "Ollama summary"}}],
+                "usage": {
+                    "prompt_tokens": 50,
+                    "completion_tokens": 10,
+                    "total_tokens": 60,
+                },
+            }
+            completion_response.raise_for_status = MagicMock()
+            mock_post.return_value = completion_response
+
+            provider = OllamaProvider()
+            result = provider.summarize("Test article content", max_length=150)
+
+            assert result == "Ollama summary"
+            mock_post.assert_called_once()
+            call_args = mock_post.call_args
+            assert call_args[0][0] == "http://localhost:11434/v1/chat/completions"
+            assert call_args[1]["json"]["model"] == "llama2"
+
+    def test_summarize_with_custom_model(self):
+        """Test summarize uses custom model in API call."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "mistral"}]}
+            mock_get.return_value = models_response
+
+            completion_response = MagicMock()
+            completion_response.status_code = 200
+            completion_response.json.return_value = {
+                "choices": [{"message": {"content": "Summary"}}],
+                "usage": {"prompt_tokens": 50, "completion_tokens": 10, "total_tokens": 60},
+            }
+            completion_response.raise_for_status = MagicMock()
+            mock_post.return_value = completion_response
+
+            provider = OllamaProvider(model="mistral")
+            provider.summarize("Test text")
+
+            call_args = mock_post.call_args
+            assert call_args[1]["json"]["model"] == "mistral"
+
+    def test_summarize_records_usage_from_response(self):
+        """Test summarize records usage stats from API response."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "llama2"}]}
+            mock_get.return_value = models_response
+
+            completion_response = MagicMock()
+            completion_response.status_code = 200
+            completion_response.json.return_value = {
+                "choices": [{"message": {"content": "Summary"}}],
+                "usage": {
+                    "prompt_tokens": 100,
+                    "completion_tokens": 25,
+                    "total_tokens": 125,
+                },
+            }
+            completion_response.raise_for_status = MagicMock()
+            mock_post.return_value = completion_response
+
+            provider = OllamaProvider()
+            provider.summarize("Test text")
+
+            assert provider.last_usage is not None
+            assert provider.last_usage.input_tokens == 100
+            assert provider.last_usage.output_tokens == 25
+            assert provider.last_usage.total_tokens == 125
+            assert provider.last_usage.model == "llama2"
+            assert provider.last_usage.provider == "Ollama"
+
+    def test_summarize_estimates_tokens_when_not_in_response(self):
+        """Test summarize estimates tokens when usage not in response."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "llama2"}]}
+            mock_get.return_value = models_response
+
+            completion_response = MagicMock()
+            completion_response.status_code = 200
+            completion_response.json.return_value = {
+                "choices": [{"message": {"content": "Summary result"}}],
+                # No usage field
+            }
+            completion_response.raise_for_status = MagicMock()
+            mock_post.return_value = completion_response
+
+            provider = OllamaProvider()
+            provider.summarize("Test text for summarization")
+
+            assert provider.last_usage is not None
+            # Should have estimated tokens
+            assert provider.last_usage.input_tokens > 0
+            assert provider.last_usage.output_tokens > 0
+
+    def test_summarize_accumulates_session_usage(self):
+        """Test multiple summarize calls accumulate session usage."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "llama2"}]}
+            mock_get.return_value = models_response
+
+            completion_response = MagicMock()
+            completion_response.status_code = 200
+            completion_response.json.return_value = {
+                "choices": [{"message": {"content": "Summary"}}],
+                "usage": {"prompt_tokens": 50, "completion_tokens": 10, "total_tokens": 60},
+            }
+            completion_response.raise_for_status = MagicMock()
+            mock_post.return_value = completion_response
+
+            provider = OllamaProvider()
+            provider.summarize("First text")
+            provider.summarize("Second text")
+
+            assert provider.session_usage["calls"] == 2
+            assert provider.session_usage["total_tokens"] == 120  # 60 * 2
+
+    def test_summarize_strips_whitespace(self):
+        """Test summarize strips whitespace from response."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "llama2"}]}
+            mock_get.return_value = models_response
+
+            completion_response = MagicMock()
+            completion_response.status_code = 200
+            completion_response.json.return_value = {
+                "choices": [{"message": {"content": "  Summary with whitespace  \n\n"}}],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+            }
+            completion_response.raise_for_status = MagicMock()
+            mock_post.return_value = completion_response
+
+            provider = OllamaProvider()
+            result = provider.summarize("Test")
+
+            assert result == "Summary with whitespace"
+
+    def test_summarize_truncates_long_response(self):
+        """Test summarize truncates response exceeding max_length * 2."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "llama2"}]}
+            mock_get.return_value = models_response
+
+            # Return very long summary
+            long_summary = "A" * 500
+            completion_response = MagicMock()
+            completion_response.status_code = 200
+            completion_response.json.return_value = {
+                "choices": [{"message": {"content": long_summary}}],
+                "usage": {"prompt_tokens": 100, "completion_tokens": 500, "total_tokens": 600},
+            }
+            completion_response.raise_for_status = MagicMock()
+            mock_post.return_value = completion_response
+
+            provider = OllamaProvider()
+            result = provider.summarize("Test text", max_length=150)
+
+            # Should be truncated to max_length (150)
+            assert len(result) == 150
+
+
+class TestOllamaProviderErrorHandling:
+    """Tests for OllamaProvider error handling."""
+
+    def test_summarize_raises_on_api_error(self):
+        """Test summarize raises when API returns error."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "llama2"}]}
+            mock_get.return_value = models_response
+
+            error_response = MagicMock()
+            error_response.status_code = 500
+            error_response.raise_for_status.side_effect = Exception("Internal Server Error")
+            mock_post.return_value = error_response
+
+            provider = OllamaProvider()
+
+            with pytest.raises(Exception, match="Internal Server Error"):
+                provider.summarize("Test text")
+
+    def test_summarize_raises_on_connection_error(self):
+        """Test summarize raises on connection error."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "llama2"}]}
+            mock_get.return_value = models_response
+
+            mock_post.side_effect = Exception("Connection refused")
+
+            provider = OllamaProvider()
+
+            with pytest.raises(Exception, match="Connection refused"):
+                provider.summarize("Test text")
+
+    def test_summarize_raises_on_timeout(self):
+        """Test summarize raises on timeout."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            import httpx
+
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "llama2"}]}
+            mock_get.return_value = models_response
+
+            mock_post.side_effect = httpx.TimeoutException("Request timed out")
+
+            provider = OllamaProvider()
+
+            with pytest.raises(httpx.TimeoutException):
+                provider.summarize("Test text")
+
+    def test_summarize_raises_on_model_not_found(self):
+        """Test summarize raises when model is not found."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "llama2"}]}
+            mock_get.return_value = models_response
+
+            error_response = MagicMock()
+            error_response.status_code = 404
+            error_response.raise_for_status.side_effect = Exception("Model not found")
+            mock_post.return_value = error_response
+
+            provider = OllamaProvider(model="nonexistent-model")
+
+            with pytest.raises(Exception, match="Model not found"):
+                provider.summarize("Test text")
+
+
+class TestOllamaProviderGenerate:
+    """Tests for OllamaProvider.generate() method."""
+
+    def test_generate_returns_empty_for_empty_input(self):
+        """Test generate returns empty string for empty input."""
+        provider = OllamaProvider()
+        result = provider.generate("")
+        assert result == ""
+
+    def test_generate_makes_correct_api_call(self):
+        """Test generate makes correct API call with max_tokens."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "llama2"}]}
+            mock_get.return_value = models_response
+
+            completion_response = MagicMock()
+            completion_response.status_code = 200
+            completion_response.json.return_value = {
+                "choices": [{"message": {"content": "Generated response"}}],
+                "usage": {"prompt_tokens": 30, "completion_tokens": 20, "total_tokens": 50},
+            }
+            completion_response.raise_for_status = MagicMock()
+            mock_post.return_value = completion_response
+
+            provider = OllamaProvider()
+            result = provider.generate("Custom prompt", max_tokens=300)
+
+            assert result == "Generated response"
+            call_args = mock_post.call_args
+            assert call_args[1]["json"]["max_tokens"] == 300
+
+    def test_generate_records_usage(self):
+        """Test generate records usage stats."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "llama2"}]}
+            mock_get.return_value = models_response
+
+            completion_response = MagicMock()
+            completion_response.status_code = 200
+            completion_response.json.return_value = {
+                "choices": [{"message": {"content": "Response"}}],
+                "usage": {"prompt_tokens": 40, "completion_tokens": 30, "total_tokens": 70},
+            }
+            completion_response.raise_for_status = MagicMock()
+            mock_post.return_value = completion_response
+
+            provider = OllamaProvider()
+            provider.generate("Test prompt")
+
+            assert provider.last_usage is not None
+            assert provider.last_usage.input_tokens == 40
+            assert provider.last_usage.output_tokens == 30
+            assert provider.last_usage.total_tokens == 70
+
+
+class TestOllamaProviderIntegration:
+    """Integration tests for OllamaProvider."""
+
+    def test_provider_used_in_get_provider_with_ollama_config(self, clean_env):
+        """Test get_provider returns OllamaProvider for ollama config."""
+        config = LLMConfig(provider=ProviderType.OLLAMA, model="phi3")
+        provider = get_provider(config)
+
+        assert isinstance(provider, OllamaProvider)
+        assert provider.model == "phi3"
+        assert provider.name == "Ollama"
+
+    def test_provider_used_in_get_provider_with_default_model(self, clean_env):
+        """Test get_provider uses llama2 as default model."""
+        config = LLMConfig(provider=ProviderType.OLLAMA)
+        provider = get_provider(config)
+
+        assert isinstance(provider, OllamaProvider)
+        assert provider.model == "llama2"
+
+    def test_provider_listed_in_list_providers(self):
+        """Test OllamaProvider appears in list_providers."""
+        with patch("httpx.get") as mock_get:
+            # Mock unavailable response
+            mock_get.side_effect = Exception("Not running")
+
+            providers = list_providers()
+            ollama_info = next(
+                (p for p in providers if p["type"] == ProviderType.OLLAMA), None
+            )
+
+            assert ollama_info is not None
+            assert ollama_info["name"] == "Ollama"
+            assert "localhost:11434" in ollama_info["description"]
+            assert ollama_info["available"] is False
+
+    def test_provider_listed_as_available_when_running(self):
+        """Test OllamaProvider shows as available when running."""
+        with patch("httpx.get") as mock_get:
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_get.return_value = mock_response
+
+            providers = list_providers()
+            ollama_info = next(
+                (p for p in providers if p["type"] == ProviderType.OLLAMA), None
+            )
+
+            assert ollama_info is not None
+            assert ollama_info["available"] is True
+
+    def test_auto_detect_finds_ollama(self):
+        """Test auto_detect_provider finds Ollama when available."""
+        with patch("httpx.get") as mock_get:
+            # Mock LM Studio unavailable, Ollama available
+            def mock_get_handler(url, **kwargs):
+                if "11434" in url:  # Ollama port
+                    response = MagicMock()
+                    response.status_code = 200
+                    return response
+                raise Exception("Not running")
+
+            mock_get.side_effect = mock_get_handler
+
+            provider = auto_detect_provider()
+
+            # Either LM Studio or Ollama could be first
+            # This test verifies Ollama is detected if LM Studio is not available
+            assert provider is not None
+            if isinstance(provider, OllamaProvider):
+                assert provider.name == "Ollama"
+
+    def test_ollama_provider_different_port(self):
+        """Test OllamaProvider uses correct port (11434 vs 1234 for LM Studio)."""
+        ollama = OllamaProvider()
+        lm_studio = LMStudioProvider()
+
+        assert "11434" in ollama.base_url
+        assert "1234" in lm_studio.base_url
+        assert ollama.base_url != lm_studio.base_url
+
+    def test_ollama_vs_lm_studio_provider_names(self):
+        """Test Ollama and LM Studio have different provider names."""
+        ollama = OllamaProvider()
+        lm_studio = LMStudioProvider()
+
+        assert ollama.name == "Ollama"
+        assert lm_studio.name == "LM Studio"
+
+    def test_multiple_requests_use_same_model(self):
+        """Test multiple requests use the same configured model."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "codellama"}]}
+            mock_get.return_value = models_response
+
+            completion_response = MagicMock()
+            completion_response.status_code = 200
+            completion_response.json.return_value = {
+                "choices": [{"message": {"content": "Summary"}}],
+                "usage": {"prompt_tokens": 50, "completion_tokens": 10, "total_tokens": 60},
+            }
+            completion_response.raise_for_status = MagicMock()
+            mock_post.return_value = completion_response
+
+            provider = OllamaProvider(model="codellama")
+            provider.summarize("Text 1")
+            provider.summarize("Text 2")
+
+            # Both calls should use the same model
+            for call in mock_post.call_args_list:
+                assert call[1]["json"]["model"] == "codellama"
