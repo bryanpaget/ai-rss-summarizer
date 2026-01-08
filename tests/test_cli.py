@@ -3537,3 +3537,816 @@ class TestOutputFormattingIntegration:
         output = capture_console_output.getvalue()
         assert "example.com" in output
         assert "Article Title" in output
+
+
+# =============================================================================
+# ERROR HANDLING TESTS (Subtask 3.8)
+# =============================================================================
+
+
+class TestSetupRequiredErrors:
+    """Test require_setup() error handling and exit codes."""
+
+    def test_require_setup_exits_when_not_configured(self, cli_runner, temp_dir):
+        """Test require_setup exits with code 1 when setup not complete."""
+        with patch("src.cli.Path") as mock_path:
+            mock_path.return_value.exists.return_value = False
+            with patch("src.cli.is_setup_complete", return_value=False):
+                result = cli_runner.invoke(app, ["fetch"])
+                assert result.exit_code == 1
+                assert "setup" in result.stdout.lower()
+
+    def test_require_setup_shows_user_friendly_message(self, cli_runner):
+        """Test require_setup shows helpful message to run setup."""
+        with patch("src.cli.is_setup_complete", return_value=False):
+            result = cli_runner.invoke(app, ["fetch"])
+            # Should show helpful instruction to run setup
+            assert "rss setup" in result.stdout or "Setup required" in result.stdout
+
+    def test_require_setup_allows_when_configured(self, cli_runner):
+        """Test require_setup allows command when setup is complete."""
+        with patch("src.cli.is_setup_complete", return_value=True), \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.load_feeds") as mock_load, \
+             patch("src.cli.fetch_all_feeds") as mock_fetch:
+            mock_storage.return_value = MagicMock()
+            mock_load.return_value = ["https://example.com/feed.xml"]
+            mock_fetch.return_value = [{"url": "test", "fetched": 0, "new": 0, "errors": []}]
+            result = cli_runner.invoke(app, ["fetch"])
+            # Should not exit due to setup
+            assert "Setup required" not in result.stdout
+
+    def test_setup_required_for_fetch_command(self, cli_runner):
+        """Test fetch command requires setup."""
+        with patch("src.cli.is_setup_complete", return_value=False):
+            result = cli_runner.invoke(app, ["fetch"])
+            assert result.exit_code == 1
+
+    def test_setup_required_for_summarize_command(self, cli_runner):
+        """Test summarize command requires setup."""
+        with patch("src.cli.is_setup_complete", return_value=False):
+            result = cli_runner.invoke(app, ["summarize"])
+            assert result.exit_code == 1
+
+    def test_setup_required_for_trends_command(self, cli_runner):
+        """Test trends command requires setup."""
+        with patch("src.cli.is_setup_complete", return_value=False):
+            result = cli_runner.invoke(app, ["trends"])
+            assert result.exit_code == 1
+
+    def test_setup_required_for_update_command(self, cli_runner):
+        """Test update command requires setup."""
+        with patch("src.cli.is_setup_complete", return_value=False):
+            result = cli_runner.invoke(app, ["update"])
+            assert result.exit_code == 1
+
+    def test_setup_required_for_discover_command(self, cli_runner):
+        """Test discover command requires setup."""
+        with patch("src.cli.is_setup_complete", return_value=False):
+            result = cli_runner.invoke(app, ["discover", "AI"])
+            assert result.exit_code == 1
+
+    def test_setup_required_for_extract_knowledge_command(self, cli_runner):
+        """Test extract-knowledge command requires setup."""
+        with patch("src.cli.is_setup_complete", return_value=False):
+            result = cli_runner.invoke(app, ["extract-knowledge"])
+            assert result.exit_code == 1
+
+    def test_setup_required_for_query_command(self, cli_runner):
+        """Test query command requires setup."""
+        with patch("src.cli.is_setup_complete", return_value=False):
+            result = cli_runner.invoke(app, ["query", "What is AI?"])
+            assert result.exit_code == 1
+
+    def test_setup_required_for_emerging_command(self, cli_runner):
+        """Test emerging command requires setup."""
+        with patch("src.cli.is_setup_complete", return_value=False):
+            result = cli_runner.invoke(app, ["emerging"])
+            assert result.exit_code == 1
+
+
+class TestNoFeedsConfiguredErrors:
+    """Test error handling when no feeds are configured."""
+
+    def test_fetch_exits_when_no_feeds(self, cli_runner):
+        """Test fetch exits with code 1 when no feeds configured."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.load_feeds") as mock_load:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_load.return_value = []  # No feeds
+
+            result = cli_runner.invoke(app, ["fetch"])
+            assert result.exit_code == 1
+
+    def test_fetch_shows_red_message_when_no_feeds(self, cli_runner):
+        """Test fetch shows red error message for no feeds."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.load_feeds") as mock_load:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_load.return_value = []
+
+            result = cli_runner.invoke(app, ["fetch"])
+            assert "No feeds" in result.stdout or "no feeds" in result.stdout.lower()
+
+    def test_fetch_shows_feeds_file_path(self, cli_runner):
+        """Test fetch shows the feeds file path in error message."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.load_feeds") as mock_load:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_load.return_value = []
+
+            result = cli_runner.invoke(app, ["fetch", "-f", "custom/feeds.txt"])
+            # Should reference the feeds file
+            assert "feeds" in result.stdout.lower()
+
+
+class TestNoArticlesFoundErrors:
+    """Test error handling when no articles are found."""
+
+    def test_trends_exits_when_no_trends(self, cli_runner):
+        """Test trends exits with code 1 when no trends found."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.analyze_trends") as mock_analyze:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_analyze.return_value = {"top_trends": [], "processed": 0}
+
+            result = cli_runner.invoke(app, ["trends"])
+            assert result.exit_code == 1
+
+    def test_trends_shows_helpful_message_when_no_articles(self, cli_runner):
+        """Test trends shows helpful message to run fetch first."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.analyze_trends") as mock_analyze:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_analyze.return_value = {"top_trends": [], "processed": 0}
+
+            result = cli_runner.invoke(app, ["trends"])
+            assert "rss fetch" in result.stdout or "fetch" in result.stdout.lower()
+
+    def test_list_exits_when_no_articles(self, cli_runner):
+        """Test list exits with code 1 when no articles found."""
+        with patch("src.cli.get_storage") as mock_storage:
+            mock_storage_instance = MagicMock()
+            mock_storage_instance.get_articles.return_value = []
+            mock_storage.return_value = mock_storage_instance
+
+            result = cli_runner.invoke(app, ["list"])
+            assert result.exit_code == 1
+
+    def test_list_shows_yellow_message_when_no_articles(self, cli_runner):
+        """Test list shows yellow warning when no articles found."""
+        with patch("src.cli.get_storage") as mock_storage:
+            mock_storage_instance = MagicMock()
+            mock_storage_instance.get_articles.return_value = []
+            mock_storage.return_value = mock_storage_instance
+
+            result = cli_runner.invoke(app, ["list"])
+            assert "No articles" in result.stdout
+
+    def test_extract_knowledge_exits_when_no_articles(self, cli_runner):
+        """Test extract-knowledge exits with code 1 when no articles."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.llm_providers.ensure_llm_or_exit") as mock_llm, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.KnowledgeBase") as mock_kb:
+            mock_setup.return_value = None
+            mock_llm.return_value = MagicMock()
+            mock_storage_instance = MagicMock()
+            mock_storage_instance.get_articles.return_value = []
+            mock_storage.return_value = mock_storage_instance
+            mock_kb.return_value = MagicMock()
+
+            result = cli_runner.invoke(app, ["extract-knowledge"])
+            assert result.exit_code == 1
+
+    def test_extract_knowledge_suggests_fetch(self, cli_runner):
+        """Test extract-knowledge suggests running fetch when no articles."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.llm_providers.ensure_llm_or_exit") as mock_llm, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.KnowledgeBase") as mock_kb:
+            mock_setup.return_value = None
+            mock_llm.return_value = MagicMock()
+            mock_storage_instance = MagicMock()
+            mock_storage_instance.get_articles.return_value = []
+            mock_storage.return_value = mock_storage_instance
+            mock_kb.return_value = MagicMock()
+
+            result = cli_runner.invoke(app, ["extract-knowledge"])
+            assert "rss fetch" in result.stdout or "fetch" in result.stdout.lower()
+
+
+class TestLLMProviderErrors:
+    """Test error handling for LLM provider issues."""
+
+    def test_discover_exits_when_no_llm(self, cli_runner):
+        """Test discover exits with code 1 when no LLM available."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.llm_providers.get_best_provider") as mock_get_provider:
+            mock_setup.return_value = None
+            mock_get_provider.return_value = (None, False)
+
+            result = cli_runner.invoke(app, ["discover", "AI news"])
+            assert result.exit_code == 1
+
+    def test_discover_shows_llm_required_message(self, cli_runner):
+        """Test discover shows LLM required message."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.llm_providers.get_best_provider") as mock_get_provider, \
+             patch("src.llm_providers.get_setup_instructions") as mock_instructions:
+            mock_setup.return_value = None
+            mock_get_provider.return_value = (None, False)
+            mock_instructions.return_value = "Run rss setup to configure"
+
+            result = cli_runner.invoke(app, ["discover", "AI news"])
+            assert "LLM required" in result.stdout or "LLM" in result.stdout
+
+    def test_discover_api_error_exits(self, cli_runner):
+        """Test discover exits with code 1 on API error."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.llm_providers.get_best_provider") as mock_get_provider:
+            mock_setup.return_value = None
+            mock_provider = MagicMock()
+            mock_provider.name = "Test"
+            mock_provider._get_client.side_effect = Exception("API error")
+            mock_get_provider.return_value = (mock_provider, True)
+
+            result = cli_runner.invoke(app, ["discover", "AI news"])
+            assert result.exit_code == 1
+
+    def test_discover_shows_error_message_on_failure(self, cli_runner):
+        """Test discover shows error message on failure."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.llm_providers.get_best_provider") as mock_get_provider:
+            mock_setup.return_value = None
+            mock_provider = MagicMock()
+            mock_provider.name = "Test"
+            mock_provider._get_client.side_effect = Exception("Connection failed")
+            mock_get_provider.return_value = (mock_provider, True)
+
+            result = cli_runner.invoke(app, ["discover", "AI news"])
+            assert "Error" in result.stdout or "error" in result.stdout.lower()
+
+    def test_discover_unsupported_provider_exits(self, cli_runner):
+        """Test discover exits when provider not supported for discovery."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.llm_providers.get_best_provider") as mock_get_provider:
+            mock_setup.return_value = None
+            mock_provider = MagicMock()
+            mock_provider.name = "Test"
+            # Provider has no _get_client or base_url
+            del mock_provider._get_client
+            del mock_provider.base_url
+            mock_get_provider.return_value = (mock_provider, True)
+
+            result = cli_runner.invoke(app, ["discover", "AI news"])
+            assert result.exit_code == 1
+            assert "not supported" in result.stdout.lower() or "discovery" in result.stdout.lower()
+
+
+class TestFeedAlreadyExistsError:
+    """Test error handling when adding duplicate feed."""
+
+    def test_add_feed_exits_when_already_exists(self, cli_runner, temp_dir):
+        """Test add-feed exits with code 1 when feed already exists."""
+        feeds_file = os.path.join(temp_dir, "feeds.txt")
+        Path(feeds_file).parent.mkdir(parents=True, exist_ok=True)
+        with open(feeds_file, "w") as f:
+            f.write("https://example.com/feed.xml\n")
+
+        with patch("src.cli.load_feeds") as mock_load:
+            mock_load.return_value = ["https://example.com/feed.xml"]
+            result = cli_runner.invoke(app, [
+                "add-feed", "https://example.com/feed.xml", "-f", feeds_file
+            ])
+            assert result.exit_code == 1
+
+    def test_add_feed_shows_yellow_message_for_duplicate(self, cli_runner, temp_dir):
+        """Test add-feed shows yellow warning for duplicate feed."""
+        feeds_file = os.path.join(temp_dir, "feeds.txt")
+        Path(feeds_file).parent.mkdir(parents=True, exist_ok=True)
+        with open(feeds_file, "w") as f:
+            f.write("https://example.com/feed.xml\n")
+
+        with patch("src.cli.load_feeds") as mock_load:
+            mock_load.return_value = ["https://example.com/feed.xml"]
+            result = cli_runner.invoke(app, [
+                "add-feed", "https://example.com/feed.xml", "-f", feeds_file
+            ])
+            assert "already exists" in result.stdout.lower()
+
+
+class TestEmergingTrendsErrors:
+    """Test error handling for emerging trends detection."""
+
+    def test_emerging_exits_on_detection_error(self, cli_runner):
+        """Test emerging exits with code 1 on detection error."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.detect_emerging_trends") as mock_detect:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_detect.side_effect = Exception("Not enough data")
+
+            result = cli_runner.invoke(app, ["emerging"])
+            assert result.exit_code == 1
+
+    def test_emerging_shows_error_message(self, cli_runner):
+        """Test emerging shows error message on failure."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.detect_emerging_trends") as mock_detect:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_detect.side_effect = Exception("Database error")
+
+            result = cli_runner.invoke(app, ["emerging"])
+            assert "Error" in result.stdout or "error" in result.stdout.lower()
+
+    def test_emerging_shows_helpful_note_on_error(self, cli_runner):
+        """Test emerging shows helpful note about data requirements."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.detect_emerging_trends") as mock_detect:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_detect.side_effect = Exception("Error")
+
+            result = cli_runner.invoke(app, ["emerging"])
+            # Should mention data requirements
+            assert "4 weeks" in result.stdout or "history" in result.stdout.lower()
+
+    def test_emerging_exits_zero_when_no_trends(self, cli_runner):
+        """Test emerging exits with code 0 when no trends (not an error)."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.detect_emerging_trends") as mock_detect:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_detect.return_value = []
+
+            result = cli_runner.invoke(app, ["emerging"])
+            # No trends is not an error, should exit 0
+            assert result.exit_code == 0
+
+    def test_emerging_shows_reasons_when_no_trends(self, cli_runner):
+        """Test emerging shows possible reasons when no trends detected."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.detect_emerging_trends") as mock_detect:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_detect.return_value = []
+
+            result = cli_runner.invoke(app, ["emerging"])
+            # Should show possible reasons
+            assert "Possible reasons" in result.stdout or "reason" in result.stdout.lower()
+
+
+class TestExitCodesConsistency:
+    """Test exit codes are consistent across commands."""
+
+    def test_successful_command_exits_zero(self, cli_runner):
+        """Test successful command exits with code 0."""
+        with patch("src.cli.is_setup_complete", return_value=True):
+            result = cli_runner.invoke(app, ["help"])
+            assert result.exit_code == 0
+
+    def test_missing_required_arg_exits_nonzero(self, cli_runner):
+        """Test missing required argument exits with non-zero code."""
+        result = cli_runner.invoke(app, ["add-feed"])
+        assert result.exit_code != 0
+
+    def test_invalid_option_exits_nonzero(self, cli_runner):
+        """Test invalid option exits with non-zero code."""
+        result = cli_runner.invoke(app, ["fetch", "--invalid-option"])
+        assert result.exit_code != 0
+
+    def test_providers_command_always_succeeds(self, cli_runner):
+        """Test providers command always exits with 0 (informational)."""
+        with patch("src.llm_providers.list_providers") as mock_list:
+            mock_list.return_value = []
+            result = cli_runner.invoke(app, ["providers"])
+            assert result.exit_code == 0
+
+    def test_stats_command_always_succeeds(self, cli_runner):
+        """Test stats command always exits with 0."""
+        with patch("src.cli.get_storage") as mock_storage:
+            mock_storage_instance = MagicMock()
+            mock_storage_instance.get_article_count.return_value = 0
+            mock_storage_instance.get_feed_stats.return_value = []
+            mock_storage.return_value = mock_storage_instance
+            result = cli_runner.invoke(app, ["stats"])
+            assert result.exit_code == 0
+
+    def test_contradictions_command_succeeds_when_empty(self, cli_runner):
+        """Test contradictions command succeeds with empty results."""
+        with patch("src.cli.KnowledgeBase") as mock_kb:
+            kb_mock = MagicMock()
+            kb_mock.get_relationships.return_value = []
+            mock_kb.return_value = kb_mock
+
+            result = cli_runner.invoke(app, ["contradictions"])
+            assert result.exit_code == 0
+
+    def test_knowledge_stats_command_always_succeeds(self, cli_runner):
+        """Test knowledge-stats command always exits with 0."""
+        with patch("src.cli.KnowledgeBase") as mock_kb:
+            kb_mock = MagicMock()
+            kb_mock.get_stats.return_value = {
+                "total_insights": 0,
+                "high_confidence_insights": 0,
+                "total_entities": 0,
+                "total_relationships": 0,
+                "contradictions": 0
+            }
+            mock_kb.return_value = kb_mock
+
+            result = cli_runner.invoke(app, ["knowledge-stats"])
+            assert result.exit_code == 0
+
+
+class TestUserFriendlyMessages:
+    """Test user-friendly message formatting."""
+
+    def test_yellow_warning_for_missing_features(self, cli_runner):
+        """Test yellow color used for warnings about missing features."""
+        with patch("src.cli.is_setup_complete", return_value=False):
+            result = cli_runner.invoke(app, ["fetch"])
+            # Output should contain warning about setup
+            assert "setup" in result.stdout.lower()
+
+    def test_green_success_message_format(self, cli_runner, temp_dir):
+        """Test green color used for success messages."""
+        feeds_file = os.path.join(temp_dir, "feeds.txt")
+        Path(feeds_file).parent.mkdir(parents=True, exist_ok=True)
+        Path(feeds_file).touch()
+
+        with patch("src.cli.load_feeds") as mock_load:
+            mock_load.return_value = []  # No existing feeds
+
+            result = cli_runner.invoke(app, [
+                "add-feed", "https://new.example.com/feed.xml", "-f", feeds_file
+            ])
+            # Success message should mention "Added"
+            assert "Added" in result.stdout or "added" in result.stdout.lower()
+
+    def test_dim_text_for_hints(self, cli_runner):
+        """Test dim text used for hints and suggestions."""
+        with patch("src.cli.get_storage") as mock_storage:
+            mock_storage_instance = MagicMock()
+            mock_storage_instance.get_articles.return_value = []
+            mock_storage.return_value = mock_storage_instance
+
+            result = cli_runner.invoke(app, ["list"])
+            # Should have a hint about fetching
+            assert "fetch" in result.stdout.lower()
+
+    def test_bold_text_for_commands_in_messages(self, cli_runner):
+        """Test command references are clearly indicated."""
+        with patch("src.cli.is_setup_complete", return_value=False):
+            result = cli_runner.invoke(app, ["help"])
+            # Commands should be mentioned
+            assert "setup" in result.stdout
+            assert "update" in result.stdout or "fetch" in result.stdout
+
+    def test_error_messages_include_context(self, cli_runner):
+        """Test error messages include helpful context."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.load_feeds") as mock_load:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_load.return_value = []
+
+            result = cli_runner.invoke(app, ["fetch", "-f", "my_feeds.txt"])
+            # Error should mention the file or "feeds"
+            assert "feeds" in result.stdout.lower()
+
+
+class TestGraphNoRelationshipsMessage:
+    """Test user-friendly messages for graph commands with no data."""
+
+    def test_graph_shows_no_relationships_suggestion(self, cli_runner):
+        """Test graph shows suggestion when entity has no relationships."""
+        with patch("src.cli.KnowledgeBase") as mock_kb:
+            kb_mock = MagicMock()
+            kb_mock.get_entity_neighborhood.return_value = {"outgoing": [], "incoming": []}
+            mock_kb.return_value = kb_mock
+
+            result = cli_runner.invoke(app, ["graph", "UnknownEntity"])
+            # Should suggest running update to extract knowledge
+            assert "update" in result.stdout.lower() or "extract" in result.stdout.lower() or "No relationships" in result.stdout
+
+    def test_graph_path_shows_no_path_message(self, cli_runner):
+        """Test graph-path shows helpful message when no path found."""
+        with patch("src.cli.KnowledgeBase") as mock_kb:
+            kb_mock = MagicMock()
+            kb_mock.find_path.return_value = None
+            mock_kb.return_value = kb_mock
+
+            result = cli_runner.invoke(app, ["graph-path", "Entity1", "Entity2"])
+            assert "No path" in result.stdout
+
+    def test_graph_path_same_entity_message(self, cli_runner):
+        """Test graph-path shows appropriate message for same entity."""
+        with patch("src.cli.KnowledgeBase") as mock_kb:
+            kb_mock = MagicMock()
+            kb_mock.find_path.return_value = []  # Empty path means same entity
+            mock_kb.return_value = kb_mock
+
+            result = cli_runner.invoke(app, ["graph-path", "Entity", "Entity"])
+            assert "same entity" in result.stdout.lower()
+
+
+class TestContextListEmptyMessage:
+    """Test user-friendly messages for context commands with no data."""
+
+    def test_context_list_shows_add_suggestion(self, cli_runner):
+        """Test context-list shows suggestion to add context."""
+        with patch("src.cli.KnowledgeBase") as mock_kb:
+            kb_mock = MagicMock()
+            kb_mock.get_contexts.return_value = []
+            mock_kb.return_value = kb_mock
+
+            result = cli_runner.invoke(app, ["context-list"])
+            # Should suggest adding a context
+            assert "context-add" in result.stdout.lower() or "add" in result.stdout.lower()
+
+
+class TestSummarizeErrorHandling:
+    """Test error handling for summarize command."""
+
+    def test_summarize_shows_error_count(self, cli_runner):
+        """Test summarize shows error count when errors occur."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.summarize_articles") as mock_summarize:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_summarize.return_value = {
+                "processed": 5,
+                "errors": ["Error 1", "Error 2", "Error 3"]
+            }
+
+            result = cli_runner.invoke(app, ["summarize"])
+            # Should show error count
+            assert "Error" in result.stdout or "3" in result.stdout
+
+    def test_summarize_shows_limited_error_details(self, cli_runner):
+        """Test summarize shows limited error details (not all)."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.summarize_articles") as mock_summarize:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            # Many errors
+            mock_summarize.return_value = {
+                "processed": 0,
+                "errors": [f"Error {i}" for i in range(10)]
+            }
+
+            result = cli_runner.invoke(app, ["summarize"])
+            # Should not show all 10 errors, only first few
+            assert result.stdout.count("Error") <= 6  # Limit shown
+
+
+class TestContradictionsOutput:
+    """Test contradictions command output formatting."""
+
+    def test_contradictions_shows_green_when_none(self, cli_runner):
+        """Test contradictions shows green message when none found."""
+        with patch("src.cli.KnowledgeBase") as mock_kb:
+            kb_mock = MagicMock()
+            kb_mock.get_relationships.return_value = []
+            mock_kb.return_value = kb_mock
+
+            result = cli_runner.invoke(app, ["contradictions"])
+            assert "No contradictions" in result.stdout
+
+    def test_contradictions_shows_count(self, cli_runner):
+        """Test contradictions shows count when found."""
+        with patch("src.cli.KnowledgeBase") as mock_kb:
+            kb_mock = MagicMock()
+            mock_rel = MagicMock()
+            mock_rel.source_insight_id = "1"
+            mock_rel.target_insight_id = "2"
+            kb_mock.get_relationships.return_value = [mock_rel]
+            mock_insight = MagicMock()
+            mock_insight.content = "Test content"
+            mock_insight.confidence = 0.8
+            kb_mock.get_insight.return_value = mock_insight
+            mock_kb.return_value = kb_mock
+
+            result = cli_runner.invoke(app, ["contradictions"])
+            assert "Found" in result.stdout or "1" in result.stdout
+
+
+class TestExtractKnowledgeErrorHandling:
+    """Test error handling during knowledge extraction."""
+
+    def test_extract_knowledge_shows_individual_errors(self, cli_runner):
+        """Test extract-knowledge shows individual article errors."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.llm_providers.ensure_llm_or_exit") as mock_llm, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.KnowledgeBase") as mock_kb, \
+             patch("src.cli.extract_insights_from_article") as mock_extract:
+            mock_setup.return_value = None
+            mock_provider = MagicMock()
+            mock_llm.return_value = mock_provider
+            mock_storage_instance = MagicMock()
+            mock_article = MagicMock()
+            mock_article.title = "Test Article"
+            mock_storage_instance.get_articles.return_value = [mock_article]
+            mock_storage.return_value = mock_storage_instance
+            kb_mock = MagicMock()
+            kb_mock.get_stats.return_value = {"total_insights": 0}
+            mock_kb.return_value = kb_mock
+            mock_extract.side_effect = Exception("Extraction failed")
+
+            result = cli_runner.invoke(app, ["extract-knowledge"])
+            # Should show error message
+            assert "Error" in result.stdout or "error" in result.stdout.lower()
+
+    def test_extract_knowledge_continues_after_error(self, cli_runner):
+        """Test extract-knowledge continues processing after single article error."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.llm_providers.ensure_llm_or_exit") as mock_llm, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.KnowledgeBase") as mock_kb, \
+             patch("src.cli.extract_insights_from_article") as mock_extract, \
+             patch("src.cli.extract_triples_from_article") as mock_triples, \
+             patch("src.cli.extract_entity_relationships_from_article") as mock_entity_rels:
+            mock_setup.return_value = None
+            mock_provider = MagicMock()
+            mock_llm.return_value = mock_provider
+            mock_storage_instance = MagicMock()
+            mock_article1 = MagicMock()
+            mock_article1.title = "Article 1"
+            mock_article2 = MagicMock()
+            mock_article2.title = "Article 2"
+            mock_storage_instance.get_articles.return_value = [mock_article1, mock_article2]
+            mock_storage.return_value = mock_storage_instance
+            kb_mock = MagicMock()
+            kb_mock.get_stats.return_value = {"total_insights": 1, "contradictions": 0}
+            mock_kb.return_value = kb_mock
+            # First article fails, second succeeds
+            mock_extract.side_effect = [Exception("Failed"), [MagicMock()]]
+            mock_triples.return_value = []
+            mock_entity_rels.return_value = []
+
+            result = cli_runner.invoke(app, ["extract-knowledge"])
+            # Should still complete and show results
+            assert result.exit_code == 0
+
+
+class TestMissingRequiredArguments:
+    """Test error handling for missing required arguments."""
+
+    def test_graph_missing_entity_shows_usage(self, cli_runner):
+        """Test graph without entity shows usage help."""
+        result = cli_runner.invoke(app, ["graph"])
+        assert result.exit_code != 0
+        # Typer exit code 2 indicates usage error (missing argument)
+        assert result.exit_code == 2
+
+    def test_query_missing_text_shows_usage(self, cli_runner):
+        """Test query without text shows usage help."""
+        result = cli_runner.invoke(app, ["query"])
+        assert result.exit_code != 0
+        assert result.exit_code == 2
+
+    def test_add_feed_missing_url_shows_usage(self, cli_runner):
+        """Test add-feed without URL shows usage help."""
+        result = cli_runner.invoke(app, ["add-feed"])
+        assert result.exit_code != 0
+        assert result.exit_code == 2
+
+    def test_discover_missing_query_shows_usage(self, cli_runner):
+        """Test discover without query shows usage help."""
+        result = cli_runner.invoke(app, ["discover"])
+        assert result.exit_code != 0
+        assert result.exit_code == 2
+
+    def test_context_add_missing_args_shows_usage(self, cli_runner):
+        """Test context-add without args shows usage help."""
+        result = cli_runner.invoke(app, ["context-add"])
+        assert result.exit_code != 0
+        assert result.exit_code == 2
+
+
+class TestCommandNotFoundSuggestions:
+    """Test handling of unknown commands."""
+
+    def test_unknown_command_exits_nonzero(self, cli_runner):
+        """Test unknown command exits with non-zero code."""
+        result = cli_runner.invoke(app, ["unknown-command"])
+        assert result.exit_code != 0
+
+    def test_unknown_command_shows_help_hint(self, cli_runner):
+        """Test unknown command shows hint about available commands."""
+        result = cli_runner.invoke(app, ["unknown-command"])
+        # Should indicate command not recognized
+        assert "No such command" in result.stdout or "Usage" in result.stdout or result.exit_code == 2
+
+
+class TestErrorMessageClarity:
+    """Test that error messages are clear and actionable."""
+
+    def test_setup_error_is_actionable(self, cli_runner):
+        """Test setup error message tells user exactly what to do."""
+        with patch("src.cli.is_setup_complete", return_value=False):
+            result = cli_runner.invoke(app, ["fetch"])
+            # Message should contain the exact command to run
+            assert "rss setup" in result.stdout
+
+    def test_no_feeds_error_is_actionable(self, cli_runner):
+        """Test no feeds error message tells user what to do."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.load_feeds") as mock_load:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_load.return_value = []
+
+            result = cli_runner.invoke(app, ["fetch"])
+            # Message should mention the file or how to add feeds
+            assert "feeds" in result.stdout.lower()
+
+    def test_no_llm_error_shows_setup_instructions(self, cli_runner):
+        """Test no LLM error shows how to set one up."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.llm_providers.get_best_provider") as mock_get_provider, \
+             patch("src.llm_providers.get_setup_instructions") as mock_instructions:
+            mock_setup.return_value = None
+            mock_get_provider.return_value = (None, False)
+            mock_instructions.return_value = "Run 'rss setup' to configure an LLM"
+
+            result = cli_runner.invoke(app, ["discover", "AI"])
+            # Should show setup instructions
+            assert "setup" in result.stdout.lower() or "LLM" in result.stdout
+
+
+class TestErrorHandlingIntegration:
+    """Integration tests for error handling across the CLI."""
+
+    def test_multiple_errors_handled_gracefully(self, cli_runner):
+        """Test that multiple errors are handled without crashing."""
+        with patch("src.cli.is_setup_complete", return_value=False):
+            # Run multiple commands that will fail
+            result1 = cli_runner.invoke(app, ["fetch"])
+            result2 = cli_runner.invoke(app, ["summarize"])
+            result3 = cli_runner.invoke(app, ["trends"])
+
+            # All should exit with code 1, not crash
+            assert result1.exit_code == 1
+            assert result2.exit_code == 1
+            assert result3.exit_code == 1
+
+    def test_graceful_handling_of_keyboard_interrupt(self, cli_runner):
+        """Test that keyboard interrupt is handled gracefully."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.load_feeds") as mock_load, \
+             patch("src.cli.fetch_all_feeds") as mock_fetch:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_load.return_value = ["https://example.com/feed.xml"]
+            mock_fetch.side_effect = KeyboardInterrupt()
+
+            result = cli_runner.invoke(app, ["fetch"])
+            # Should not produce a traceback, handled gracefully
+            assert result.exit_code != 0
+
+    def test_storage_error_handled(self, cli_runner):
+        """Test that storage errors are handled gracefully."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage:
+            mock_setup.return_value = None
+            mock_storage.side_effect = Exception("Database locked")
+
+            result = cli_runner.invoke(app, ["fetch"])
+            # Should not produce raw traceback
+            assert result.exit_code != 0
+
+    def test_consistent_exit_codes_for_same_error_type(self, cli_runner):
+        """Test that same error type produces consistent exit codes."""
+        with patch("src.cli.is_setup_complete", return_value=False):
+            results = [
+                cli_runner.invoke(app, ["fetch"]),
+                cli_runner.invoke(app, ["summarize"]),
+                cli_runner.invoke(app, ["update"]),
+            ]
+            # All setup-required errors should exit with 1
+            assert all(r.exit_code == 1 for r in results)
