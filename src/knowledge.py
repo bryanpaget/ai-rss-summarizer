@@ -53,6 +53,60 @@ class Relationship:
 
 
 @dataclass
+class Triple:
+    """RDF-style triple: subject-predicate-object.
+
+    Examples:
+        - ("GPT-4", "developed_by", "OpenAI")
+        - ("React 19", "introduces", "Server Components")
+        - ("AI regulation", "discussed_in", "EU AI Act")
+    """
+
+    id: str
+    subject: str
+    predicate: str
+    object: str
+    subject_type: str  # 'entity', 'article', 'insight'
+    object_type: str   # 'entity', 'article', 'insight', 'literal'
+    source_article_id: Optional[str] = None
+    confidence: str = "medium"  # 'high', 'medium', 'low'
+    extracted_at: Optional[datetime] = None
+
+
+@dataclass
+class EntityRelationship:
+    """Direct relationship between two entities.
+
+    More expressive than insight-to-insight relationships.
+    Captures things like "Company X acquired Company Y".
+    """
+
+    id: str
+    source_entity_id: str
+    target_entity_id: str
+    relationship_type: str  # 'acquired', 'competes_with', 'partners_with', 'created', etc.
+    properties: Optional[str] = None  # JSON string for additional properties
+    source_article_id: Optional[str] = None
+    detected_at: Optional[datetime] = None
+
+
+@dataclass
+class Embedding:
+    """Vector embedding for semantic search.
+
+    Stores embeddings for insights, entities, or articles
+    to enable semantic similarity queries.
+    """
+
+    id: str
+    target_id: str  # ID of insight, entity, or article
+    target_type: str  # 'insight', 'entity', 'article'
+    vector: bytes  # Serialized numpy array
+    model: str  # Model used to generate embedding
+    created_at: Optional[datetime] = None
+
+
+@dataclass
 class UserContext:
     """Represents user's personal context (projects, interests)."""
 
@@ -150,6 +204,50 @@ class KnowledgeBase:
                 )
             """)
 
+            # RDF-style triples table (Option B enhancement)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS knowledge_triples (
+                    id TEXT PRIMARY KEY,
+                    subject TEXT NOT NULL,
+                    predicate TEXT NOT NULL,
+                    object TEXT NOT NULL,
+                    subject_type TEXT NOT NULL,
+                    object_type TEXT NOT NULL,
+                    source_article_id TEXT,
+                    confidence TEXT DEFAULT 'medium',
+                    extracted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (source_article_id) REFERENCES articles(id)
+                )
+            """)
+
+            # Entity-to-entity relationships
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS entity_relationships (
+                    id TEXT PRIMARY KEY,
+                    source_entity_id TEXT NOT NULL,
+                    target_entity_id TEXT NOT NULL,
+                    relationship_type TEXT NOT NULL,
+                    properties TEXT,
+                    source_article_id TEXT,
+                    detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (source_entity_id) REFERENCES knowledge_entities(id),
+                    FOREIGN KEY (target_entity_id) REFERENCES knowledge_entities(id),
+                    FOREIGN KEY (source_article_id) REFERENCES articles(id)
+                )
+            """)
+
+            # Vector embeddings for semantic search
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS knowledge_embeddings (
+                    id TEXT PRIMARY KEY,
+                    target_id TEXT NOT NULL,
+                    target_type TEXT NOT NULL,
+                    vector BLOB NOT NULL,
+                    model TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
             # Create indexes
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_insights_type ON knowledge_insights(insight_type)"
@@ -174,6 +272,36 @@ class KnowledgeBase:
             )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_relationships_target ON knowledge_relationships(target_insight_id)"
+            )
+
+            # Indexes for triples (graph queries)
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_triples_subject ON knowledge_triples(subject)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_triples_predicate ON knowledge_triples(predicate)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_triples_object ON knowledge_triples(object)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_triples_subject_type ON knowledge_triples(subject_type)"
+            )
+
+            # Indexes for entity relationships
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_entity_rel_source ON entity_relationships(source_entity_id)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_entity_rel_target ON entity_relationships(target_entity_id)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_entity_rel_type ON entity_relationships(relationship_type)"
+            )
+
+            # Indexes for embeddings
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_embeddings_target ON knowledge_embeddings(target_id, target_type)"
             )
 
             conn.commit()
@@ -494,6 +622,422 @@ class KnowledgeBase:
             updated_at=row["updated_at"],
         )
 
+    def _row_to_triple(self, row: sqlite3.Row) -> Triple:
+        """Convert database row to Triple object."""
+        return Triple(
+            id=row["id"],
+            subject=row["subject"],
+            predicate=row["predicate"],
+            object=row["object"],
+            subject_type=row["subject_type"],
+            object_type=row["object_type"],
+            source_article_id=row["source_article_id"],
+            confidence=row["confidence"],
+            extracted_at=row["extracted_at"],
+        )
+
+    def _row_to_entity_relationship(self, row: sqlite3.Row) -> EntityRelationship:
+        """Convert database row to EntityRelationship object."""
+        return EntityRelationship(
+            id=row["id"],
+            source_entity_id=row["source_entity_id"],
+            target_entity_id=row["target_entity_id"],
+            relationship_type=row["relationship_type"],
+            properties=row["properties"],
+            source_article_id=row["source_article_id"],
+            detected_at=row["detected_at"],
+        )
+
+    # =========================================================================
+    # Triple (RDF-style) Methods - Option B Enhancement
+    # =========================================================================
+
+    def save_triple(self, triple: Triple) -> bool:
+        """Save an RDF-style triple to the database."""
+        with self._connect() as conn:
+            try:
+                conn.execute(
+                    """
+                    INSERT INTO knowledge_triples
+                    (id, subject, predicate, object, subject_type, object_type,
+                     source_article_id, confidence)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        triple.id,
+                        triple.subject,
+                        triple.predicate,
+                        triple.object,
+                        triple.subject_type,
+                        triple.object_type,
+                        triple.source_article_id,
+                        triple.confidence,
+                    ),
+                )
+                conn.commit()
+                return True
+            except sqlite3.IntegrityError:
+                return False
+
+    def get_triples(
+        self,
+        subject: Optional[str] = None,
+        predicate: Optional[str] = None,
+        object_val: Optional[str] = None,
+        limit: int = 100,
+    ) -> list[Triple]:
+        """Query triples with optional filters (SPARQL-like)."""
+        query = "SELECT * FROM knowledge_triples WHERE 1=1"
+        params: list = []
+
+        if subject:
+            query += " AND subject = ?"
+            params.append(subject)
+        if predicate:
+            query += " AND predicate = ?"
+            params.append(predicate)
+        if object_val:
+            query += " AND object = ?"
+            params.append(object_val)
+
+        query += " ORDER BY extracted_at DESC LIMIT ?"
+        params.append(limit)
+
+        with self._connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+            return [self._row_to_triple(row) for row in rows]
+
+    def query_triples_pattern(
+        self, subject_pattern: Optional[str] = None, predicate_pattern: Optional[str] = None
+    ) -> list[Triple]:
+        """Query triples with LIKE patterns for graph exploration."""
+        query = "SELECT * FROM knowledge_triples WHERE 1=1"
+        params: list = []
+
+        if subject_pattern:
+            query += " AND subject LIKE ?"
+            params.append(f"%{subject_pattern}%")
+        if predicate_pattern:
+            query += " AND predicate LIKE ?"
+            params.append(f"%{predicate_pattern}%")
+
+        query += " ORDER BY extracted_at DESC LIMIT 200"
+
+        with self._connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+            return [self._row_to_triple(row) for row in rows]
+
+    # =========================================================================
+    # Entity Relationship Methods - Option B Enhancement
+    # =========================================================================
+
+    def save_entity_relationship(self, relationship: EntityRelationship) -> bool:
+        """Save an entity-to-entity relationship."""
+        with self._connect() as conn:
+            try:
+                conn.execute(
+                    """
+                    INSERT INTO entity_relationships
+                    (id, source_entity_id, target_entity_id, relationship_type,
+                     properties, source_article_id)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        relationship.id,
+                        relationship.source_entity_id,
+                        relationship.target_entity_id,
+                        relationship.relationship_type,
+                        relationship.properties,
+                        relationship.source_article_id,
+                    ),
+                )
+                conn.commit()
+                return True
+            except sqlite3.IntegrityError:
+                return False
+
+    def get_entity_relationships(
+        self,
+        entity_id: Optional[str] = None,
+        relationship_type: Optional[str] = None,
+    ) -> list[EntityRelationship]:
+        """Get entity relationships, optionally filtered."""
+        query = "SELECT * FROM entity_relationships WHERE 1=1"
+        params: list = []
+
+        if entity_id:
+            query += " AND (source_entity_id = ? OR target_entity_id = ?)"
+            params.extend([entity_id, entity_id])
+        if relationship_type:
+            query += " AND relationship_type = ?"
+            params.append(relationship_type)
+
+        query += " ORDER BY detected_at DESC"
+
+        with self._connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+            return [self._row_to_entity_relationship(row) for row in rows]
+
+    # =========================================================================
+    # Graph Traversal Methods - Option B Enhancement
+    # =========================================================================
+
+    def get_connected_entities(
+        self, entity_name: str, max_depth: int = 2
+    ) -> dict[str, list[dict]]:
+        """
+        Get all entities connected to the given entity within max_depth hops.
+
+        Returns a dict with 'entities' and 'relationships' for graph visualization.
+        """
+        visited_entities: set[str] = set()
+        all_relationships: list[dict] = []
+        entities_to_process: list[tuple[str, int]] = [(entity_name, 0)]
+
+        while entities_to_process:
+            current_entity, depth = entities_to_process.pop(0)
+
+            if current_entity in visited_entities or depth > max_depth:
+                continue
+
+            visited_entities.add(current_entity)
+
+            # Find triples where this entity is subject or object
+            with self._connect() as conn:
+                # As subject
+                rows = conn.execute(
+                    "SELECT * FROM knowledge_triples WHERE subject = ?",
+                    (current_entity,)
+                ).fetchall()
+                for row in rows:
+                    rel = {
+                        "source": row["subject"],
+                        "target": row["object"],
+                        "predicate": row["predicate"],
+                        "confidence": row["confidence"],
+                    }
+                    all_relationships.append(rel)
+                    if row["object"] not in visited_entities:
+                        entities_to_process.append((row["object"], depth + 1))
+
+                # As object
+                rows = conn.execute(
+                    "SELECT * FROM knowledge_triples WHERE object = ?",
+                    (current_entity,)
+                ).fetchall()
+                for row in rows:
+                    rel = {
+                        "source": row["subject"],
+                        "target": row["object"],
+                        "predicate": row["predicate"],
+                        "confidence": row["confidence"],
+                    }
+                    all_relationships.append(rel)
+                    if row["subject"] not in visited_entities:
+                        entities_to_process.append((row["subject"], depth + 1))
+
+        return {
+            "entities": list(visited_entities),
+            "relationships": all_relationships,
+        }
+
+    def find_path(
+        self, start_entity: str, end_entity: str, max_depth: int = 4
+    ) -> Optional[list[dict]]:
+        """
+        Find a path between two entities in the knowledge graph.
+
+        Returns list of relationship dicts forming the path, or None if no path found.
+        """
+        if start_entity == end_entity:
+            return []
+
+        # BFS to find shortest path
+        visited: set[str] = {start_entity}
+        queue: list[tuple[str, list[dict]]] = [(start_entity, [])]
+
+        with self._connect() as conn:
+            while queue:
+                current, path = queue.pop(0)
+
+                if len(path) >= max_depth:
+                    continue
+
+                # Get all connected entities via triples
+                rows = conn.execute(
+                    """
+                    SELECT subject, predicate, object FROM knowledge_triples
+                    WHERE subject = ? OR object = ?
+                    """,
+                    (current, current)
+                ).fetchall()
+
+                for row in rows:
+                    next_entity = row["object"] if row["subject"] == current else row["subject"]
+                    rel = {
+                        "from": row["subject"],
+                        "predicate": row["predicate"],
+                        "to": row["object"],
+                    }
+
+                    if next_entity == end_entity:
+                        return path + [rel]
+
+                    if next_entity not in visited:
+                        visited.add(next_entity)
+                        queue.append((next_entity, path + [rel]))
+
+        return None
+
+    def get_entity_neighborhood(self, entity_name: str) -> dict:
+        """
+        Get immediate neighborhood of an entity (1-hop connections).
+
+        Returns structured data for display or visualization.
+        """
+        with self._connect() as conn:
+            # Outgoing relationships (entity is subject)
+            outgoing = conn.execute(
+                """
+                SELECT predicate, object, object_type, COUNT(*) as count
+                FROM knowledge_triples
+                WHERE subject = ?
+                GROUP BY predicate, object
+                ORDER BY count DESC
+                """,
+                (entity_name,)
+            ).fetchall()
+
+            # Incoming relationships (entity is object)
+            incoming = conn.execute(
+                """
+                SELECT subject, predicate, subject_type, COUNT(*) as count
+                FROM knowledge_triples
+                WHERE object = ?
+                GROUP BY subject, predicate
+                ORDER BY count DESC
+                """,
+                (entity_name,)
+            ).fetchall()
+
+            return {
+                "entity": entity_name,
+                "outgoing": [
+                    {"predicate": r["predicate"], "target": r["object"], "count": r["count"]}
+                    for r in outgoing
+                ],
+                "incoming": [
+                    {"source": r["subject"], "predicate": r["predicate"], "count": r["count"]}
+                    for r in incoming
+                ],
+            }
+
+    # =========================================================================
+    # Embedding Methods - Option B Enhancement (Optional, degrades gracefully)
+    # =========================================================================
+
+    def save_embedding(self, embedding: Embedding) -> bool:
+        """Save a vector embedding."""
+        with self._connect() as conn:
+            try:
+                conn.execute(
+                    """
+                    INSERT OR REPLACE INTO knowledge_embeddings
+                    (id, target_id, target_type, vector, model)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        embedding.id,
+                        embedding.target_id,
+                        embedding.target_type,
+                        embedding.vector,
+                        embedding.model,
+                    ),
+                )
+                conn.commit()
+                return True
+            except sqlite3.Error:
+                return False
+
+    def get_embedding(self, target_id: str, target_type: str) -> Optional[Embedding]:
+        """Get embedding for a target."""
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT * FROM knowledge_embeddings
+                WHERE target_id = ? AND target_type = ?
+                """,
+                (target_id, target_type)
+            ).fetchone()
+            if row:
+                return Embedding(
+                    id=row["id"],
+                    target_id=row["target_id"],
+                    target_type=row["target_type"],
+                    vector=row["vector"],
+                    model=row["model"],
+                    created_at=row["created_at"],
+                )
+            return None
+
+    def has_embeddings(self) -> bool:
+        """Check if any embeddings exist in the database."""
+        with self._connect() as conn:
+            count = conn.execute(
+                "SELECT COUNT(*) FROM knowledge_embeddings"
+            ).fetchone()[0]
+            return count > 0
+
+    # =========================================================================
+    # Enhanced Statistics - Option B Enhancement
+    # =========================================================================
+
+    def get_graph_stats(self) -> dict:
+        """Get comprehensive knowledge graph statistics."""
+        base_stats = self.get_stats()
+
+        with self._connect() as conn:
+            triples_count = conn.execute(
+                "SELECT COUNT(*) FROM knowledge_triples"
+            ).fetchone()[0]
+
+            entity_rels_count = conn.execute(
+                "SELECT COUNT(*) FROM entity_relationships"
+            ).fetchone()[0]
+
+            embeddings_count = conn.execute(
+                "SELECT COUNT(*) FROM knowledge_embeddings"
+            ).fetchone()[0]
+
+            # Unique predicates (relationship types in graph)
+            predicates = conn.execute(
+                "SELECT DISTINCT predicate FROM knowledge_triples"
+            ).fetchall()
+
+            # Most connected entities
+            top_entities = conn.execute(
+                """
+                SELECT subject as entity, COUNT(*) as connections
+                FROM knowledge_triples
+                GROUP BY subject
+                ORDER BY connections DESC
+                LIMIT 10
+                """
+            ).fetchall()
+
+        return {
+            **base_stats,
+            "total_triples": triples_count,
+            "total_entity_relationships": entity_rels_count,
+            "total_embeddings": embeddings_count,
+            "unique_predicates": len(predicates),
+            "predicate_types": [p["predicate"] for p in predicates],
+            "top_connected_entities": [
+                {"entity": e["entity"], "connections": e["connections"]}
+                for e in top_entities
+            ],
+        }
+
 
 def extract_insights_from_article(
     article: Article, llm_provider, knowledge_base: KnowledgeBase
@@ -613,6 +1157,189 @@ Only return valid JSON, no other text."""
         )
         knowledge_base.save_insight(insight)
         return [insight]
+
+
+def extract_triples_from_article(
+    article: Article, llm_provider, knowledge_base: KnowledgeBase
+) -> list[Triple]:
+    """
+    Extract RDF-style triples from an article using LLM.
+
+    Generates subject-predicate-object triples like:
+    - ("GPT-4", "developed_by", "OpenAI")
+    - ("React 19", "introduces", "Server Components")
+    - ("Microsoft", "acquired", "Activision")
+
+    Args:
+        article: Article to extract triples from
+        llm_provider: LLM provider for extraction
+        knowledge_base: Knowledge base to save triples to
+
+    Returns:
+        List of extracted triples
+    """
+    if not article.content or len(article.content) < 100:
+        return []
+
+    prompt = f"""Extract factual relationships from this article as subject-predicate-object triples.
+
+Article: "{article.title}"
+
+Content (excerpt): {article.content[:2000]}
+
+Extract 3-8 triples that capture key facts and relationships. Use clear, normalized predicates.
+
+Common predicates to use:
+- developed_by, created_by, founded_by (attribution)
+- acquired, merged_with, partnered_with (corporate)
+- announced, released, launched (events)
+- competes_with, integrates_with, replaces (relationships)
+- located_in, works_at, leads (associations)
+- costs, valued_at, raised (financial)
+- uses, requires, supports (technical)
+
+Return as JSON array:
+[
+  {{"subject": "GPT-4", "predicate": "developed_by", "object": "OpenAI", "subject_type": "entity", "object_type": "entity", "confidence": "high"}},
+  {{"subject": "OpenAI", "predicate": "announced", "object": "GPT-4 API pricing changes", "subject_type": "entity", "object_type": "literal", "confidence": "high"}}
+]
+
+Types: entity (company/person/product/technology), literal (facts/values/descriptions), article, insight
+
+Only return valid JSON, no other text."""
+
+    try:
+        response = llm_provider.summarize(prompt, max_length=1200)
+
+        # Clean response
+        response = response.strip()
+        if response.startswith("```"):
+            lines = response.split("\n")
+            response = "\n".join(lines[1:-1] if len(lines) > 2 else lines)
+
+        triples_data = json.loads(response)
+
+        triples = []
+        for data in triples_data:
+            triple = Triple(
+                id=str(uuid.uuid4()),
+                subject=data.get("subject", ""),
+                predicate=data.get("predicate", ""),
+                object=data.get("object", ""),
+                subject_type=data.get("subject_type", "entity"),
+                object_type=data.get("object_type", "entity"),
+                source_article_id=article.id,
+                confidence=data.get("confidence", "medium"),
+            )
+
+            if triple.subject and triple.predicate and triple.object:
+                knowledge_base.save_triple(triple)
+                triples.append(triple)
+
+        return triples
+
+    except (json.JSONDecodeError, Exception):
+        # Silent failure - triples are supplementary
+        return []
+
+
+def extract_entity_relationships_from_article(
+    article: Article, llm_provider, knowledge_base: KnowledgeBase
+) -> list[EntityRelationship]:
+    """
+    Extract entity-to-entity relationships from an article.
+
+    These are higher-level relationships between known entities,
+    like "Microsoft acquired Activision" or "Google competes with OpenAI".
+
+    Args:
+        article: Article to extract relationships from
+        llm_provider: LLM provider for extraction
+        knowledge_base: Knowledge base to save relationships to
+
+    Returns:
+        List of extracted entity relationships
+    """
+    if not article.content or len(article.content) < 100:
+        return []
+
+    prompt = f"""Identify relationships between organizations, people, and products in this article.
+
+Article: "{article.title}"
+
+Content (excerpt): {article.content[:2000]}
+
+Find 1-5 significant relationships between named entities. Focus on:
+- Business relationships (acquired, partnered, competes_with)
+- People relationships (founded, leads, joined, left)
+- Product relationships (created, maintains, deprecated)
+
+Return as JSON array:
+[
+  {{
+    "source": "Microsoft",
+    "target": "OpenAI",
+    "relationship": "invested_in",
+    "properties": {{"amount": "$10 billion", "year": "2023"}}
+  }}
+]
+
+Only return valid JSON, no other text."""
+
+    try:
+        response = llm_provider.summarize(prompt, max_length=800)
+
+        response = response.strip()
+        if response.startswith("```"):
+            lines = response.split("\n")
+            response = "\n".join(lines[1:-1] if len(lines) > 2 else lines)
+
+        rels_data = json.loads(response)
+
+        relationships = []
+        for data in rels_data:
+            source_name = data.get("source", "")
+            target_name = data.get("target", "")
+
+            if not source_name or not target_name:
+                continue
+
+            # Get or create entities
+            source_entity = knowledge_base.get_entity_by_name(source_name, "company")
+            if not source_entity:
+                source_entity = Entity(
+                    id=str(uuid.uuid4()),
+                    name=source_name,
+                    entity_type="company",
+                )
+                knowledge_base.save_entity(source_entity)
+
+            target_entity = knowledge_base.get_entity_by_name(target_name, "company")
+            if not target_entity:
+                target_entity = Entity(
+                    id=str(uuid.uuid4()),
+                    name=target_name,
+                    entity_type="company",
+                )
+                knowledge_base.save_entity(target_entity)
+
+            # Create relationship
+            properties = data.get("properties")
+            rel = EntityRelationship(
+                id=str(uuid.uuid4()),
+                source_entity_id=source_entity.id,
+                target_entity_id=target_entity.id,
+                relationship_type=data.get("relationship", "related_to"),
+                properties=json.dumps(properties) if properties else None,
+                source_article_id=article.id,
+            )
+            knowledge_base.save_entity_relationship(rel)
+            relationships.append(rel)
+
+        return relationships
+
+    except (json.JSONDecodeError, Exception):
+        return []
 
 
 def detect_connections(
