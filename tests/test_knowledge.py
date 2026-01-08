@@ -1343,3 +1343,562 @@ class TestEntityIntegration:
         retrieved = knowledge_base.get_entity_by_name("日本語テスト", "concept")
         assert retrieved is not None
         assert retrieved.name == "日本語テスト"
+
+
+# =============================================================================
+# Tests for Relationship Operations (Subtask 1.4)
+# =============================================================================
+
+
+class TestSaveRelationship:
+    """Tests for KnowledgeBase.save_relationship() method."""
+
+    def test_save_relationship_success(self, knowledge_base, sample_insight, sample_insight_statistic, sample_relationship_confirms):
+        """Test saving a new relationship returns True."""
+        # First save the insights that the relationship references
+        knowledge_base.save_insight(sample_insight)
+        knowledge_base.save_insight(sample_insight_statistic)
+
+        result = knowledge_base.save_relationship(sample_relationship_confirms)
+        assert result is True
+
+    def test_save_relationship_duplicate_id_fails(self, knowledge_base, sample_insight, sample_insight_statistic, sample_relationship_confirms):
+        """Test saving relationship with duplicate ID returns False."""
+        knowledge_base.save_insight(sample_insight)
+        knowledge_base.save_insight(sample_insight_statistic)
+
+        knowledge_base.save_relationship(sample_relationship_confirms)
+        result = knowledge_base.save_relationship(sample_relationship_confirms)
+        assert result is False
+
+    def test_save_relationship_persists_all_fields(self, knowledge_base, sample_insight, sample_insight_statistic, sample_relationship_confirms):
+        """Test that all relationship fields are persisted correctly."""
+        knowledge_base.save_insight(sample_insight)
+        knowledge_base.save_insight(sample_insight_statistic)
+        knowledge_base.save_relationship(sample_relationship_confirms)
+
+        relationships = knowledge_base.get_relationships()
+
+        assert len(relationships) == 1
+        retrieved = relationships[0]
+        assert retrieved.id == sample_relationship_confirms.id
+        assert retrieved.source_insight_id == sample_relationship_confirms.source_insight_id
+        assert retrieved.target_insight_id == sample_relationship_confirms.target_insight_id
+        assert retrieved.relationship_type == sample_relationship_confirms.relationship_type
+        assert retrieved.strength == sample_relationship_confirms.strength
+
+    def test_save_relationship_default_strength(self, knowledge_base, sample_insight, sample_insight_low_confidence):
+        """Test saving relationship with default strength value."""
+        knowledge_base.save_insight(sample_insight)
+        knowledge_base.save_insight(sample_insight_low_confidence)
+
+        relationship = Relationship(
+            id="rel-default-strength",
+            source_insight_id=sample_insight.id,
+            target_insight_id=sample_insight_low_confidence.id,
+            relationship_type="extends",
+        )
+        result = knowledge_base.save_relationship(relationship)
+        assert result is True
+
+        relationships = knowledge_base.get_relationships()
+        assert len(relationships) == 1
+        # Default strength is 1.0
+        assert relationships[0].strength == 1.0
+
+    def test_save_multiple_relationships(self, knowledge_base, sample_insights, sample_relationships):
+        """Test saving multiple different relationships."""
+        for insight in sample_insights:
+            knowledge_base.save_insight(insight)
+
+        results = []
+        for relationship in sample_relationships:
+            results.append(knowledge_base.save_relationship(relationship))
+
+        assert all(results), "All unique relationships should save successfully"
+
+        relationships = knowledge_base.get_relationships()
+        assert len(relationships) == len(sample_relationships)
+
+    def test_save_relationship_different_types(self, knowledge_base, sample_insight, sample_insight_low_confidence):
+        """Test saving relationships with different types."""
+        knowledge_base.save_insight(sample_insight)
+        knowledge_base.save_insight(sample_insight_low_confidence)
+
+        types = ["confirms", "contradicts", "refines", "extends"]
+
+        for i, rel_type in enumerate(types):
+            relationship = Relationship(
+                id=f"rel-type-{i}",
+                source_insight_id=sample_insight.id,
+                target_insight_id=sample_insight_low_confidence.id,
+                relationship_type=rel_type,
+                strength=0.5,
+            )
+            result = knowledge_base.save_relationship(relationship)
+            assert result is True
+
+        relationships = knowledge_base.get_relationships()
+        assert len(relationships) == len(types)
+
+
+class TestGetRelationships:
+    """Tests for KnowledgeBase.get_relationships() method."""
+
+    def test_get_relationships_empty_database(self, empty_knowledge_base):
+        """Test get_relationships on empty database returns empty list."""
+        result = empty_knowledge_base.get_relationships()
+        assert result == []
+
+    def test_get_relationships_returns_all(self, knowledge_base, sample_insights, sample_relationships):
+        """Test get_relationships returns all saved relationships."""
+        for insight in sample_insights:
+            knowledge_base.save_insight(insight)
+
+        for relationship in sample_relationships:
+            knowledge_base.save_relationship(relationship)
+
+        result = knowledge_base.get_relationships()
+        assert len(result) == len(sample_relationships)
+
+    def test_get_relationships_filter_by_source_insight_id(self, knowledge_base, sample_insights, sample_relationships):
+        """Test filtering relationships by source_insight_id."""
+        for insight in sample_insights:
+            knowledge_base.save_insight(insight)
+
+        for relationship in sample_relationships:
+            knowledge_base.save_relationship(relationship)
+
+        # insight-001 is source in sample_relationship_confirms and sample_relationship_contradicts
+        result = knowledge_base.get_relationships(insight_id="insight-001")
+
+        # Should match relationships where insight-001 is either source or target
+        # sample_relationship_confirms: source=insight-001, target=insight-003
+        # sample_relationship_contradicts: source=insight-001, target=insight-002
+        # sample_relationship_extends: source=insight-003, target=insight-001
+        assert len(result) == 3
+
+    def test_get_relationships_filter_by_target_insight_id(self, knowledge_base, sample_insights, sample_relationships):
+        """Test filtering relationships where insight is target."""
+        for insight in sample_insights:
+            knowledge_base.save_insight(insight)
+
+        for relationship in sample_relationships:
+            knowledge_base.save_relationship(relationship)
+
+        # insight-002 is only target in sample_relationship_contradicts
+        result = knowledge_base.get_relationships(insight_id="insight-002")
+
+        # Should match only relationships where insight-002 is source or target
+        assert len(result) == 1
+        assert result[0].target_insight_id == "insight-002"
+
+    def test_get_relationships_filter_by_type(self, knowledge_base, sample_insights, sample_relationships):
+        """Test filtering relationships by relationship_type."""
+        for insight in sample_insights:
+            knowledge_base.save_insight(insight)
+
+        for relationship in sample_relationships:
+            knowledge_base.save_relationship(relationship)
+
+        # Filter for 'confirms' type
+        result = knowledge_base.get_relationships(relationship_type="confirms")
+
+        assert len(result) == 1
+        assert result[0].relationship_type == "confirms"
+
+    def test_get_relationships_filter_by_contradicts(self, knowledge_base, sample_insights, sample_relationships):
+        """Test filtering relationships by 'contradicts' type."""
+        for insight in sample_insights:
+            knowledge_base.save_insight(insight)
+
+        for relationship in sample_relationships:
+            knowledge_base.save_relationship(relationship)
+
+        result = knowledge_base.get_relationships(relationship_type="contradicts")
+
+        assert len(result) == 1
+        assert result[0].relationship_type == "contradicts"
+
+    def test_get_relationships_combined_filters(self, knowledge_base, sample_insights, sample_relationships):
+        """Test combining insight_id and relationship_type filters."""
+        for insight in sample_insights:
+            knowledge_base.save_insight(insight)
+
+        for relationship in sample_relationships:
+            knowledge_base.save_relationship(relationship)
+
+        # Filter for insight-001 and 'confirms' type
+        result = knowledge_base.get_relationships(
+            insight_id="insight-001",
+            relationship_type="confirms"
+        )
+
+        assert len(result) == 1
+        assert result[0].relationship_type == "confirms"
+        assert result[0].source_insight_id == "insight-001"
+
+    def test_get_relationships_no_matches(self, knowledge_base, sample_insights, sample_relationships):
+        """Test get_relationships returns empty list when no matches."""
+        for insight in sample_insights:
+            knowledge_base.save_insight(insight)
+
+        for relationship in sample_relationships:
+            knowledge_base.save_relationship(relationship)
+
+        result = knowledge_base.get_relationships(relationship_type="nonexistent_type")
+        assert result == []
+
+    def test_get_relationships_returns_relationship_objects(self, knowledge_base, sample_insight, sample_insight_statistic, sample_relationship_confirms):
+        """Test that get_relationships returns list of Relationship objects."""
+        knowledge_base.save_insight(sample_insight)
+        knowledge_base.save_insight(sample_insight_statistic)
+        knowledge_base.save_relationship(sample_relationship_confirms)
+
+        result = knowledge_base.get_relationships()
+
+        assert all(isinstance(rel, Relationship) for rel in result)
+
+    def test_get_relationships_detected_at_populated(self, knowledge_base, sample_insight, sample_insight_statistic, sample_relationship_confirms):
+        """Test that detected_at is populated after save."""
+        knowledge_base.save_insight(sample_insight)
+        knowledge_base.save_insight(sample_insight_statistic)
+        knowledge_base.save_relationship(sample_relationship_confirms)
+
+        result = knowledge_base.get_relationships()
+
+        assert len(result) == 1
+        assert result[0].detected_at is not None
+
+    def test_get_relationships_ordered_by_detected_at(self, knowledge_base, sample_insight, sample_insight_low_confidence):
+        """Test that relationships are ordered by detected_at descending."""
+        knowledge_base.save_insight(sample_insight)
+        knowledge_base.save_insight(sample_insight_low_confidence)
+
+        # Insert multiple relationships
+        for i in range(5):
+            relationship = Relationship(
+                id=f"rel-order-{i:03d}",
+                source_insight_id=sample_insight.id,
+                target_insight_id=sample_insight_low_confidence.id,
+                relationship_type="confirms",
+                strength=0.5,
+            )
+            knowledge_base.save_relationship(relationship)
+
+        result = knowledge_base.get_relationships()
+
+        assert len(result) == 5
+        # Each result should have a detected_at value
+        for rel in result:
+            assert rel.detected_at is not None
+
+    def test_get_relationships_filter_insight_not_in_any(self, knowledge_base, sample_insights, sample_relationships):
+        """Test filtering by insight_id that exists in no relationships."""
+        for insight in sample_insights:
+            knowledge_base.save_insight(insight)
+
+        for relationship in sample_relationships:
+            knowledge_base.save_relationship(relationship)
+
+        result = knowledge_base.get_relationships(insight_id="nonexistent-insight")
+        assert result == []
+
+
+class TestLinkInsightToEntity:
+    """Tests for KnowledgeBase.link_insight_to_entity() method."""
+
+    def test_link_insight_to_entity_success(self, knowledge_base, sample_insight, sample_entity_tool):
+        """Test linking an insight to an entity."""
+        knowledge_base.save_insight(sample_insight)
+        knowledge_base.save_entity(sample_entity_tool)
+
+        # Should not raise an exception
+        knowledge_base.link_insight_to_entity(sample_insight.id, sample_entity_tool.id)
+
+    def test_link_insight_to_entity_with_relevance(self, knowledge_base, sample_insight, sample_entity_tool):
+        """Test linking insight to entity with relevance value."""
+        knowledge_base.save_insight(sample_insight)
+        knowledge_base.save_entity(sample_entity_tool)
+
+        knowledge_base.link_insight_to_entity(
+            sample_insight.id,
+            sample_entity_tool.id,
+            relevance="high"
+        )
+
+    def test_link_insight_to_entity_without_relevance(self, knowledge_base, sample_insight, sample_entity_tool):
+        """Test linking insight to entity without relevance value."""
+        knowledge_base.save_insight(sample_insight)
+        knowledge_base.save_entity(sample_entity_tool)
+
+        knowledge_base.link_insight_to_entity(
+            sample_insight.id,
+            sample_entity_tool.id
+        )
+
+    def test_link_insight_to_entity_duplicate_ignored(self, knowledge_base, sample_insight, sample_entity_tool):
+        """Test that duplicate links are ignored (INSERT OR IGNORE)."""
+        knowledge_base.save_insight(sample_insight)
+        knowledge_base.save_entity(sample_entity_tool)
+
+        # Link twice - should not raise
+        knowledge_base.link_insight_to_entity(sample_insight.id, sample_entity_tool.id)
+        knowledge_base.link_insight_to_entity(sample_insight.id, sample_entity_tool.id)
+
+    def test_link_insight_to_multiple_entities(self, knowledge_base, sample_insight, sample_entities):
+        """Test linking one insight to multiple entities."""
+        knowledge_base.save_insight(sample_insight)
+
+        for entity in sample_entities:
+            knowledge_base.save_entity(entity)
+
+        # Link insight to all entities
+        for entity in sample_entities:
+            knowledge_base.link_insight_to_entity(sample_insight.id, entity.id)
+
+    def test_link_multiple_insights_to_one_entity(self, knowledge_base, sample_insights, sample_entity_tool):
+        """Test linking multiple insights to one entity."""
+        for insight in sample_insights:
+            knowledge_base.save_insight(insight)
+
+        knowledge_base.save_entity(sample_entity_tool)
+
+        # Link all insights to the entity
+        for insight in sample_insights:
+            knowledge_base.link_insight_to_entity(insight.id, sample_entity_tool.id)
+
+    def test_link_with_various_relevance_values(self, knowledge_base, sample_insight, sample_entities):
+        """Test linking with various relevance values."""
+        knowledge_base.save_insight(sample_insight)
+
+        relevance_values = ["high", "medium", "low", None]
+
+        for i, (entity, relevance) in enumerate(zip(sample_entities, relevance_values)):
+            knowledge_base.save_entity(entity)
+            knowledge_base.link_insight_to_entity(
+                sample_insight.id,
+                entity.id,
+                relevance=relevance
+            )
+
+    def test_link_insight_to_entity_data_persists(self, knowledge_base, sample_insight, sample_entity_tool):
+        """Test that linked data persists in database."""
+        knowledge_base.save_insight(sample_insight)
+        knowledge_base.save_entity(sample_entity_tool)
+        knowledge_base.link_insight_to_entity(
+            sample_insight.id,
+            sample_entity_tool.id,
+            relevance="high"
+        )
+
+        # Verify by directly querying the database
+        with knowledge_base._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM insight_entities WHERE insight_id = ? AND entity_id = ?",
+                (sample_insight.id, sample_entity_tool.id)
+            ).fetchone()
+
+        assert row is not None
+        assert row["insight_id"] == sample_insight.id
+        assert row["entity_id"] == sample_entity_tool.id
+        assert row["relevance"] == "high"
+
+
+class TestRelationshipIntegration:
+    """Integration tests for relationship operations."""
+
+    def test_complete_relationship_workflow(self, knowledge_base):
+        """Test complete workflow: create insights, link entities, create relationships."""
+        # Create insights
+        insight1 = Insight(
+            id="workflow-insight-1",
+            article_id="article-001",
+            content="Python is widely used for ML.",
+            insight_type="technical",
+            confidence="high",
+        )
+        insight2 = Insight(
+            id="workflow-insight-2",
+            article_id="article-002",
+            content="Python adoption continues to grow.",
+            insight_type="statistic",
+            confidence="high",
+        )
+        knowledge_base.save_insight(insight1)
+        knowledge_base.save_insight(insight2)
+
+        # Create entity
+        entity = Entity(
+            id="workflow-entity-1",
+            name="Python",
+            entity_type="tool",
+            mention_count=1,
+        )
+        knowledge_base.save_entity(entity)
+
+        # Link insights to entity
+        knowledge_base.link_insight_to_entity(insight1.id, entity.id, relevance="high")
+        knowledge_base.link_insight_to_entity(insight2.id, entity.id, relevance="high")
+
+        # Create relationship between insights
+        relationship = Relationship(
+            id="workflow-rel-1",
+            source_insight_id=insight1.id,
+            target_insight_id=insight2.id,
+            relationship_type="confirms",
+            strength=0.9,
+        )
+        knowledge_base.save_relationship(relationship)
+
+        # Verify relationship
+        relationships = knowledge_base.get_relationships(insight_id=insight1.id)
+        assert len(relationships) == 1
+        assert relationships[0].relationship_type == "confirms"
+
+    def test_bidirectional_relationship_query(self, knowledge_base, sample_insights):
+        """Test that insight_id filter finds relationships in both directions."""
+        for insight in sample_insights:
+            knowledge_base.save_insight(insight)
+
+        # Create bidirectional relationships
+        rel_forward = Relationship(
+            id="rel-forward",
+            source_insight_id="insight-001",
+            target_insight_id="insight-003",
+            relationship_type="extends",
+            strength=0.7,
+        )
+        rel_backward = Relationship(
+            id="rel-backward",
+            source_insight_id="insight-003",
+            target_insight_id="insight-001",
+            relationship_type="contradicts",
+            strength=0.5,
+        )
+
+        knowledge_base.save_relationship(rel_forward)
+        knowledge_base.save_relationship(rel_backward)
+
+        # Query for insight-001 should find both
+        relationships = knowledge_base.get_relationships(insight_id="insight-001")
+        assert len(relationships) == 2
+
+        # Query for insight-003 should also find both
+        relationships = knowledge_base.get_relationships(insight_id="insight-003")
+        assert len(relationships) == 2
+
+    def test_relationship_type_distribution(self, knowledge_base, sample_insight, sample_insight_low_confidence):
+        """Test creating multiple relationships of different types."""
+        knowledge_base.save_insight(sample_insight)
+        knowledge_base.save_insight(sample_insight_low_confidence)
+
+        types = ["confirms", "contradicts", "refines", "extends"]
+
+        for i, rel_type in enumerate(types):
+            relationship = Relationship(
+                id=f"type-dist-{i}",
+                source_insight_id=sample_insight.id,
+                target_insight_id=sample_insight_low_confidence.id,
+                relationship_type=rel_type,
+                strength=0.5 + (i * 0.1),
+            )
+            knowledge_base.save_relationship(relationship)
+
+        # Test filtering by each type
+        for rel_type in types:
+            result = knowledge_base.get_relationships(relationship_type=rel_type)
+            assert len(result) == 1
+            assert result[0].relationship_type == rel_type
+
+    def test_entity_insight_network(self, knowledge_base):
+        """Test complex network of entities and insights."""
+        # Create multiple insights
+        insights = [
+            Insight(id=f"network-insight-{i}", article_id=f"article-{i}", content=f"Content {i}", insight_type="technical", confidence="high")
+            for i in range(5)
+        ]
+
+        # Create multiple entities
+        entities = [
+            Entity(id=f"network-entity-{i}", name=f"Entity{i}", entity_type="tool", mention_count=1)
+            for i in range(3)
+        ]
+
+        for insight in insights:
+            knowledge_base.save_insight(insight)
+
+        for entity in entities:
+            knowledge_base.save_entity(entity)
+
+        # Link each insight to multiple entities
+        for insight in insights:
+            for entity in entities:
+                knowledge_base.link_insight_to_entity(insight.id, entity.id)
+
+        # Create relationships between insights
+        relationships_to_create = [
+            Relationship(id="net-rel-0", source_insight_id="network-insight-0", target_insight_id="network-insight-1", relationship_type="confirms", strength=0.8),
+            Relationship(id="net-rel-1", source_insight_id="network-insight-1", target_insight_id="network-insight-2", relationship_type="extends", strength=0.7),
+            Relationship(id="net-rel-2", source_insight_id="network-insight-2", target_insight_id="network-insight-3", relationship_type="refines", strength=0.6),
+            Relationship(id="net-rel-3", source_insight_id="network-insight-3", target_insight_id="network-insight-4", relationship_type="contradicts", strength=0.5),
+        ]
+
+        for rel in relationships_to_create:
+            knowledge_base.save_relationship(rel)
+
+        # Verify all relationships exist
+        all_relationships = knowledge_base.get_relationships()
+        assert len(all_relationships) == 4
+
+        # Verify filtering by type works correctly
+        assert len(knowledge_base.get_relationships(relationship_type="confirms")) == 1
+        assert len(knowledge_base.get_relationships(relationship_type="extends")) == 1
+        assert len(knowledge_base.get_relationships(relationship_type="refines")) == 1
+        assert len(knowledge_base.get_relationships(relationship_type="contradicts")) == 1
+
+    def test_relationship_strength_values(self, knowledge_base, sample_insight, sample_insight_low_confidence):
+        """Test relationships with various strength values."""
+        knowledge_base.save_insight(sample_insight)
+        knowledge_base.save_insight(sample_insight_low_confidence)
+
+        strength_values = [0.0, 0.25, 0.5, 0.75, 1.0]
+
+        for i, strength in enumerate(strength_values):
+            relationship = Relationship(
+                id=f"strength-{i}",
+                source_insight_id=sample_insight.id,
+                target_insight_id=sample_insight_low_confidence.id,
+                relationship_type="confirms",
+                strength=strength,
+            )
+            knowledge_base.save_relationship(relationship)
+
+        relationships = knowledge_base.get_relationships()
+        assert len(relationships) == len(strength_values)
+
+        # Verify strengths are persisted correctly
+        retrieved_strengths = {rel.strength for rel in relationships}
+        assert retrieved_strengths == set(strength_values)
+
+    def test_insight_entity_link_count(self, knowledge_base, sample_insights, sample_entities):
+        """Test counting insight-entity links."""
+        for insight in sample_insights:
+            knowledge_base.save_insight(insight)
+
+        for entity in sample_entities:
+            knowledge_base.save_entity(entity)
+
+        # Link each insight to each entity
+        link_count = 0
+        for insight in sample_insights:
+            for entity in sample_entities:
+                knowledge_base.link_insight_to_entity(insight.id, entity.id)
+                link_count += 1
+
+        # Verify by counting in database
+        with knowledge_base._connect() as conn:
+            row = conn.execute("SELECT COUNT(*) as count FROM insight_entities").fetchone()
+
+        assert row["count"] == link_count
+        assert row["count"] == len(sample_insights) * len(sample_entities)
