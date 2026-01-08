@@ -4516,3 +4516,814 @@ class TestEmbeddingIntegration:
         # Verify each byte value
         for i in range(256):
             assert retrieved.vector[i] == i
+
+
+# =============================================================================
+# Tests for get_stats() Method
+# =============================================================================
+
+
+class TestGetStats:
+    """Tests for the get_stats() method."""
+
+    def test_get_stats_empty_database(self, knowledge_base):
+        """Test get_stats returns zeros for empty database."""
+        stats = knowledge_base.get_stats()
+
+        assert stats["total_insights"] == 0
+        assert stats["total_entities"] == 0
+        assert stats["total_relationships"] == 0
+        assert stats["contradictions"] == 0
+        assert stats["high_confidence_insights"] == 0
+
+    def test_get_stats_with_single_insight(self, knowledge_base, sample_insight):
+        """Test get_stats counts single insight correctly."""
+        knowledge_base.save_insight(sample_insight)
+
+        stats = knowledge_base.get_stats()
+
+        assert stats["total_insights"] == 1
+        assert stats["total_entities"] == 0
+        assert stats["total_relationships"] == 0
+
+    def test_get_stats_with_multiple_insights(self, knowledge_base, sample_insights):
+        """Test get_stats counts multiple insights correctly."""
+        for insight in sample_insights:
+            knowledge_base.save_insight(insight)
+
+        stats = knowledge_base.get_stats()
+
+        assert stats["total_insights"] == len(sample_insights)
+
+    def test_get_stats_high_confidence_count(self, knowledge_base, sample_insights):
+        """Test get_stats correctly counts high confidence insights."""
+        # sample_insights has 2 high confidence insights (sample_insight and sample_insight_statistic)
+        for insight in sample_insights:
+            knowledge_base.save_insight(insight)
+
+        stats = knowledge_base.get_stats()
+
+        # Count expected high confidence insights from fixtures
+        expected_high_confidence = sum(
+            1 for i in sample_insights if i.confidence == "high"
+        )
+        assert stats["high_confidence_insights"] == expected_high_confidence
+
+    def test_get_stats_with_entities(self, knowledge_base, sample_entities):
+        """Test get_stats counts entities correctly."""
+        for entity in sample_entities:
+            knowledge_base.save_entity(entity)
+
+        stats = knowledge_base.get_stats()
+
+        assert stats["total_entities"] == len(sample_entities)
+
+    def test_get_stats_with_single_entity(self, knowledge_base, sample_entity_tool):
+        """Test get_stats counts single entity correctly."""
+        knowledge_base.save_entity(sample_entity_tool)
+
+        stats = knowledge_base.get_stats()
+
+        assert stats["total_entities"] == 1
+
+    def test_get_stats_with_relationships(self, knowledge_base, sample_insight, sample_insight_low_confidence):
+        """Test get_stats counts relationships correctly."""
+        knowledge_base.save_insight(sample_insight)
+        knowledge_base.save_insight(sample_insight_low_confidence)
+
+        relationship = Relationship(
+            id="rel-001",
+            source_insight_id=sample_insight.id,
+            target_insight_id=sample_insight_low_confidence.id,
+            relationship_type="confirms",
+            strength=0.8,
+        )
+        knowledge_base.save_relationship(relationship)
+
+        stats = knowledge_base.get_stats()
+
+        assert stats["total_relationships"] == 1
+
+    def test_get_stats_with_multiple_relationships(self, knowledge_base, sample_insights):
+        """Test get_stats counts multiple relationships correctly."""
+        for insight in sample_insights:
+            knowledge_base.save_insight(insight)
+
+        relationships = [
+            Relationship(
+                id="rel-001",
+                source_insight_id=sample_insights[0].id,
+                target_insight_id=sample_insights[1].id,
+                relationship_type="confirms",
+                strength=0.8,
+            ),
+            Relationship(
+                id="rel-002",
+                source_insight_id=sample_insights[1].id,
+                target_insight_id=sample_insights[2].id,
+                relationship_type="extends",
+                strength=0.6,
+            ),
+            Relationship(
+                id="rel-003",
+                source_insight_id=sample_insights[0].id,
+                target_insight_id=sample_insights[2].id,
+                relationship_type="refines",
+                strength=0.7,
+            ),
+        ]
+
+        for rel in relationships:
+            knowledge_base.save_relationship(rel)
+
+        stats = knowledge_base.get_stats()
+
+        assert stats["total_relationships"] == 3
+
+    def test_get_stats_contradictions_count(self, knowledge_base, sample_insights):
+        """Test get_stats correctly counts contradiction relationships."""
+        for insight in sample_insights:
+            knowledge_base.save_insight(insight)
+
+        # Create various relationship types including contradictions
+        relationships = [
+            Relationship(
+                id="rel-001",
+                source_insight_id=sample_insights[0].id,
+                target_insight_id=sample_insights[1].id,
+                relationship_type="contradicts",
+                strength=0.9,
+            ),
+            Relationship(
+                id="rel-002",
+                source_insight_id=sample_insights[1].id,
+                target_insight_id=sample_insights[2].id,
+                relationship_type="confirms",
+                strength=0.8,
+            ),
+            Relationship(
+                id="rel-003",
+                source_insight_id=sample_insights[0].id,
+                target_insight_id=sample_insights[2].id,
+                relationship_type="contradicts",
+                strength=0.7,
+            ),
+        ]
+
+        for rel in relationships:
+            knowledge_base.save_relationship(rel)
+
+        stats = knowledge_base.get_stats()
+
+        assert stats["contradictions"] == 2
+        assert stats["total_relationships"] == 3
+
+    def test_get_stats_no_contradictions(self, knowledge_base, sample_insights):
+        """Test get_stats returns zero contradictions when none exist."""
+        for insight in sample_insights:
+            knowledge_base.save_insight(insight)
+
+        # Only non-contradiction relationships
+        relationship = Relationship(
+            id="rel-001",
+            source_insight_id=sample_insights[0].id,
+            target_insight_id=sample_insights[1].id,
+            relationship_type="confirms",
+            strength=0.8,
+        )
+        knowledge_base.save_relationship(relationship)
+
+        stats = knowledge_base.get_stats()
+
+        assert stats["contradictions"] == 0
+        assert stats["total_relationships"] == 1
+
+    def test_get_stats_returns_all_expected_keys(self, knowledge_base):
+        """Test get_stats returns all expected dictionary keys."""
+        stats = knowledge_base.get_stats()
+
+        expected_keys = [
+            "total_insights",
+            "total_entities",
+            "total_relationships",
+            "contradictions",
+            "high_confidence_insights",
+        ]
+
+        for key in expected_keys:
+            assert key in stats
+
+    def test_get_stats_with_mixed_confidence_levels(self, knowledge_base):
+        """Test get_stats with insights of different confidence levels."""
+        insights = [
+            Insight(id="i1", article_id="a1", content="Content 1", insight_type="technical", confidence="high"),
+            Insight(id="i2", article_id="a1", content="Content 2", insight_type="technical", confidence="high"),
+            Insight(id="i3", article_id="a1", content="Content 3", insight_type="technical", confidence="medium"),
+            Insight(id="i4", article_id="a1", content="Content 4", insight_type="technical", confidence="low"),
+            Insight(id="i5", article_id="a1", content="Content 5", insight_type="technical", confidence="high"),
+        ]
+
+        for insight in insights:
+            knowledge_base.save_insight(insight)
+
+        stats = knowledge_base.get_stats()
+
+        assert stats["total_insights"] == 5
+        assert stats["high_confidence_insights"] == 3
+
+    def test_get_stats_comprehensive(self, knowledge_base, sample_insights, sample_entities):
+        """Test get_stats with comprehensive data."""
+        # Add insights
+        for insight in sample_insights:
+            knowledge_base.save_insight(insight)
+
+        # Add entities
+        for entity in sample_entities:
+            knowledge_base.save_entity(entity)
+
+        # Add relationships
+        relationship = Relationship(
+            id="rel-001",
+            source_insight_id=sample_insights[0].id,
+            target_insight_id=sample_insights[1].id,
+            relationship_type="contradicts",
+            strength=0.9,
+        )
+        knowledge_base.save_relationship(relationship)
+
+        stats = knowledge_base.get_stats()
+
+        assert stats["total_insights"] == len(sample_insights)
+        assert stats["total_entities"] == len(sample_entities)
+        assert stats["total_relationships"] == 1
+        assert stats["contradictions"] == 1
+        # sample_insight and sample_insight_statistic have high confidence
+        assert stats["high_confidence_insights"] == 2
+
+
+# =============================================================================
+# Tests for get_graph_stats() Method
+# =============================================================================
+
+
+class TestGetGraphStats:
+    """Tests for the get_graph_stats() method."""
+
+    def test_get_graph_stats_empty_database(self, knowledge_base):
+        """Test get_graph_stats returns zeros for empty database."""
+        stats = knowledge_base.get_graph_stats()
+
+        # Base stats
+        assert stats["total_insights"] == 0
+        assert stats["total_entities"] == 0
+        assert stats["total_relationships"] == 0
+        assert stats["contradictions"] == 0
+        assert stats["high_confidence_insights"] == 0
+
+        # Graph-specific stats
+        assert stats["total_triples"] == 0
+        assert stats["total_entity_relationships"] == 0
+        assert stats["total_embeddings"] == 0
+        assert stats["unique_predicates"] == 0
+        assert stats["predicate_types"] == []
+        assert stats["top_connected_entities"] == []
+
+    def test_get_graph_stats_includes_base_stats(self, knowledge_base, sample_insight, sample_entity_tool):
+        """Test get_graph_stats includes all base stats from get_stats."""
+        knowledge_base.save_insight(sample_insight)
+        knowledge_base.save_entity(sample_entity_tool)
+
+        stats = knowledge_base.get_graph_stats()
+
+        # Should include all keys from get_stats()
+        assert "total_insights" in stats
+        assert "total_entities" in stats
+        assert "total_relationships" in stats
+        assert "contradictions" in stats
+        assert "high_confidence_insights" in stats
+
+        assert stats["total_insights"] == 1
+        assert stats["total_entities"] == 1
+
+    def test_get_graph_stats_with_triples(self, knowledge_base, sample_triple_developed_by):
+        """Test get_graph_stats counts triples correctly."""
+        knowledge_base.save_triple(sample_triple_developed_by)
+
+        stats = knowledge_base.get_graph_stats()
+
+        assert stats["total_triples"] == 1
+
+    def test_get_graph_stats_with_multiple_triples(self, knowledge_base, sample_triples):
+        """Test get_graph_stats counts multiple triples correctly."""
+        for triple in sample_triples:
+            knowledge_base.save_triple(triple)
+
+        stats = knowledge_base.get_graph_stats()
+
+        assert stats["total_triples"] == len(sample_triples)
+
+    def test_get_graph_stats_unique_predicates(self, knowledge_base, sample_triples):
+        """Test get_graph_stats counts unique predicates correctly."""
+        for triple in sample_triples:
+            knowledge_base.save_triple(triple)
+
+        stats = knowledge_base.get_graph_stats()
+
+        # Get expected unique predicates from sample_triples
+        expected_predicates = set(t.predicate for t in sample_triples)
+        assert stats["unique_predicates"] == len(expected_predicates)
+        assert set(stats["predicate_types"]) == expected_predicates
+
+    def test_get_graph_stats_predicate_types_list(self, knowledge_base):
+        """Test get_graph_stats returns correct predicate types."""
+        triples = [
+            Triple(id="t1", subject="A", predicate="created", object="B", subject_type="entity", object_type="entity"),
+            Triple(id="t2", subject="C", predicate="acquired", object="D", subject_type="entity", object_type="entity"),
+            Triple(id="t3", subject="E", predicate="created", object="F", subject_type="entity", object_type="entity"),
+        ]
+
+        for triple in triples:
+            knowledge_base.save_triple(triple)
+
+        stats = knowledge_base.get_graph_stats()
+
+        assert stats["unique_predicates"] == 2
+        assert "created" in stats["predicate_types"]
+        assert "acquired" in stats["predicate_types"]
+
+    def test_get_graph_stats_entity_relationships(self, knowledge_base, sample_entity_relationship_acquired):
+        """Test get_graph_stats counts entity relationships correctly."""
+        knowledge_base.save_entity_relationship(sample_entity_relationship_acquired)
+
+        stats = knowledge_base.get_graph_stats()
+
+        assert stats["total_entity_relationships"] == 1
+
+    def test_get_graph_stats_multiple_entity_relationships(self, knowledge_base, sample_entity_relationships):
+        """Test get_graph_stats counts multiple entity relationships correctly."""
+        for rel in sample_entity_relationships:
+            knowledge_base.save_entity_relationship(rel)
+
+        stats = knowledge_base.get_graph_stats()
+
+        assert stats["total_entity_relationships"] == len(sample_entity_relationships)
+
+    def test_get_graph_stats_embeddings_count(self, knowledge_base, sample_embeddings):
+        """Test get_graph_stats counts embeddings correctly."""
+        for embedding in sample_embeddings:
+            knowledge_base.save_embedding(embedding)
+
+        stats = knowledge_base.get_graph_stats()
+
+        assert stats["total_embeddings"] == len(sample_embeddings)
+
+    def test_get_graph_stats_with_single_embedding(self, knowledge_base, sample_embedding):
+        """Test get_graph_stats counts single embedding correctly."""
+        knowledge_base.save_embedding(sample_embedding)
+
+        stats = knowledge_base.get_graph_stats()
+
+        assert stats["total_embeddings"] == 1
+
+    def test_get_graph_stats_top_connected_entities(self, knowledge_base):
+        """Test get_graph_stats returns top connected entities."""
+        # Create triples with varying connection counts
+        triples = [
+            # Entity A has 3 connections (as subject)
+            Triple(id="t1", subject="EntityA", predicate="relates_to", object="EntityB", subject_type="entity", object_type="entity"),
+            Triple(id="t2", subject="EntityA", predicate="relates_to", object="EntityC", subject_type="entity", object_type="entity"),
+            Triple(id="t3", subject="EntityA", predicate="relates_to", object="EntityD", subject_type="entity", object_type="entity"),
+            # Entity B has 1 connection
+            Triple(id="t4", subject="EntityB", predicate="relates_to", object="EntityE", subject_type="entity", object_type="entity"),
+        ]
+
+        for triple in triples:
+            knowledge_base.save_triple(triple)
+
+        stats = knowledge_base.get_graph_stats()
+
+        assert len(stats["top_connected_entities"]) > 0
+        # EntityA should be first with 3 connections
+        assert stats["top_connected_entities"][0]["entity"] == "EntityA"
+        assert stats["top_connected_entities"][0]["connections"] == 3
+
+    def test_get_graph_stats_top_connected_entities_ordering(self, knowledge_base):
+        """Test get_graph_stats orders top connected entities by connections DESC."""
+        # Create triples with specific connection counts
+        triples = [
+            # Entity C: 2 connections
+            Triple(id="t1", subject="EntityC", predicate="p1", object="X1", subject_type="entity", object_type="entity"),
+            Triple(id="t2", subject="EntityC", predicate="p2", object="X2", subject_type="entity", object_type="entity"),
+            # Entity A: 4 connections
+            Triple(id="t3", subject="EntityA", predicate="p1", object="X3", subject_type="entity", object_type="entity"),
+            Triple(id="t4", subject="EntityA", predicate="p2", object="X4", subject_type="entity", object_type="entity"),
+            Triple(id="t5", subject="EntityA", predicate="p3", object="X5", subject_type="entity", object_type="entity"),
+            Triple(id="t6", subject="EntityA", predicate="p4", object="X6", subject_type="entity", object_type="entity"),
+            # Entity B: 1 connection
+            Triple(id="t7", subject="EntityB", predicate="p1", object="X7", subject_type="entity", object_type="entity"),
+        ]
+
+        for triple in triples:
+            knowledge_base.save_triple(triple)
+
+        stats = knowledge_base.get_graph_stats()
+
+        top_entities = stats["top_connected_entities"]
+        # Should be ordered by connections DESC
+        assert top_entities[0]["entity"] == "EntityA"
+        assert top_entities[0]["connections"] == 4
+        assert top_entities[1]["entity"] == "EntityC"
+        assert top_entities[1]["connections"] == 2
+        assert top_entities[2]["entity"] == "EntityB"
+        assert top_entities[2]["connections"] == 1
+
+    def test_get_graph_stats_top_connected_entities_limit_10(self, knowledge_base):
+        """Test get_graph_stats limits top connected entities to 10."""
+        # Create triples for 15 different entities
+        triples = []
+        for i in range(15):
+            triple = Triple(
+                id=f"t{i}",
+                subject=f"Entity{i:02d}",
+                predicate="relates_to",
+                object="Target",
+                subject_type="entity",
+                object_type="entity",
+            )
+            triples.append(triple)
+
+        for triple in triples:
+            knowledge_base.save_triple(triple)
+
+        stats = knowledge_base.get_graph_stats()
+
+        assert len(stats["top_connected_entities"]) == 10
+
+    def test_get_graph_stats_returns_all_expected_keys(self, knowledge_base):
+        """Test get_graph_stats returns all expected dictionary keys."""
+        stats = knowledge_base.get_graph_stats()
+
+        expected_keys = [
+            # Base stats keys
+            "total_insights",
+            "total_entities",
+            "total_relationships",
+            "contradictions",
+            "high_confidence_insights",
+            # Graph-specific keys
+            "total_triples",
+            "total_entity_relationships",
+            "total_embeddings",
+            "unique_predicates",
+            "predicate_types",
+            "top_connected_entities",
+        ]
+
+        for key in expected_keys:
+            assert key in stats, f"Missing key: {key}"
+
+    def test_get_graph_stats_comprehensive(
+        self,
+        knowledge_base,
+        sample_insights,
+        sample_entities,
+        sample_triples,
+        sample_entity_relationships,
+        sample_embeddings,
+    ):
+        """Test get_graph_stats with comprehensive data across all tables."""
+        # Add insights
+        for insight in sample_insights:
+            knowledge_base.save_insight(insight)
+
+        # Add entities
+        for entity in sample_entities:
+            knowledge_base.save_entity(entity)
+
+        # Add relationships between insights
+        relationship = Relationship(
+            id="rel-001",
+            source_insight_id=sample_insights[0].id,
+            target_insight_id=sample_insights[1].id,
+            relationship_type="contradicts",
+            strength=0.9,
+        )
+        knowledge_base.save_relationship(relationship)
+
+        # Add triples
+        for triple in sample_triples:
+            knowledge_base.save_triple(triple)
+
+        # Add entity relationships
+        for rel in sample_entity_relationships:
+            knowledge_base.save_entity_relationship(rel)
+
+        # Add embeddings
+        for embedding in sample_embeddings:
+            knowledge_base.save_embedding(embedding)
+
+        stats = knowledge_base.get_graph_stats()
+
+        # Verify all counts
+        assert stats["total_insights"] == len(sample_insights)
+        assert stats["total_entities"] == len(sample_entities)
+        assert stats["total_relationships"] == 1
+        assert stats["contradictions"] == 1
+        assert stats["total_triples"] == len(sample_triples)
+        assert stats["total_entity_relationships"] == len(sample_entity_relationships)
+        assert stats["total_embeddings"] == len(sample_embeddings)
+        assert stats["unique_predicates"] > 0
+        assert len(stats["predicate_types"]) == stats["unique_predicates"]
+
+    def test_get_graph_stats_no_triples(self, knowledge_base, sample_insights, sample_entities):
+        """Test get_graph_stats when only insights and entities exist, no graph data."""
+        for insight in sample_insights:
+            knowledge_base.save_insight(insight)
+        for entity in sample_entities:
+            knowledge_base.save_entity(entity)
+
+        stats = knowledge_base.get_graph_stats()
+
+        # Base stats should be populated
+        assert stats["total_insights"] == len(sample_insights)
+        assert stats["total_entities"] == len(sample_entities)
+
+        # Graph stats should be empty
+        assert stats["total_triples"] == 0
+        assert stats["unique_predicates"] == 0
+        assert stats["predicate_types"] == []
+        assert stats["top_connected_entities"] == []
+
+
+# =============================================================================
+# Tests for Statistics Integration
+# =============================================================================
+
+
+class TestStatisticsIntegration:
+    """Integration tests for statistics methods."""
+
+    def test_stats_consistency_with_graph_stats(self, knowledge_base, sample_insights, sample_entities):
+        """Test that get_stats values are consistent with get_graph_stats."""
+        for insight in sample_insights:
+            knowledge_base.save_insight(insight)
+        for entity in sample_entities:
+            knowledge_base.save_entity(entity)
+
+        # Add a relationship
+        relationship = Relationship(
+            id="rel-001",
+            source_insight_id=sample_insights[0].id,
+            target_insight_id=sample_insights[1].id,
+            relationship_type="confirms",
+            strength=0.8,
+        )
+        knowledge_base.save_relationship(relationship)
+
+        basic_stats = knowledge_base.get_stats()
+        graph_stats = knowledge_base.get_graph_stats()
+
+        # All base stats should match
+        assert basic_stats["total_insights"] == graph_stats["total_insights"]
+        assert basic_stats["total_entities"] == graph_stats["total_entities"]
+        assert basic_stats["total_relationships"] == graph_stats["total_relationships"]
+        assert basic_stats["contradictions"] == graph_stats["contradictions"]
+        assert basic_stats["high_confidence_insights"] == graph_stats["high_confidence_insights"]
+
+    def test_stats_update_after_adding_data(self, knowledge_base):
+        """Test that statistics update correctly after adding new data."""
+        # Initial stats
+        initial_stats = knowledge_base.get_stats()
+        assert initial_stats["total_insights"] == 0
+
+        # Add insight
+        insight = Insight(
+            id="ins-001",
+            article_id="art-001",
+            content="Test content",
+            insight_type="technical",
+            confidence="high",
+        )
+        knowledge_base.save_insight(insight)
+
+        # Updated stats
+        updated_stats = knowledge_base.get_stats()
+        assert updated_stats["total_insights"] == 1
+        assert updated_stats["high_confidence_insights"] == 1
+
+    def test_graph_stats_update_after_adding_triples(self, knowledge_base):
+        """Test that graph statistics update correctly after adding triples."""
+        # Initial graph stats
+        initial_stats = knowledge_base.get_graph_stats()
+        assert initial_stats["total_triples"] == 0
+        assert initial_stats["unique_predicates"] == 0
+
+        # Add triple
+        triple = Triple(
+            id="t1",
+            subject="A",
+            predicate="knows",
+            object="B",
+            subject_type="entity",
+            object_type="entity",
+        )
+        knowledge_base.save_triple(triple)
+
+        # Updated stats
+        updated_stats = knowledge_base.get_graph_stats()
+        assert updated_stats["total_triples"] == 1
+        assert updated_stats["unique_predicates"] == 1
+        assert "knows" in updated_stats["predicate_types"]
+
+    def test_top_entities_update_dynamically(self, knowledge_base):
+        """Test that top connected entities update as triples are added."""
+        # Add initial triple
+        triple1 = Triple(
+            id="t1",
+            subject="EntityA",
+            predicate="relates",
+            object="X",
+            subject_type="entity",
+            object_type="entity",
+        )
+        knowledge_base.save_triple(triple1)
+
+        stats1 = knowledge_base.get_graph_stats()
+        assert stats1["top_connected_entities"][0]["entity"] == "EntityA"
+        assert stats1["top_connected_entities"][0]["connections"] == 1
+
+        # Add more triples for EntityB to make it the top
+        for i in range(5):
+            triple = Triple(
+                id=f"t{i+2}",
+                subject="EntityB",
+                predicate="relates",
+                object=f"Y{i}",
+                subject_type="entity",
+                object_type="entity",
+            )
+            knowledge_base.save_triple(triple)
+
+        stats2 = knowledge_base.get_graph_stats()
+        assert stats2["top_connected_entities"][0]["entity"] == "EntityB"
+        assert stats2["top_connected_entities"][0]["connections"] == 5
+
+    def test_stats_with_all_data_types(self, knowledge_base):
+        """Test statistics with all data types populated."""
+        # Add insight
+        insight = Insight(
+            id="ins-001",
+            article_id="art-001",
+            content="Test insight",
+            insight_type="technical",
+            confidence="high",
+        )
+        knowledge_base.save_insight(insight)
+
+        # Add entity
+        entity = Entity(
+            id="ent-001",
+            name="TestEntity",
+            entity_type="tool",
+        )
+        knowledge_base.save_entity(entity)
+
+        # Add relationship
+        insight2 = Insight(
+            id="ins-002",
+            article_id="art-002",
+            content="Another insight",
+            insight_type="opinion",
+            confidence="low",
+        )
+        knowledge_base.save_insight(insight2)
+        rel = Relationship(
+            id="rel-001",
+            source_insight_id="ins-001",
+            target_insight_id="ins-002",
+            relationship_type="contradicts",
+            strength=0.9,
+        )
+        knowledge_base.save_relationship(rel)
+
+        # Add triple
+        triple = Triple(
+            id="trip-001",
+            subject="TestEntity",
+            predicate="developed_by",
+            object="Company",
+            subject_type="entity",
+            object_type="entity",
+        )
+        knowledge_base.save_triple(triple)
+
+        # Add entity relationship
+        ent_rel = EntityRelationship(
+            id="er-001",
+            source_entity_id="ent-001",
+            target_entity_id="ent-002",
+            relationship_type="competes_with",
+        )
+        knowledge_base.save_entity_relationship(ent_rel)
+
+        # Add embedding
+        embedding = Embedding(
+            id="emb-001",
+            target_id="ins-001",
+            target_type="insight",
+            vector=bytes([1, 2, 3]),
+            model="test-model",
+        )
+        knowledge_base.save_embedding(embedding)
+
+        # Check basic stats
+        basic_stats = knowledge_base.get_stats()
+        assert basic_stats["total_insights"] == 2
+        assert basic_stats["total_entities"] == 1
+        assert basic_stats["total_relationships"] == 1
+        assert basic_stats["contradictions"] == 1
+        assert basic_stats["high_confidence_insights"] == 1
+
+        # Check graph stats
+        graph_stats = knowledge_base.get_graph_stats()
+        assert graph_stats["total_triples"] == 1
+        assert graph_stats["total_entity_relationships"] == 1
+        assert graph_stats["total_embeddings"] == 1
+        assert graph_stats["unique_predicates"] == 1
+        assert "developed_by" in graph_stats["predicate_types"]
+        assert len(graph_stats["top_connected_entities"]) == 1
+
+    def test_statistics_with_many_predicates(self, knowledge_base):
+        """Test statistics with many different predicates."""
+        predicates = [
+            "created_by",
+            "developed_by",
+            "acquired",
+            "competes_with",
+            "partners_with",
+            "uses",
+            "supports",
+            "released",
+        ]
+
+        for i, predicate in enumerate(predicates):
+            triple = Triple(
+                id=f"t{i}",
+                subject=f"Entity{i}",
+                predicate=predicate,
+                object=f"Target{i}",
+                subject_type="entity",
+                object_type="entity",
+            )
+            knowledge_base.save_triple(triple)
+
+        stats = knowledge_base.get_graph_stats()
+
+        assert stats["total_triples"] == len(predicates)
+        assert stats["unique_predicates"] == len(predicates)
+        for predicate in predicates:
+            assert predicate in stats["predicate_types"]
+
+    def test_statistics_performance_with_large_dataset(self, knowledge_base):
+        """Test statistics methods handle larger datasets efficiently."""
+        # Add 100 insights
+        for i in range(100):
+            insight = Insight(
+                id=f"ins-{i:03d}",
+                article_id=f"art-{i % 10}",
+                content=f"Insight content {i}",
+                insight_type=["technical", "opinion", "statistic", "tool"][i % 4],
+                confidence=["high", "medium", "low"][i % 3],
+            )
+            knowledge_base.save_insight(insight)
+
+        # Add 50 entities
+        for i in range(50):
+            entity = Entity(
+                id=f"ent-{i:03d}",
+                name=f"Entity{i}",
+                entity_type=["tool", "company", "person", "concept"][i % 4],
+            )
+            knowledge_base.save_entity(entity)
+
+        # Add 200 triples
+        for i in range(200):
+            triple = Triple(
+                id=f"trip-{i:03d}",
+                subject=f"Entity{i % 50}",
+                predicate=["created", "uses", "competes", "acquired"][i % 4],
+                object=f"Entity{(i + 1) % 50}",
+                subject_type="entity",
+                object_type="entity",
+            )
+            knowledge_base.save_triple(triple)
+
+        # Statistics should still work
+        basic_stats = knowledge_base.get_stats()
+        graph_stats = knowledge_base.get_graph_stats()
+
+        assert basic_stats["total_insights"] == 100
+        assert basic_stats["total_entities"] == 50
+        assert graph_stats["total_triples"] == 200
+        assert graph_stats["unique_predicates"] == 4
+        assert len(graph_stats["top_connected_entities"]) == 10  # Limited to 10
