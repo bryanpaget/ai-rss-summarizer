@@ -751,8 +751,8 @@ def full_update_mocks(
 @pytest.fixture
 def setup_wizard_mocks(mock_console, clean_env):
     """Combine mocks needed for setup wizard tests."""
-    with patch("src.commands.list_providers") as mock_list, \
-         patch("src.commands.auto_detect_provider") as mock_auto:
+    with patch("src.llm_providers.list_providers") as mock_list, \
+         patch("src.llm_providers.auto_detect_provider") as mock_auto:
         mock_list.return_value = [
             {"name": "Ollama", "type": "ollama", "available": True, "description": "Local LLM"},
             {"name": "OpenAI", "type": "openai", "available": False, "description": "OpenAI API"},
@@ -2359,3 +2359,1401 @@ class TestUpdateIntegration:
             )
 
             assert isinstance(result, dict)
+
+
+# =============================================================================
+# Tests for setup_wizard command
+# =============================================================================
+
+
+class TestSetupWizardMainFlow:
+    """Test the main setup_wizard function flow."""
+
+    def test_setup_wizard_with_available_provider_use_recommended(self, clean_env):
+        """Test setup wizard when provider is available and user chooses recommended."""
+        with patch("src.commands.console") as mock_console, \
+             patch("src.llm_providers.list_providers") as mock_list, \
+             patch("src.llm_providers.auto_detect_provider") as mock_auto, \
+             patch("src.commands._save_provider_config") as mock_save:
+
+            mock_provider = MagicMock()
+            mock_provider.name = "Ollama"
+
+            mock_list.return_value = [
+                {"name": "Ollama", "type": "ollama", "available": True, "description": "Local LLM"},
+                {"name": "OpenAI", "type": "openai", "available": False, "description": "OpenAI API"},
+            ]
+            mock_auto.return_value = mock_provider
+            mock_console.input.return_value = "1"  # Use recommended
+
+            setup_wizard()
+
+            mock_save.assert_called_once()
+            mock_list.assert_called_once()
+            mock_auto.assert_called_once()
+
+    def test_setup_wizard_with_available_provider_quit(self, clean_env):
+        """Test setup wizard when user chooses to quit."""
+        with patch("src.commands.console") as mock_console, \
+             patch("src.llm_providers.list_providers") as mock_list, \
+             patch("src.llm_providers.auto_detect_provider") as mock_auto, \
+             patch("src.commands._save_provider_config") as mock_save:
+
+            mock_provider = MagicMock()
+            mock_provider.name = "Ollama"
+
+            mock_list.return_value = [
+                {"name": "Ollama", "type": "ollama", "available": True, "description": "Local LLM"},
+            ]
+            mock_auto.return_value = mock_provider
+            mock_console.input.return_value = "q"  # Quit
+
+            setup_wizard()
+
+            mock_save.assert_not_called()
+
+    def test_setup_wizard_with_available_provider_setup_new(self, clean_env):
+        """Test setup wizard when user chooses to set up new provider."""
+        with patch("src.commands.console") as mock_console, \
+             patch("src.llm_providers.list_providers") as mock_list, \
+             patch("src.llm_providers.auto_detect_provider") as mock_auto, \
+             patch("src.commands._setup_new_provider") as mock_setup:
+
+            mock_provider = MagicMock()
+            mock_provider.name = "Ollama"
+
+            mock_list.return_value = [
+                {"name": "Ollama", "type": "ollama", "available": True, "description": "Local LLM"},
+            ]
+            mock_auto.return_value = mock_provider
+            mock_console.input.return_value = "3"  # Setup new provider
+
+            setup_wizard()
+
+            mock_setup.assert_called_once()
+
+    def test_setup_wizard_no_providers_available_cloud_setup(self, clean_env):
+        """Test setup wizard when no providers available - cloud setup path."""
+        with patch("src.commands.console") as mock_console, \
+             patch("src.llm_providers.list_providers") as mock_list, \
+             patch("src.llm_providers.auto_detect_provider") as mock_auto, \
+             patch("src.commands._setup_new_provider") as mock_setup:
+
+            mock_list.return_value = [
+                {"name": "OpenAI", "type": "openai", "available": False, "description": "OpenAI API"},
+            ]
+            mock_auto.return_value = None
+            mock_console.input.return_value = "1"  # Cloud provider setup
+
+            setup_wizard()
+
+            mock_setup.assert_called_once()
+
+    def test_setup_wizard_no_providers_available_local_setup(self, clean_env):
+        """Test setup wizard when no providers available - local setup path."""
+        with patch("src.commands.console") as mock_console, \
+             patch("src.llm_providers.list_providers") as mock_list, \
+             patch("src.llm_providers.auto_detect_provider") as mock_auto, \
+             patch("src.commands._show_local_setup_instructions") as mock_local:
+
+            mock_list.return_value = [
+                {"name": "OpenAI", "type": "openai", "available": False, "description": "OpenAI API"},
+            ]
+            mock_auto.return_value = None
+            mock_console.input.return_value = "2"  # Local setup
+
+            setup_wizard()
+
+            mock_local.assert_called_once()
+
+    def test_setup_wizard_no_providers_available_quit(self, clean_env):
+        """Test setup wizard quit when no providers available."""
+        with patch("src.commands.console") as mock_console, \
+             patch("src.llm_providers.list_providers") as mock_list, \
+             patch("src.llm_providers.auto_detect_provider") as mock_auto:
+
+            mock_list.return_value = []
+            mock_auto.return_value = None
+            mock_console.input.return_value = "q"  # Quit
+
+            setup_wizard()
+
+            # Just verify no exceptions raised
+
+    def test_setup_wizard_provider_selection_fallthrough(self, clean_env):
+        """Test setup wizard when choice falls through to provider selection."""
+        with patch("src.commands.console") as mock_console, \
+             patch("src.llm_providers.list_providers") as mock_list, \
+             patch("src.llm_providers.auto_detect_provider") as mock_auto, \
+             patch("src.commands._select_provider") as mock_select:
+
+            mock_provider = MagicMock()
+            mock_provider.name = "Ollama"
+
+            mock_list.return_value = [
+                {"name": "Ollama", "type": "ollama", "available": True, "description": "Local LLM"},
+            ]
+            mock_auto.return_value = mock_provider
+            mock_console.input.return_value = "2"  # Choose different provider
+
+            setup_wizard()
+
+            mock_select.assert_called_once()
+
+
+class TestSetupWizardProviderStatus:
+    """Test provider status display in setup wizard."""
+
+    def test_setup_wizard_displays_provider_table(self, clean_env):
+        """Test that setup wizard displays provider status table."""
+        from src.llm_providers import ProviderType
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.llm_providers.list_providers") as mock_list, \
+             patch("src.llm_providers.auto_detect_provider") as mock_auto:
+
+            mock_list.return_value = [
+                {"name": "LM Studio", "type": ProviderType.LM_STUDIO, "available": True, "description": "Local LM Studio"},
+                {"name": "Ollama", "type": ProviderType.OLLAMA, "available": False, "description": "Local Ollama"},
+                {"name": "Gemini", "type": ProviderType.GEMINI, "available": False, "description": "Google Gemini"},
+                {"name": "Groq", "type": ProviderType.GROQ, "available": False, "description": "Groq API"},
+                {"name": "Claude", "type": ProviderType.CLAUDE, "available": False, "description": "Claude API"},
+                {"name": "Claude Code", "type": ProviderType.CLAUDE_CODE, "available": False, "description": "Claude Code CLI"},
+                {"name": "Grok", "type": ProviderType.GROK, "available": False, "description": "xAI Grok"},
+                {"name": "OpenAI", "type": ProviderType.OPENAI, "available": False, "description": "OpenAI API"},
+            ]
+            mock_auto.return_value = None
+            mock_console.input.return_value = "q"
+
+            setup_wizard()
+
+            # Verify console.print was called (for table display)
+            assert mock_console.print.called
+
+    def test_setup_wizard_categorizes_providers_correctly(self, clean_env):
+        """Test that providers are categorized by status."""
+        from src.llm_providers import ProviderType
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.llm_providers.list_providers") as mock_list, \
+             patch("src.llm_providers.auto_detect_provider") as mock_auto, \
+             patch("src.commands._save_provider_config") as mock_save:
+
+            mock_provider = MagicMock()
+            mock_provider.name = "LM Studio"
+
+            mock_list.return_value = [
+                {"name": "LM Studio", "type": ProviderType.LM_STUDIO, "available": True, "description": "Ready"},
+                {"name": "Ollama", "type": ProviderType.OLLAMA, "available": False, "description": "Not running"},
+                {"name": "Gemini", "type": ProviderType.GEMINI, "available": False, "description": "Needs API key"},
+            ]
+            mock_auto.return_value = mock_provider
+            mock_console.input.return_value = "1"
+
+            setup_wizard()
+
+            mock_save.assert_called_once()
+
+
+class TestSaveProviderConfig:
+    """Test _save_provider_config function."""
+
+    def test_save_provider_config_basic(self, clean_env, temp_dir):
+        """Test saving basic provider config."""
+        from src.commands import _save_provider_config
+        from src.llm_providers import ProviderType
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.llm_providers.LLMConfig") as mock_config_cls, \
+             patch("src.commands._onboard_feeds") as mock_onboard:
+
+            mock_provider = MagicMock()
+            mock_provider.name = "Ollama"
+
+            providers_list = [
+                {"name": "Ollama", "type": ProviderType.OLLAMA, "available": True},
+            ]
+
+            mock_config = MagicMock()
+            mock_config_cls.return_value = mock_config
+
+            _save_provider_config(mock_provider, providers_list)
+
+            mock_config.save.assert_called_once()
+            mock_onboard.assert_called_once()
+
+    def test_save_provider_config_lm_studio(self, clean_env, temp_dir):
+        """Test saving LM Studio config triggers special setup."""
+        from src.commands import _save_provider_config
+        from src.llm_providers import ProviderType
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.commands._setup_lm_studio_config") as mock_lm_setup, \
+             patch("src.commands._onboard_feeds") as mock_onboard:
+
+            mock_provider = MagicMock()
+            mock_provider.name = "LM Studio"
+
+            providers_list = [
+                {"name": "LM Studio", "type": ProviderType.LM_STUDIO, "available": True},
+            ]
+
+            mock_config = MagicMock()
+            mock_lm_setup.return_value = mock_config
+
+            _save_provider_config(mock_provider, providers_list)
+
+            mock_lm_setup.assert_called_once()
+            mock_config.save.assert_called_once()
+
+    def test_save_provider_config_lm_studio_cancelled(self, clean_env, temp_dir):
+        """Test LM Studio config cancelled by user."""
+        from src.commands import _save_provider_config
+        from src.llm_providers import ProviderType
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.commands._setup_lm_studio_config") as mock_lm_setup, \
+             patch("src.commands._onboard_feeds") as mock_onboard:
+
+            mock_provider = MagicMock()
+            mock_provider.name = "LM Studio"
+
+            providers_list = [
+                {"name": "LM Studio", "type": ProviderType.LM_STUDIO, "available": True},
+            ]
+
+            mock_lm_setup.return_value = None  # User cancelled
+
+            _save_provider_config(mock_provider, providers_list)
+
+            mock_onboard.assert_not_called()
+
+    def test_save_provider_config_unknown_provider_type(self, clean_env, temp_dir):
+        """Test handling when provider type cannot be determined."""
+        from src.commands import _save_provider_config
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.commands._onboard_feeds") as mock_onboard:
+
+            mock_provider = MagicMock()
+            mock_provider.name = "UnknownProvider"
+
+            providers_list = []  # Empty list - can't find provider
+
+            _save_provider_config(mock_provider, providers_list)
+
+            # Should print error message
+            assert any("Could not determine provider type" in str(call)
+                      for call in mock_console.print.call_args_list)
+            mock_onboard.assert_not_called()
+
+
+class TestSetupLMStudioConfig:
+    """Test _setup_lm_studio_config function."""
+
+    def test_setup_lm_studio_no_cli(self, clean_env):
+        """Test LM Studio setup when CLI not available."""
+        from src.commands import _setup_lm_studio_config
+
+        with patch("src.commands.console") as mock_console, \
+             patch("shutil.which") as mock_which:
+
+            mock_which.return_value = None  # lms not found
+
+            result = _setup_lm_studio_config()
+
+            assert result is None
+            assert any("LM Studio CLI (lms) not found" in str(call)
+                      for call in mock_console.print.call_args_list)
+
+    def test_setup_lm_studio_with_default_model(self, clean_env):
+        """Test LM Studio setup with default model."""
+        from src.commands import _setup_lm_studio_config
+        from src.llm_providers import ProviderType
+
+        with patch("src.commands.console") as mock_console, \
+             patch("shutil.which") as mock_which, \
+             patch("subprocess.run") as mock_run:
+
+            mock_which.return_value = "/usr/local/bin/lms"
+            mock_console.input.return_value = ""  # Accept default model
+            mock_run.return_value = MagicMock(
+                stdout="model1\nmodel2",
+                stderr="",
+                returncode=0
+            )
+
+            result = _setup_lm_studio_config()
+
+            assert result is not None
+            assert result.provider == ProviderType.LM_STUDIO
+            assert result.model == "google/gemma-3n-e4b"
+
+    def test_setup_lm_studio_with_custom_model(self, clean_env):
+        """Test LM Studio setup with custom model."""
+        from src.commands import _setup_lm_studio_config
+
+        with patch("src.commands.console") as mock_console, \
+             patch("shutil.which") as mock_which, \
+             patch("subprocess.run") as mock_run:
+
+            mock_which.return_value = "/usr/local/bin/lms"
+            mock_console.input.return_value = "custom/model-name"
+            mock_run.return_value = MagicMock(
+                stdout="",
+                stderr="",
+                returncode=0
+            )
+
+            result = _setup_lm_studio_config()
+
+            assert result is not None
+            assert result.model == "custom/model-name"
+
+    def test_setup_lm_studio_resource_check_warning(self, clean_env):
+        """Test LM Studio setup when resource check warns about loading."""
+        from src.commands import _setup_lm_studio_config
+
+        with patch("src.commands.console") as mock_console, \
+             patch("shutil.which") as mock_which, \
+             patch("subprocess.run") as mock_run:
+
+            mock_which.return_value = "/usr/local/bin/lms"
+            input_values = iter(["", "n"])  # Default model, then decline
+            mock_console.input.side_effect = lambda *args: next(input_values)
+
+            # First call for lms ls, second for estimate
+            mock_run.side_effect = [
+                MagicMock(stdout="", stderr="", returncode=0),
+                MagicMock(
+                    stdout="Model cannot be loaded - insufficient memory",
+                    stderr="",
+                    returncode=1
+                )
+            ]
+
+            result = _setup_lm_studio_config()
+
+            assert result is None  # User declined
+
+    def test_setup_lm_studio_resource_check_proceed(self, clean_env):
+        """Test LM Studio setup when user proceeds despite warning."""
+        from src.commands import _setup_lm_studio_config
+
+        with patch("src.commands.console") as mock_console, \
+             patch("shutil.which") as mock_which, \
+             patch("subprocess.run") as mock_run:
+
+            mock_which.return_value = "/usr/local/bin/lms"
+            input_values = iter(["", "y"])  # Default model, then proceed
+            mock_console.input.side_effect = lambda *args: next(input_values)
+
+            mock_run.side_effect = [
+                MagicMock(stdout="", stderr="", returncode=0),
+                MagicMock(
+                    stdout="Model cannot be loaded - insufficient memory",
+                    stderr="",
+                    returncode=1
+                )
+            ]
+
+            result = _setup_lm_studio_config()
+
+            assert result is not None
+
+    def test_setup_lm_studio_list_models_error(self, clean_env):
+        """Test LM Studio setup when listing models fails."""
+        from src.commands import _setup_lm_studio_config
+
+        with patch("src.commands.console") as mock_console, \
+             patch("shutil.which") as mock_which, \
+             patch("subprocess.run") as mock_run:
+
+            mock_which.return_value = "/usr/local/bin/lms"
+            mock_console.input.return_value = ""
+
+            mock_run.side_effect = [
+                Exception("Command failed"),  # lms ls fails
+                MagicMock(stdout="OK", stderr="", returncode=0)  # estimate OK
+            ]
+
+            result = _setup_lm_studio_config()
+
+            assert result is not None  # Still continues
+
+
+class TestOnboardFeeds:
+    """Test _onboard_feeds function."""
+
+    def test_onboard_feeds_no_existing_feeds(self, clean_env, temp_dir):
+        """Test onboarding when no feeds exist."""
+        from src.commands import _onboard_feeds
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.rss.load_feeds") as mock_load, \
+             patch("src.commands._setup_feeds") as mock_setup, \
+             patch("src.commands._finish_onboarding") as mock_finish:
+
+            mock_load.return_value = []
+
+            _onboard_feeds()
+
+            mock_setup.assert_called_once()
+            mock_finish.assert_called_once()
+
+    def test_onboard_feeds_with_existing_keep(self, clean_env, temp_dir):
+        """Test onboarding with existing feeds - keep them."""
+        from src.commands import _onboard_feeds
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.rss.load_feeds") as mock_load, \
+             patch("src.commands._finish_onboarding") as mock_finish:
+
+            mock_load.return_value = ["https://example.com/feed.xml"]
+            mock_console.input.return_value = "3"  # Keep existing
+
+            _onboard_feeds()
+
+            mock_finish.assert_called_once()
+
+    def test_onboard_feeds_with_existing_add_more(self, clean_env, temp_dir):
+        """Test onboarding with existing feeds - add more."""
+        from src.commands import _onboard_feeds
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.rss.load_feeds") as mock_load, \
+             patch("src.commands._setup_feeds") as mock_setup, \
+             patch("src.commands._finish_onboarding") as mock_finish:
+
+            mock_load.return_value = ["https://example.com/feed.xml"]
+            mock_console.input.return_value = "1"  # Keep existing and add more
+
+            _onboard_feeds()
+
+            mock_setup.assert_called_once()
+            mock_finish.assert_called_once()
+
+    def test_onboard_feeds_with_existing_start_fresh(self, clean_env, temp_dir):
+        """Test onboarding with existing feeds - start fresh."""
+        from src.commands import _onboard_feeds
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.rss.load_feeds") as mock_load, \
+             patch("src.commands._setup_feeds") as mock_setup, \
+             patch("src.commands._finish_onboarding") as mock_finish, \
+             patch("pathlib.Path.parent", new_callable=lambda: MagicMock()), \
+             patch("pathlib.Path.write_text"):
+
+            mock_load.return_value = ["https://example.com/feed.xml"]
+            mock_console.input.return_value = "2"  # Start fresh
+
+            _onboard_feeds()
+
+            mock_setup.assert_called_once()
+            mock_finish.assert_called_once()
+
+
+class TestSetupFeeds:
+    """Test _setup_feeds function."""
+
+    def test_setup_feeds_import_opml(self, clean_env):
+        """Test feed setup - OPML import option."""
+        from src.commands import _setup_feeds
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.commands._import_opml") as mock_import:
+
+            mock_console.input.return_value = "1"
+
+            _setup_feeds()
+
+            mock_import.assert_called_once()
+
+    def test_setup_feeds_add_url(self, clean_env):
+        """Test feed setup - add feed URL option."""
+        from src.commands import _setup_feeds
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.commands._add_feed_smart") as mock_add:
+
+            mock_console.input.return_value = "2"
+
+            _setup_feeds()
+
+            mock_add.assert_called_once()
+
+    def test_setup_feeds_paste_multiple(self, clean_env):
+        """Test feed setup - paste multiple URLs option."""
+        from src.commands import _setup_feeds
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.commands._paste_multiple_urls") as mock_paste:
+
+            mock_console.input.return_value = "3"
+
+            _setup_feeds()
+
+            mock_paste.assert_called_once()
+
+    def test_setup_feeds_browse_curated(self, clean_env):
+        """Test feed setup - browse curated option."""
+        from src.commands import _setup_feeds
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.commands._browse_curated_feeds") as mock_browse:
+
+            mock_console.input.return_value = "4"
+
+            _setup_feeds()
+
+            mock_browse.assert_called_once()
+
+    def test_setup_feeds_skip(self, clean_env):
+        """Test feed setup - skip option."""
+        from src.commands import _setup_feeds
+
+        with patch("src.commands.console") as mock_console:
+
+            mock_console.input.return_value = "s"
+
+            # Should not raise and not call any other function
+            _setup_feeds()
+
+
+class TestImportOpml:
+    """Test _import_opml function."""
+
+    def test_import_opml_success(self, clean_env, temp_dir):
+        """Test successful OPML import."""
+        from src.commands import _import_opml
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.feed_discovery.parse_opml") as mock_parse, \
+             patch("src.feed_discovery.validate_feed") as mock_validate, \
+             patch("pathlib.Path.parent", new_callable=lambda: MagicMock()), \
+             patch("builtins.open", MagicMock()):
+
+            input_values = iter(["/path/to/feeds.opml", "y"])
+            mock_console.input.side_effect = lambda *args: next(input_values)
+
+            mock_parse.return_value = ([
+                {"url": "https://example.com/feed.xml", "title": "Example Feed", "category": "Tech"},
+            ], None)
+
+            mock_feed_info = MagicMock()
+            mock_feed_info.title = "Example Feed"
+            mock_feed_info.url = "https://example.com/feed.xml"
+            mock_validate.return_value = (True, mock_feed_info, None)
+
+            _import_opml()
+
+            mock_parse.assert_called_once()
+            mock_validate.assert_called_once()
+
+    def test_import_opml_empty_path(self, clean_env):
+        """Test OPML import with empty path."""
+        from src.commands import _import_opml
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.feed_discovery.parse_opml") as mock_parse:
+
+            mock_console.input.return_value = ""  # Empty path
+
+            _import_opml()
+
+            mock_parse.assert_not_called()
+
+    def test_import_opml_parse_error(self, clean_env):
+        """Test OPML import with parse error."""
+        from src.commands import _import_opml
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.feed_discovery.parse_opml") as mock_parse:
+
+            mock_console.input.return_value = "/path/to/invalid.opml"
+            mock_parse.return_value = ([], "Invalid OPML format")
+
+            _import_opml()
+
+            assert any("Error" in str(call) for call in mock_console.print.call_args_list)
+
+    def test_import_opml_no_feeds(self, clean_env):
+        """Test OPML import with no feeds found."""
+        from src.commands import _import_opml
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.feed_discovery.parse_opml") as mock_parse:
+
+            mock_console.input.return_value = "/path/to/empty.opml"
+            mock_parse.return_value = ([], None)
+
+            _import_opml()
+
+            assert any("No feeds found" in str(call) for call in mock_console.print.call_args_list)
+
+    def test_import_opml_user_declines(self, clean_env):
+        """Test OPML import when user declines to import."""
+        from src.commands import _import_opml
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.feed_discovery.parse_opml") as mock_parse, \
+             patch("src.feed_discovery.validate_feed") as mock_validate:
+
+            input_values = iter(["/path/to/feeds.opml", "n"])
+            mock_console.input.side_effect = lambda *args: next(input_values)
+
+            mock_parse.return_value = ([
+                {"url": "https://example.com/feed.xml", "title": "Example", "category": "Tech"},
+            ], None)
+
+            _import_opml()
+
+            mock_validate.assert_not_called()
+
+
+class TestAddFeedSmart:
+    """Test _add_feed_smart function."""
+
+    def test_add_feed_smart_direct_feed_url(self, clean_env, temp_dir):
+        """Test adding a direct feed URL."""
+        from src.commands import _add_feed_smart
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.feed_discovery.detect_input_type") as mock_detect, \
+             patch("src.feed_discovery.validate_feed") as mock_validate, \
+             patch("builtins.open", MagicMock()):
+
+            input_values = iter(["https://example.com/feed.xml", "y", "n"])
+            mock_console.input.side_effect = lambda *args: next(input_values)
+
+            mock_detect.return_value = "single_url"
+            mock_feed_info = MagicMock()
+            mock_feed_info.title = "Example Feed"
+            mock_feed_info.url = "https://example.com/feed.xml"
+            mock_feed_info.preview.return_value = "Feed preview"
+            mock_validate.return_value = (True, mock_feed_info, None)
+
+            _add_feed_smart()
+
+            mock_validate.assert_called()
+
+    def test_add_feed_smart_domain_discovery(self, clean_env, temp_dir):
+        """Test adding feed via domain discovery."""
+        from src.commands import _add_feed_smart
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.feed_discovery.detect_input_type") as mock_detect, \
+             patch("src.feed_discovery.discover_feed") as mock_discover, \
+             patch("builtins.open", MagicMock()):
+
+            input_values = iter(["example.com", "y", "n"])
+            mock_console.input.side_effect = lambda *args: next(input_values)
+
+            mock_detect.return_value = "domain"
+            mock_feed_info = MagicMock()
+            mock_feed_info.title = "Example Feed"
+            mock_feed_info.url = "https://example.com/feed.xml"
+            mock_feed_info.preview.return_value = "Feed preview"
+            mock_discover.return_value = (True, mock_feed_info, None)
+
+            _add_feed_smart()
+
+            mock_discover.assert_called()
+
+    def test_add_feed_smart_platform_url(self, clean_env, temp_dir):
+        """Test adding feed from platform URL."""
+        from src.commands import _add_feed_smart
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.feed_discovery.detect_input_type") as mock_detect, \
+             patch("src.feed_discovery.transform_url") as mock_transform, \
+             patch("src.feed_discovery.validate_feed") as mock_validate, \
+             patch("builtins.open", MagicMock()):
+
+            input_values = iter(["youtube.com/@channel", "y", "n"])
+            mock_console.input.side_effect = lambda *args: next(input_values)
+
+            mock_detect.return_value = "platform_url"
+            mock_transform.return_value = "https://youtube.com/feeds/videos.xml?channel_id=123"
+
+            mock_feed_info = MagicMock()
+            mock_feed_info.title = "Channel Feed"
+            mock_feed_info.url = "https://youtube.com/feeds/videos.xml?channel_id=123"
+            mock_feed_info.preview.return_value = "Feed preview"
+            mock_validate.return_value = (True, mock_feed_info, None)
+
+            _add_feed_smart()
+
+            mock_transform.assert_called()
+
+    def test_add_feed_smart_empty_input(self, clean_env):
+        """Test add feed with empty input exits."""
+        from src.commands import _add_feed_smart
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.feed_discovery.detect_input_type") as mock_detect:
+
+            mock_console.input.return_value = ""
+
+            _add_feed_smart()
+
+            mock_detect.assert_not_called()
+
+    def test_add_feed_smart_url_not_found(self, clean_env):
+        """Test add feed when URL validation fails."""
+        from src.commands import _add_feed_smart
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.feed_discovery.detect_input_type") as mock_detect, \
+             patch("src.feed_discovery.validate_feed") as mock_validate, \
+             patch("src.feed_discovery.discover_feed") as mock_discover:
+
+            input_values = iter(["https://example.com/notfeed.html", "n"])
+            mock_console.input.side_effect = lambda *args: next(input_values)
+
+            mock_detect.return_value = "single_url"
+            mock_validate.return_value = (False, None, "Not a valid feed")
+            mock_discover.return_value = (False, None, "No feed found")
+
+            _add_feed_smart()
+
+            assert any("Not found" in str(call) for call in mock_console.print.call_args_list)
+
+
+class TestPasteMultipleUrls:
+    """Test _paste_multiple_urls function."""
+
+    def test_paste_multiple_urls_success(self, clean_env, temp_dir):
+        """Test pasting multiple URLs successfully."""
+        from src.commands import _paste_multiple_urls
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.feed_discovery.validate_feed") as mock_validate, \
+             patch("builtins.open", MagicMock()):
+
+            input_values = iter([
+                "https://example1.com/feed.xml",
+                "https://example2.com/feed.xml",
+                ""  # Blank line ends input
+            ])
+            mock_console.input.side_effect = lambda *args: next(input_values)
+
+            mock_feed_info = MagicMock()
+            mock_feed_info.title = "Feed Title"
+            mock_feed_info.url = "https://example.com/feed.xml"
+            mock_validate.return_value = (True, mock_feed_info, None)
+
+            _paste_multiple_urls()
+
+            assert mock_validate.call_count == 2
+
+    def test_paste_multiple_urls_no_urls(self, clean_env):
+        """Test pasting when no URLs provided."""
+        from src.commands import _paste_multiple_urls
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.feed_discovery.validate_feed") as mock_validate:
+
+            mock_console.input.return_value = ""  # Empty input
+
+            _paste_multiple_urls()
+
+            mock_validate.assert_not_called()
+
+    def test_paste_multiple_urls_mixed_success_failure(self, clean_env, temp_dir):
+        """Test pasting URLs with mixed success/failure."""
+        from src.commands import _paste_multiple_urls
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.feed_discovery.validate_feed") as mock_validate, \
+             patch("builtins.open", MagicMock()):
+
+            input_values = iter([
+                "https://valid.com/feed.xml",
+                "https://invalid.com/notfeed",
+                ""
+            ])
+            mock_console.input.side_effect = lambda *args: next(input_values)
+
+            mock_feed_info = MagicMock()
+            mock_feed_info.title = "Valid Feed"
+            mock_feed_info.url = "https://valid.com/feed.xml"
+
+            mock_validate.side_effect = [
+                (True, mock_feed_info, None),
+                (False, None, "Not a feed")
+            ]
+
+            _paste_multiple_urls()
+
+            # Should report both added and failed
+            print_calls = [str(call) for call in mock_console.print.call_args_list]
+            assert any("Added" in call for call in print_calls)
+
+
+class TestBrowseCuratedFeeds:
+    """Test _browse_curated_feeds function."""
+
+    def test_browse_curated_feeds_category_option(self, clean_env):
+        """Test browsing curated feeds - category option."""
+        from src.commands import _browse_curated_feeds
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.commands._show_curated_categories") as mock_categories:
+
+            mock_console.input.return_value = "1"
+
+            _browse_curated_feeds()
+
+            mock_categories.assert_called_once()
+
+    def test_browse_curated_feeds_search_option(self, clean_env):
+        """Test browsing curated feeds - search option."""
+        from src.commands import _browse_curated_feeds
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.commands._search_feeds") as mock_search:
+
+            mock_console.input.return_value = "2"
+
+            _browse_curated_feeds()
+
+            mock_search.assert_called_once()
+
+    def test_browse_curated_feeds_back(self, clean_env):
+        """Test browsing curated feeds - back option."""
+        from src.commands import _browse_curated_feeds
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.commands._show_curated_categories") as mock_categories, \
+             patch("src.commands._search_feeds") as mock_search:
+
+            mock_console.input.return_value = "b"
+
+            _browse_curated_feeds()
+
+            mock_categories.assert_not_called()
+            mock_search.assert_not_called()
+
+
+class TestShowCuratedCategories:
+    """Test _show_curated_categories function."""
+
+    def test_show_curated_categories_select_category(self, clean_env, temp_dir):
+        """Test selecting a category from curated list."""
+        from src.commands import _show_curated_categories
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.feed_catalog.CURATED_CATEGORIES", {"Tech": ["feed1", "feed2"]}), \
+             patch("src.feed_catalog.get_feeds_by_category") as mock_get, \
+             patch("src.commands._show_category_feeds") as mock_show:
+
+            mock_console.input.return_value = "1"
+            mock_get.return_value = [{"title": "Feed 1", "url": "https://example.com"}]
+
+            _show_curated_categories()
+
+            mock_get.assert_called_once()
+            mock_show.assert_called_once()
+
+    def test_show_curated_categories_back(self, clean_env):
+        """Test going back from category selection."""
+        from src.commands import _show_curated_categories
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.feed_catalog.CURATED_CATEGORIES", {"Tech": []}), \
+             patch("src.commands._show_category_feeds") as mock_show:
+
+            mock_console.input.return_value = "b"
+
+            _show_curated_categories()
+
+            mock_show.assert_not_called()
+
+    def test_show_curated_categories_invalid_selection(self, clean_env):
+        """Test invalid category selection."""
+        from src.commands import _show_curated_categories
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.feed_catalog.CURATED_CATEGORIES", {"Tech": []}), \
+             patch("src.commands._show_category_feeds") as mock_show:
+
+            mock_console.input.return_value = "99"  # Invalid number
+
+            _show_curated_categories()
+
+            assert any("Invalid selection" in str(call) for call in mock_console.print.call_args_list)
+
+    def test_show_curated_categories_non_numeric(self, clean_env):
+        """Test non-numeric category selection."""
+        from src.commands import _show_curated_categories
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.feed_catalog.CURATED_CATEGORIES", {"Tech": []}), \
+             patch("src.commands._show_category_feeds") as mock_show:
+
+            mock_console.input.return_value = "invalid"
+
+            _show_curated_categories()
+
+            assert any("Invalid selection" in str(call) for call in mock_console.print.call_args_list)
+
+
+class TestShowCategoryFeeds:
+    """Test _show_category_feeds function."""
+
+    def test_show_category_feeds_add_all(self, clean_env, temp_dir):
+        """Test adding all feeds from a category."""
+        from src.commands import _show_category_feeds
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.feed_discovery.validate_feed") as mock_validate, \
+             patch("src.commands._parse_selection") as mock_parse, \
+             patch("builtins.open", MagicMock()):
+
+            mock_console.input.return_value = "all"
+            mock_parse.return_value = [0, 1]
+
+            feeds = [
+                {"title": "Feed 1", "url": "https://feed1.com/rss", "description": "Desc 1"},
+                {"title": "Feed 2", "url": "https://feed2.com/rss", "description": "Desc 2"},
+            ]
+
+            mock_feed_info = MagicMock()
+            mock_feed_info.title = "Feed"
+            mock_feed_info.url = "https://feed.com/rss"
+            mock_validate.return_value = (True, mock_feed_info, None)
+
+            _show_category_feeds("Tech", feeds)
+
+            assert mock_validate.call_count == 2
+
+    def test_show_category_feeds_select_range(self, clean_env, temp_dir):
+        """Test selecting a range of feeds."""
+        from src.commands import _show_category_feeds
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.feed_discovery.validate_feed") as mock_validate, \
+             patch("builtins.open", MagicMock()):
+
+            mock_console.input.return_value = "1-2"
+
+            feeds = [
+                {"title": "Feed 1", "url": "https://feed1.com/rss", "description": "Desc 1"},
+                {"title": "Feed 2", "url": "https://feed2.com/rss", "description": "Desc 2"},
+                {"title": "Feed 3", "url": "https://feed3.com/rss", "description": "Desc 3"},
+            ]
+
+            mock_feed_info = MagicMock()
+            mock_feed_info.title = "Feed"
+            mock_feed_info.url = "https://feed.com/rss"
+            mock_validate.return_value = (True, mock_feed_info, None)
+
+            _show_category_feeds("Tech", feeds)
+
+            assert mock_validate.call_count == 2
+
+    def test_show_category_feeds_back(self, clean_env):
+        """Test going back from category feeds."""
+        from src.commands import _show_category_feeds
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.feed_discovery.validate_feed") as mock_validate:
+
+            mock_console.input.return_value = "b"
+
+            feeds = [{"title": "Feed", "url": "https://feed.com", "description": "Desc"}]
+
+            _show_category_feeds("Tech", feeds)
+
+            mock_validate.assert_not_called()
+
+
+class TestSearchFeeds:
+    """Test _search_feeds function."""
+
+    def test_search_feeds_success(self, clean_env, temp_dir):
+        """Test successful feed search."""
+        from src.commands import _search_feeds
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.feed_discovery.search_feeds_online") as mock_search, \
+             patch("src.commands._parse_selection") as mock_parse, \
+             patch("builtins.open", MagicMock()):
+
+            input_values = iter(["python programming", "1"])
+            mock_console.input.side_effect = lambda *args: next(input_values)
+
+            mock_search.return_value = [
+                {"title": "Python Blog", "url": "https://python.org/feed"},
+            ]
+            mock_parse.return_value = [0]
+
+            _search_feeds()
+
+            mock_search.assert_called_once_with("python programming")
+
+    def test_search_feeds_empty_query(self, clean_env):
+        """Test search with empty query."""
+        from src.commands import _search_feeds
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.feed_discovery.search_feeds_online") as mock_search:
+
+            mock_console.input.return_value = ""
+
+            _search_feeds()
+
+            mock_search.assert_not_called()
+
+    def test_search_feeds_no_results(self, clean_env):
+        """Test search with no results."""
+        from src.commands import _search_feeds
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.feed_discovery.search_feeds_online") as mock_search:
+
+            mock_console.input.return_value = "obscure query xyz123"
+            mock_search.return_value = []
+
+            _search_feeds()
+
+            assert any("No feeds found" in str(call) for call in mock_console.print.call_args_list)
+
+    def test_search_feeds_back_from_selection(self, clean_env):
+        """Test going back from search selection."""
+        from src.commands import _search_feeds
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.feed_discovery.search_feeds_online") as mock_search, \
+             patch("builtins.open") as mock_open:
+
+            input_values = iter(["python", "b"])
+            mock_console.input.side_effect = lambda *args: next(input_values)
+
+            mock_search.return_value = [{"title": "Feed", "url": "https://feed.com"}]
+
+            _search_feeds()
+
+            mock_open.assert_not_called()
+
+
+class TestFinishOnboarding:
+    """Test _finish_onboarding function."""
+
+    def test_finish_onboarding_displays_message(self, clean_env):
+        """Test finish onboarding displays completion message."""
+        from src.commands import _finish_onboarding
+
+        with patch("src.commands.console") as mock_console:
+
+            _finish_onboarding()
+
+            print_calls = [str(call) for call in mock_console.print.call_args_list]
+            assert any("Setup complete" in call for call in print_calls)
+            assert any("rss update" in call for call in print_calls)
+
+
+class TestSetupNewProvider:
+    """Test _setup_new_provider function."""
+
+    def test_setup_new_provider_gemini(self, clean_env, temp_dir):
+        """Test setting up Gemini provider."""
+        from src.commands import _setup_new_provider
+        from src.llm_providers import ProviderType
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.llm_providers.LLMConfig") as mock_config_cls:
+
+            input_values = iter(["1", "test-api-key"])
+            mock_console.input.side_effect = lambda *args: next(input_values)
+
+            mock_config = MagicMock()
+            mock_config_cls.return_value = mock_config
+
+            _setup_new_provider([])
+
+            mock_config_cls.assert_called_with(provider=ProviderType.GEMINI, api_key="test-api-key")
+            mock_config.save.assert_called_once()
+
+    def test_setup_new_provider_groq(self, clean_env, temp_dir):
+        """Test setting up Groq provider."""
+        from src.commands import _setup_new_provider
+        from src.llm_providers import ProviderType
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.llm_providers.LLMConfig") as mock_config_cls:
+
+            input_values = iter(["2", "groq-api-key"])
+            mock_console.input.side_effect = lambda *args: next(input_values)
+
+            mock_config = MagicMock()
+            mock_config_cls.return_value = mock_config
+
+            _setup_new_provider([])
+
+            mock_config_cls.assert_called_with(provider=ProviderType.GROQ, api_key="groq-api-key")
+
+    def test_setup_new_provider_claude_code(self, clean_env, temp_dir):
+        """Test setting up Claude Code provider."""
+        from src.commands import _setup_new_provider
+        from src.llm_providers import ProviderType
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.llm_providers.LLMConfig") as mock_config_cls:
+
+            input_values = iter(["3", "y"])
+            mock_console.input.side_effect = lambda *args: next(input_values)
+
+            mock_config = MagicMock()
+            mock_config_cls.return_value = mock_config
+
+            _setup_new_provider([])
+
+            mock_config_cls.assert_called_with(provider=ProviderType.CLAUDE_CODE)
+
+    def test_setup_new_provider_claude_api(self, clean_env, temp_dir):
+        """Test setting up Claude API provider."""
+        from src.commands import _setup_new_provider
+        from src.llm_providers import ProviderType
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.llm_providers.LLMConfig") as mock_config_cls:
+
+            input_values = iter(["4", "anthropic-key"])
+            mock_console.input.side_effect = lambda *args: next(input_values)
+
+            mock_config = MagicMock()
+            mock_config_cls.return_value = mock_config
+
+            _setup_new_provider([])
+
+            mock_config_cls.assert_called_with(provider=ProviderType.CLAUDE, api_key="anthropic-key")
+
+    def test_setup_new_provider_openai(self, clean_env, temp_dir):
+        """Test setting up OpenAI provider."""
+        from src.commands import _setup_new_provider
+        from src.llm_providers import ProviderType
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.llm_providers.LLMConfig") as mock_config_cls:
+
+            input_values = iter(["5", "openai-key"])
+            mock_console.input.side_effect = lambda *args: next(input_values)
+
+            mock_config = MagicMock()
+            mock_config_cls.return_value = mock_config
+
+            _setup_new_provider([])
+
+            mock_config_cls.assert_called_with(provider=ProviderType.OPENAI, api_key="openai-key")
+
+    def test_setup_new_provider_grok(self, clean_env, temp_dir):
+        """Test setting up Grok provider."""
+        from src.commands import _setup_new_provider
+        from src.llm_providers import ProviderType
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.llm_providers.LLMConfig") as mock_config_cls:
+
+            input_values = iter(["6", "xai-key"])
+            mock_console.input.side_effect = lambda *args: next(input_values)
+
+            mock_config = MagicMock()
+            mock_config_cls.return_value = mock_config
+
+            _setup_new_provider([])
+
+            mock_config_cls.assert_called_with(provider=ProviderType.GROK, api_key="xai-key")
+
+    def test_setup_new_provider_quit(self, clean_env):
+        """Test quitting provider setup."""
+        from src.commands import _setup_new_provider
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.llm_providers.LLMConfig") as mock_config_cls:
+
+            mock_console.input.return_value = "q"
+
+            _setup_new_provider([])
+
+            mock_config_cls.assert_not_called()
+
+    def test_setup_new_provider_skip_api_key(self, clean_env):
+        """Test skipping API key entry."""
+        from src.commands import _setup_new_provider
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.llm_providers.LLMConfig") as mock_config_cls:
+
+            input_values = iter(["1", "skip"])
+            mock_console.input.side_effect = lambda *args: next(input_values)
+
+            _setup_new_provider([])
+
+            mock_config_cls.assert_not_called()
+
+
+class TestShowLocalSetupInstructions:
+    """Test _show_local_setup_instructions function."""
+
+    def test_show_local_setup_instructions_displays_info(self, clean_env):
+        """Test local setup instructions are displayed."""
+        from src.commands import _show_local_setup_instructions
+
+        with patch("src.commands.console") as mock_console:
+
+            _show_local_setup_instructions()
+
+            print_calls = [str(call) for call in mock_console.print.call_args_list]
+            assert any("Local LLM Setup" in call for call in print_calls)
+            assert any("LM Studio" in call for call in print_calls)
+            assert any("Ollama" in call for call in print_calls)
+
+
+class TestSelectProvider:
+    """Test _select_provider function."""
+
+    def test_select_provider_available(self, clean_env, temp_dir):
+        """Test selecting an available provider."""
+        from src.commands import _select_provider
+        from src.llm_providers import ProviderType
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.llm_providers.LLMConfig") as mock_config_cls, \
+             patch("src.commands._onboard_feeds") as mock_onboard:
+
+            mock_console.input.return_value = "1"
+
+            mock_config = MagicMock()
+            mock_config_cls.return_value = mock_config
+
+            all_providers = [
+                {"name": "Ollama", "type": ProviderType.OLLAMA, "available": True},
+            ]
+            selectable = [(1, all_providers[0])]
+
+            _select_provider(all_providers, selectable)
+
+            mock_config.save.assert_called_once()
+            mock_onboard.assert_called_once()
+
+    def test_select_provider_unavailable(self, clean_env):
+        """Test selecting an unavailable provider."""
+        from src.commands import _select_provider
+        from src.llm_providers import ProviderType
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.commands._setup_new_provider") as mock_setup:
+
+            mock_console.input.return_value = "1"
+
+            all_providers = [
+                {"name": "OpenAI", "type": ProviderType.OPENAI, "available": False},
+            ]
+            selectable = [(1, all_providers[0])]
+
+            _select_provider(all_providers, selectable)
+
+            mock_setup.assert_called_once()
+
+    def test_select_provider_quit(self, clean_env):
+        """Test quitting provider selection."""
+        from src.commands import _select_provider
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.llm_providers.LLMConfig") as mock_config_cls:
+
+            mock_console.input.return_value = "q"
+
+            _select_provider([], [])
+
+            mock_config_cls.assert_not_called()
+
+    def test_select_provider_invalid_input(self, clean_env):
+        """Test invalid input in provider selection."""
+        from src.commands import _select_provider
+        from src.llm_providers import ProviderType
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.llm_providers.LLMConfig") as mock_config_cls:
+
+            mock_console.input.return_value = "invalid"
+
+            all_providers = [
+                {"name": "Ollama", "type": ProviderType.OLLAMA, "available": True},
+            ]
+            selectable = [(1, all_providers[0])]
+
+            _select_provider(all_providers, selectable)
+
+            assert any("Invalid selection" in str(call) for call in mock_console.print.call_args_list)
+
+
+class TestSetupWizardIntegration:
+    """Integration tests for setup wizard."""
+
+    def test_full_setup_flow_with_recommended_provider(self, clean_env, temp_dir):
+        """Test complete setup wizard flow with recommended provider."""
+        from src.llm_providers import ProviderType
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.llm_providers.list_providers") as mock_list, \
+             patch("src.llm_providers.auto_detect_provider") as mock_auto, \
+             patch("src.llm_providers.LLMConfig") as mock_config_cls, \
+             patch("src.rss.load_feeds") as mock_load, \
+             patch("src.commands._setup_feeds") as mock_setup_feeds:
+
+            mock_provider = MagicMock()
+            mock_provider.name = "Ollama"
+
+            mock_list.return_value = [
+                {"name": "Ollama", "type": ProviderType.OLLAMA, "available": True, "description": "Local LLM"},
+            ]
+            mock_auto.return_value = mock_provider
+            mock_load.return_value = []  # No existing feeds
+
+            input_values = iter(["1"])  # Use recommended
+            mock_console.input.side_effect = lambda *args: next(input_values, "")
+
+            mock_config = MagicMock()
+            mock_config_cls.return_value = mock_config
+
+            setup_wizard()
+
+            # Config should be saved
+            mock_config.save.assert_called()
+
+    def test_full_setup_flow_new_provider_gemini(self, clean_env, temp_dir):
+        """Test complete setup wizard flow setting up Gemini."""
+        from src.llm_providers import ProviderType
+
+        with patch("src.commands.console") as mock_console, \
+             patch("src.llm_providers.list_providers") as mock_list, \
+             patch("src.llm_providers.auto_detect_provider") as mock_auto, \
+             patch("src.llm_providers.LLMConfig") as mock_config_cls:
+
+            mock_list.return_value = []  # No providers available
+            mock_auto.return_value = None
+
+            input_values = iter(["1", "1", "test-gemini-key"])
+            mock_console.input.side_effect = lambda *args: next(input_values, "")
+
+            mock_config = MagicMock()
+            mock_config_cls.return_value = mock_config
+
+            setup_wizard()
+
+            # Gemini config should be created
+            mock_config_cls.assert_called_with(provider=ProviderType.GEMINI, api_key="test-gemini-key")
+
+    def test_setup_wizard_handles_exception(self, clean_env):
+        """Test setup wizard handles exceptions gracefully."""
+        with patch("src.commands.console") as mock_console, \
+             patch("src.llm_providers.list_providers") as mock_list:
+
+            mock_list.side_effect = Exception("Provider error")
+
+            # Should raise since we don't catch this exception in setup_wizard
+            with pytest.raises(Exception):
+                setup_wizard()
