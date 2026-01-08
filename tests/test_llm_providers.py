@@ -3057,3 +3057,820 @@ class TestOllamaProviderIntegration:
             # Both calls should use the same model
             for call in mock_post.call_args_list:
                 assert call[1]["json"]["model"] == "codellama"
+
+
+# =============================================================================
+# Tests for ClaudeProvider
+# =============================================================================
+
+
+class TestClaudeProviderInitialization:
+    """Tests for ClaudeProvider initialization."""
+
+    def test_initialization_with_default_model(self, clean_env):
+        """Test ClaudeProvider initializes with default model."""
+        provider = ClaudeProvider()
+
+        assert provider._model == "claude-sonnet-4-20250514"
+        assert provider.name == "Claude"
+        assert provider._client is None
+
+    def test_initialization_with_custom_model(self, clean_env):
+        """Test ClaudeProvider initializes with custom model."""
+        provider = ClaudeProvider(model="claude-opus-4-20250514")
+
+        assert provider._model == "claude-opus-4-20250514"
+        assert provider.name == "Claude"
+
+    def test_model_name_property(self, clean_env):
+        """Test model_name property returns configured model."""
+        provider = ClaudeProvider(model="claude-3-haiku")
+        assert provider.model_name == "claude-3-haiku"
+
+    def test_model_name_property_default(self, clean_env):
+        """Test model_name property returns default model."""
+        provider = ClaudeProvider()
+        assert provider.model_name == "claude-sonnet-4-20250514"
+
+    def test_inherits_from_llm_provider(self, clean_env):
+        """Test ClaudeProvider inherits from LLMProvider."""
+        provider = ClaudeProvider()
+        assert isinstance(provider, LLMProvider)
+
+    def test_session_usage_initialized(self, clean_env):
+        """Test session usage is initialized correctly."""
+        provider = ClaudeProvider()
+        assert provider.session_usage == {"calls": 0, "total_tokens": 0}
+        assert provider.last_usage is None
+
+
+class TestClaudeProviderIsAvailable:
+    """Tests for ClaudeProvider.is_available() method."""
+
+    def test_is_available_returns_true_with_sdk_and_api_key(self, clean_env):
+        """Test is_available returns True when SDK installed and API key set."""
+        os.environ["ANTHROPIC_API_KEY"] = "test-anthropic-key"
+        mock_anthropic = MagicMock()
+
+        with patch.dict("sys.modules", {"anthropic": mock_anthropic}):
+            provider = ClaudeProvider()
+            assert provider.is_available() is True
+
+    def test_is_available_returns_false_without_api_key(self, clean_env):
+        """Test is_available returns False when API key not set."""
+        # Ensure no API key is set
+        if "ANTHROPIC_API_KEY" in os.environ:
+            del os.environ["ANTHROPIC_API_KEY"]
+
+        mock_anthropic = MagicMock()
+        with patch.dict("sys.modules", {"anthropic": mock_anthropic}):
+            provider = ClaudeProvider()
+            assert provider.is_available() is False
+
+    def test_is_available_returns_false_without_sdk(self, clean_env):
+        """Test is_available returns False when SDK not installed."""
+        os.environ["ANTHROPIC_API_KEY"] = "test-anthropic-key"
+
+        # Mock ImportError by making the import fail
+        with patch.dict("sys.modules", {"anthropic": None}):
+            provider = ClaudeProvider()
+            # When module is None, import will raise ImportError or TypeError
+            assert provider.is_available() is False
+
+    def test_is_available_returns_false_without_both(self, clean_env):
+        """Test is_available returns False when neither SDK nor API key present."""
+        if "ANTHROPIC_API_KEY" in os.environ:
+            del os.environ["ANTHROPIC_API_KEY"]
+
+        with patch.dict("sys.modules", {"anthropic": None}):
+            provider = ClaudeProvider()
+            assert provider.is_available() is False
+
+    def test_is_available_with_empty_api_key(self, clean_env):
+        """Test is_available returns False when API key is empty string."""
+        os.environ["ANTHROPIC_API_KEY"] = ""
+
+        mock_anthropic = MagicMock()
+        with patch.dict("sys.modules", {"anthropic": mock_anthropic}):
+            provider = ClaudeProvider()
+            assert provider.is_available() is False
+
+
+class TestClaudeProviderSummarize:
+    """Tests for ClaudeProvider.summarize() method with mocked responses."""
+
+    def test_summarize_returns_empty_for_empty_input(self, clean_env):
+        """Test summarize returns empty string for empty input."""
+        provider = ClaudeProvider()
+        result = provider.summarize("")
+        assert result == ""
+
+    def test_summarize_makes_correct_api_call(self, clean_env):
+        """Test summarize makes correct API call to Claude."""
+        os.environ["ANTHROPIC_API_KEY"] = "test-anthropic-key"
+
+        # Create mock anthropic module and client
+        mock_usage = MagicMock()
+        mock_usage.input_tokens = 50
+        mock_usage.output_tokens = 10
+
+        mock_content = MagicMock()
+        mock_content.text = "Claude summary"
+
+        mock_message = MagicMock()
+        mock_message.content = [mock_content]
+        mock_message.usage = mock_usage
+
+        mock_client = MagicMock()
+        mock_client.messages.create.return_value = mock_message
+
+        mock_anthropic = MagicMock()
+        mock_anthropic.Anthropic.return_value = mock_client
+
+        with patch.dict("sys.modules", {"anthropic": mock_anthropic}):
+            provider = ClaudeProvider()
+            result = provider.summarize("Test article content", max_length=150)
+
+            assert result == "Claude summary"
+            mock_client.messages.create.assert_called_once()
+            call_kwargs = mock_client.messages.create.call_args[1]
+            assert call_kwargs["model"] == "claude-sonnet-4-20250514"
+            assert call_kwargs["max_tokens"] == 256
+            assert "messages" in call_kwargs
+
+    def test_summarize_with_custom_model(self, clean_env):
+        """Test summarize uses custom model in API call."""
+        os.environ["ANTHROPIC_API_KEY"] = "test-anthropic-key"
+
+        mock_usage = MagicMock()
+        mock_usage.input_tokens = 50
+        mock_usage.output_tokens = 10
+
+        mock_content = MagicMock()
+        mock_content.text = "Summary"
+
+        mock_message = MagicMock()
+        mock_message.content = [mock_content]
+        mock_message.usage = mock_usage
+
+        mock_client = MagicMock()
+        mock_client.messages.create.return_value = mock_message
+
+        mock_anthropic = MagicMock()
+        mock_anthropic.Anthropic.return_value = mock_client
+
+        with patch.dict("sys.modules", {"anthropic": mock_anthropic}):
+            provider = ClaudeProvider(model="claude-3-haiku")
+            provider.summarize("Test text")
+
+            call_kwargs = mock_client.messages.create.call_args[1]
+            assert call_kwargs["model"] == "claude-3-haiku"
+
+    def test_summarize_records_usage_from_response(self, clean_env):
+        """Test summarize records usage stats from API response."""
+        os.environ["ANTHROPIC_API_KEY"] = "test-anthropic-key"
+
+        mock_usage = MagicMock()
+        mock_usage.input_tokens = 100
+        mock_usage.output_tokens = 25
+
+        mock_content = MagicMock()
+        mock_content.text = "Summary"
+
+        mock_message = MagicMock()
+        mock_message.content = [mock_content]
+        mock_message.usage = mock_usage
+
+        mock_client = MagicMock()
+        mock_client.messages.create.return_value = mock_message
+
+        mock_anthropic = MagicMock()
+        mock_anthropic.Anthropic.return_value = mock_client
+
+        with patch.dict("sys.modules", {"anthropic": mock_anthropic}):
+            provider = ClaudeProvider()
+            provider.summarize("Test text")
+
+            assert provider.last_usage is not None
+            assert provider.last_usage.input_tokens == 100
+            assert provider.last_usage.output_tokens == 25
+            assert provider.last_usage.model == "claude-sonnet-4-20250514"
+            assert provider.last_usage.provider == "Claude"
+
+    def test_summarize_accumulates_session_usage(self, clean_env):
+        """Test multiple summarize calls accumulate session usage."""
+        os.environ["ANTHROPIC_API_KEY"] = "test-anthropic-key"
+
+        mock_usage = MagicMock()
+        mock_usage.input_tokens = 50
+        mock_usage.output_tokens = 10
+
+        mock_content = MagicMock()
+        mock_content.text = "Summary"
+
+        mock_message = MagicMock()
+        mock_message.content = [mock_content]
+        mock_message.usage = mock_usage
+
+        mock_client = MagicMock()
+        mock_client.messages.create.return_value = mock_message
+
+        mock_anthropic = MagicMock()
+        mock_anthropic.Anthropic.return_value = mock_client
+
+        with patch.dict("sys.modules", {"anthropic": mock_anthropic}):
+            provider = ClaudeProvider()
+            provider.summarize("First text")
+            provider.summarize("Second text")
+
+            assert provider.session_usage["calls"] == 2
+            assert provider.session_usage["total_tokens"] == 120  # 60 * 2
+
+    def test_summarize_strips_whitespace(self, clean_env):
+        """Test summarize strips whitespace from response."""
+        os.environ["ANTHROPIC_API_KEY"] = "test-anthropic-key"
+
+        mock_usage = MagicMock()
+        mock_usage.input_tokens = 10
+        mock_usage.output_tokens = 5
+
+        mock_content = MagicMock()
+        mock_content.text = "  Summary with whitespace  \n\n"
+
+        mock_message = MagicMock()
+        mock_message.content = [mock_content]
+        mock_message.usage = mock_usage
+
+        mock_client = MagicMock()
+        mock_client.messages.create.return_value = mock_message
+
+        mock_anthropic = MagicMock()
+        mock_anthropic.Anthropic.return_value = mock_client
+
+        with patch.dict("sys.modules", {"anthropic": mock_anthropic}):
+            provider = ClaudeProvider()
+            result = provider.summarize("Test")
+
+            assert result == "Summary with whitespace"
+
+    def test_summarize_raises_when_not_available(self, clean_env):
+        """Test summarize raises RuntimeError when provider not available."""
+        if "ANTHROPIC_API_KEY" in os.environ:
+            del os.environ["ANTHROPIC_API_KEY"]
+
+        with patch.dict("sys.modules", {"anthropic": None}):
+            provider = ClaudeProvider()
+
+            with pytest.raises(RuntimeError, match="Claude provider not available"):
+                provider.summarize("Test text")
+
+    def test_summarize_estimates_tokens_when_usage_none(self, clean_env):
+        """Test summarize estimates tokens when usage is None."""
+        os.environ["ANTHROPIC_API_KEY"] = "test-anthropic-key"
+
+        mock_content = MagicMock()
+        mock_content.text = "Summary result"
+
+        mock_message = MagicMock()
+        mock_message.content = [mock_content]
+        mock_message.usage = None  # No usage data
+
+        mock_client = MagicMock()
+        mock_client.messages.create.return_value = mock_message
+
+        mock_anthropic = MagicMock()
+        mock_anthropic.Anthropic.return_value = mock_client
+
+        with patch.dict("sys.modules", {"anthropic": mock_anthropic}):
+            provider = ClaudeProvider()
+            provider.summarize("Test text for summarization")
+
+            assert provider.last_usage is not None
+            # Should have estimated tokens
+            assert provider.last_usage.input_tokens > 0
+            assert provider.last_usage.output_tokens > 0
+
+
+class TestClaudeProviderAPIKeyHandling:
+    """Tests for ClaudeProvider API key handling."""
+
+    def test_api_key_from_environment(self, clean_env):
+        """Test API key is read from ANTHROPIC_API_KEY environment variable."""
+        os.environ["ANTHROPIC_API_KEY"] = "test-key-12345"
+
+        mock_anthropic = MagicMock()
+        with patch.dict("sys.modules", {"anthropic": mock_anthropic}):
+            provider = ClaudeProvider()
+            assert provider.is_available() is True
+
+    def test_api_key_not_in_other_env_vars(self, clean_env):
+        """Test API key is not read from other common env vars."""
+        # Set other provider keys but not ANTHROPIC_API_KEY
+        os.environ["OPENAI_API_KEY"] = "openai-key"
+        os.environ["GOOGLE_API_KEY"] = "google-key"
+
+        mock_anthropic = MagicMock()
+        with patch.dict("sys.modules", {"anthropic": mock_anthropic}):
+            provider = ClaudeProvider()
+            assert provider.is_available() is False
+
+    def test_empty_api_key_treated_as_unavailable(self, clean_env):
+        """Test empty string API key is treated as unavailable."""
+        os.environ["ANTHROPIC_API_KEY"] = ""
+
+        mock_anthropic = MagicMock()
+        with patch.dict("sys.modules", {"anthropic": mock_anthropic}):
+            provider = ClaudeProvider()
+            assert provider.is_available() is False
+
+    def test_whitespace_only_api_key(self, clean_env):
+        """Test whitespace-only API key is treated as available (truthy)."""
+        os.environ["ANTHROPIC_API_KEY"] = "   "
+
+        mock_anthropic = MagicMock()
+        with patch.dict("sys.modules", {"anthropic": mock_anthropic}):
+            provider = ClaudeProvider()
+            # Whitespace is truthy in Python, so this will return True
+            assert provider.is_available() is True
+
+
+class TestClaudeProviderErrorHandling:
+    """Tests for ClaudeProvider error handling."""
+
+    def test_summarize_raises_on_api_error(self, clean_env):
+        """Test summarize raises when API returns error."""
+        os.environ["ANTHROPIC_API_KEY"] = "test-anthropic-key"
+
+        mock_client = MagicMock()
+        mock_client.messages.create.side_effect = Exception("API Error")
+
+        mock_anthropic = MagicMock()
+        mock_anthropic.Anthropic.return_value = mock_client
+
+        with patch.dict("sys.modules", {"anthropic": mock_anthropic}):
+            provider = ClaudeProvider()
+
+            with pytest.raises(Exception, match="API Error"):
+                provider.summarize("Test text")
+
+    def test_summarize_raises_on_rate_limit(self, clean_env):
+        """Test summarize raises on rate limit error."""
+        os.environ["ANTHROPIC_API_KEY"] = "test-anthropic-key"
+
+        mock_client = MagicMock()
+        mock_client.messages.create.side_effect = Exception("Rate limit exceeded")
+
+        mock_anthropic = MagicMock()
+        mock_anthropic.Anthropic.return_value = mock_client
+
+        with patch.dict("sys.modules", {"anthropic": mock_anthropic}):
+            provider = ClaudeProvider()
+
+            with pytest.raises(Exception, match="Rate limit exceeded"):
+                provider.summarize("Test text")
+
+    def test_summarize_raises_on_invalid_api_key(self, clean_env):
+        """Test summarize raises on invalid API key."""
+        os.environ["ANTHROPIC_API_KEY"] = "invalid-key"
+
+        mock_client = MagicMock()
+        mock_client.messages.create.side_effect = Exception("Invalid API key")
+
+        mock_anthropic = MagicMock()
+        mock_anthropic.Anthropic.return_value = mock_client
+
+        with patch.dict("sys.modules", {"anthropic": mock_anthropic}):
+            provider = ClaudeProvider()
+
+            with pytest.raises(Exception, match="Invalid API key"):
+                provider.summarize("Test text")
+
+
+# =============================================================================
+# Tests for ClaudeCodeProvider
+# =============================================================================
+
+
+class TestClaudeCodeProviderInitialization:
+    """Tests for ClaudeCodeProvider initialization."""
+
+    def test_initialization_with_default_model(self):
+        """Test ClaudeCodeProvider initializes with default sonnet model."""
+        provider = ClaudeCodeProvider()
+
+        assert provider._model == "sonnet"
+        assert provider.name == "Claude Code"
+
+    def test_initialization_with_custom_model(self):
+        """Test ClaudeCodeProvider initializes with custom model."""
+        provider = ClaudeCodeProvider(model="opus")
+
+        assert provider._model == "opus"
+        assert provider.name == "Claude Code"
+
+    def test_model_name_property(self):
+        """Test model_name property returns configured model."""
+        provider = ClaudeCodeProvider(model="haiku")
+        assert provider.model_name == "haiku"
+
+    def test_model_name_property_default(self):
+        """Test model_name property returns sonnet as default."""
+        provider = ClaudeCodeProvider()
+        assert provider.model_name == "sonnet"
+
+    def test_inherits_from_llm_provider(self):
+        """Test ClaudeCodeProvider inherits from LLMProvider."""
+        provider = ClaudeCodeProvider()
+        assert isinstance(provider, LLMProvider)
+
+    def test_session_usage_initialized(self):
+        """Test session usage is initialized correctly."""
+        provider = ClaudeCodeProvider()
+        assert provider.session_usage == {"calls": 0, "total_tokens": 0}
+        assert provider.last_usage is None
+
+
+class TestClaudeCodeProviderIsAvailable:
+    """Tests for ClaudeCodeProvider.is_available() method."""
+
+    def test_is_available_returns_true_when_claude_cli_found(self):
+        """Test is_available returns True when Claude CLI is found."""
+        with patch("shutil.which") as mock_which:
+            mock_which.return_value = "/usr/local/bin/claude"
+
+            provider = ClaudeCodeProvider()
+            assert provider.is_available() is True
+            mock_which.assert_called_once_with("claude")
+
+    def test_is_available_returns_false_when_claude_cli_not_found(self):
+        """Test is_available returns False when Claude CLI not found."""
+        with patch("shutil.which") as mock_which:
+            mock_which.return_value = None
+
+            provider = ClaudeCodeProvider()
+            assert provider.is_available() is False
+            mock_which.assert_called_once_with("claude")
+
+    def test_is_available_checks_shutil_which(self):
+        """Test is_available uses shutil.which to check CLI."""
+        with patch("shutil.which") as mock_which:
+            mock_which.return_value = "/opt/homebrew/bin/claude"
+
+            provider = ClaudeCodeProvider()
+            provider.is_available()
+
+            mock_which.assert_called_with("claude")
+
+    def test_is_available_with_custom_model_same_check(self):
+        """Test is_available uses same check regardless of model."""
+        with patch("shutil.which") as mock_which:
+            mock_which.return_value = "/usr/bin/claude"
+
+            provider = ClaudeCodeProvider(model="opus")
+            assert provider.is_available() is True
+            mock_which.assert_called_once_with("claude")
+
+    def test_is_available_on_windows_path(self):
+        """Test is_available works with Windows-style paths."""
+        with patch("shutil.which") as mock_which:
+            mock_which.return_value = "C:\\Program Files\\Claude\\claude.exe"
+
+            provider = ClaudeCodeProvider()
+            assert provider.is_available() is True
+
+
+class TestClaudeCodeProviderSummarize:
+    """Tests for ClaudeCodeProvider.summarize() method with mocked subprocess."""
+
+    def test_summarize_returns_empty_for_empty_input(self):
+        """Test summarize returns empty string for empty input."""
+        provider = ClaudeCodeProvider()
+        result = provider.summarize("")
+        assert result == ""
+
+    def test_summarize_makes_correct_cli_call(self):
+        """Test summarize makes correct CLI call to Claude Code."""
+        with patch("shutil.which") as mock_which, \
+             patch("subprocess.run") as mock_run:
+            mock_which.return_value = "/usr/local/bin/claude"
+
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            mock_result.stdout = '{"result": "Claude Code summary", "usage": {"tokens": 100}}'
+            mock_result.stderr = ""
+            mock_run.return_value = mock_result
+
+            provider = ClaudeCodeProvider()
+            result = provider.summarize("Test article content", max_length=150)
+
+            assert result == "Claude Code summary"
+            mock_run.assert_called_once()
+
+            # Verify command arguments
+            call_args = mock_run.call_args
+            cmd = call_args[0][0]
+            assert cmd[0] == "claude"
+            assert "--print" in cmd
+            assert "--output-format" in cmd
+            assert "json" in cmd
+            assert "--model" in cmd
+            assert "sonnet" in cmd
+
+    def test_summarize_with_custom_model(self):
+        """Test summarize uses custom model in CLI call."""
+        with patch("shutil.which") as mock_which, \
+             patch("subprocess.run") as mock_run:
+            mock_which.return_value = "/usr/local/bin/claude"
+
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            mock_result.stdout = '{"result": "Summary"}'
+            mock_result.stderr = ""
+            mock_run.return_value = mock_result
+
+            provider = ClaudeCodeProvider(model="opus")
+            provider.summarize("Test text")
+
+            call_args = mock_run.call_args
+            cmd = call_args[0][0]
+            assert "opus" in cmd
+
+    def test_summarize_records_usage(self):
+        """Test summarize records usage stats."""
+        with patch("shutil.which") as mock_which, \
+             patch("subprocess.run") as mock_run:
+            mock_which.return_value = "/usr/local/bin/claude"
+
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            mock_result.stdout = '{"result": "Summary", "usage": {"tokens": 100}}'
+            mock_result.stderr = ""
+            mock_run.return_value = mock_result
+
+            provider = ClaudeCodeProvider()
+            provider.summarize("Test text for summarization")
+
+            assert provider.last_usage is not None
+            assert provider.last_usage.model == "sonnet"
+            assert provider.last_usage.provider == "Claude Code"
+
+    def test_summarize_strips_whitespace(self):
+        """Test summarize strips whitespace from response."""
+        with patch("shutil.which") as mock_which, \
+             patch("subprocess.run") as mock_run:
+            mock_which.return_value = "/usr/local/bin/claude"
+
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            mock_result.stdout = '{"result": "  Summary with whitespace  \\n\\n"}'
+            mock_result.stderr = ""
+            mock_run.return_value = mock_result
+
+            provider = ClaudeCodeProvider()
+            result = provider.summarize("Test")
+
+            assert result == "Summary with whitespace"
+
+    def test_summarize_raises_when_not_available(self):
+        """Test summarize raises RuntimeError when CLI not available."""
+        with patch("shutil.which") as mock_which:
+            mock_which.return_value = None
+
+            provider = ClaudeCodeProvider()
+
+            with pytest.raises(RuntimeError, match="Claude Code CLI not available"):
+                provider.summarize("Test text")
+
+    def test_summarize_uses_correct_cli_flags(self):
+        """Test summarize uses all required CLI flags."""
+        with patch("shutil.which") as mock_which, \
+             patch("subprocess.run") as mock_run:
+            mock_which.return_value = "/usr/local/bin/claude"
+
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            mock_result.stdout = '{"result": "Summary"}'
+            mock_result.stderr = ""
+            mock_run.return_value = mock_result
+
+            provider = ClaudeCodeProvider()
+            provider.summarize("Test text")
+
+            call_args = mock_run.call_args
+            cmd = call_args[0][0]
+
+            # Verify all expected flags are present
+            assert "--print" in cmd
+            assert "--output-format" in cmd
+            assert "--model" in cmd
+            assert "--tools" in cmd
+            assert "--no-session-persistence" in cmd
+
+
+class TestClaudeCodeProviderErrorHandling:
+    """Tests for ClaudeCodeProvider error handling."""
+
+    def test_summarize_raises_on_cli_error(self):
+        """Test summarize raises when CLI returns non-zero exit code."""
+        with patch("shutil.which") as mock_which, \
+             patch("subprocess.run") as mock_run:
+            mock_which.return_value = "/usr/local/bin/claude"
+
+            mock_result = MagicMock()
+            mock_result.returncode = 1
+            mock_result.stdout = ""
+            mock_result.stderr = "CLI Error: Authentication failed"
+            mock_run.return_value = mock_result
+
+            provider = ClaudeCodeProvider()
+
+            with pytest.raises(RuntimeError, match="Claude Code CLI failed"):
+                provider.summarize("Test text")
+
+    def test_summarize_raises_on_timeout(self):
+        """Test summarize raises on CLI timeout."""
+        import subprocess
+
+        with patch("shutil.which") as mock_which, \
+             patch("subprocess.run") as mock_run:
+            mock_which.return_value = "/usr/local/bin/claude"
+            mock_run.side_effect = subprocess.TimeoutExpired(cmd="claude", timeout=60)
+
+            provider = ClaudeCodeProvider()
+
+            with pytest.raises(subprocess.TimeoutExpired):
+                provider.summarize("Test text")
+
+    def test_summarize_raises_on_invalid_json_response(self):
+        """Test summarize raises on invalid JSON response from CLI."""
+        with patch("shutil.which") as mock_which, \
+             patch("subprocess.run") as mock_run:
+            mock_which.return_value = "/usr/local/bin/claude"
+
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            mock_result.stdout = "Invalid JSON output"
+            mock_result.stderr = ""
+            mock_run.return_value = mock_result
+
+            provider = ClaudeCodeProvider()
+
+            with pytest.raises(Exception):  # json.JSONDecodeError
+                provider.summarize("Test text")
+
+    def test_summarize_handles_missing_result_key(self):
+        """Test summarize handles missing 'result' key in response."""
+        with patch("shutil.which") as mock_which, \
+             patch("subprocess.run") as mock_run:
+            mock_which.return_value = "/usr/local/bin/claude"
+
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            mock_result.stdout = '{"other_key": "value"}'  # No 'result' key
+            mock_result.stderr = ""
+            mock_run.return_value = mock_result
+
+            provider = ClaudeCodeProvider()
+            result = provider.summarize("Test text")
+
+            # Should return empty string when 'result' key is missing
+            assert result == ""
+
+
+class TestClaudeCodeProviderIntegration:
+    """Integration tests for ClaudeCodeProvider with get_provider."""
+
+    def test_get_provider_returns_claude_code_provider(self, clean_env):
+        """Test get_provider returns ClaudeCodeProvider when configured."""
+        config = LLMConfig(
+            provider=ProviderType.CLAUDE_CODE,
+            model="sonnet",
+        )
+
+        provider = get_provider(config)
+
+        assert isinstance(provider, ClaudeCodeProvider)
+        assert provider._model == "sonnet"
+
+    def test_get_provider_with_custom_model(self, clean_env):
+        """Test get_provider uses custom model for ClaudeCodeProvider."""
+        config = LLMConfig(
+            provider=ProviderType.CLAUDE_CODE,
+            model="opus",
+        )
+
+        provider = get_provider(config)
+
+        assert isinstance(provider, ClaudeCodeProvider)
+        assert provider._model == "opus"
+
+    def test_get_provider_uses_default_model(self, clean_env):
+        """Test get_provider uses default sonnet model when not specified."""
+        config = LLMConfig(
+            provider=ProviderType.CLAUDE_CODE,
+            model=None,
+        )
+
+        provider = get_provider(config)
+
+        assert isinstance(provider, ClaudeCodeProvider)
+        assert provider._model == "sonnet"
+
+    def test_list_providers_includes_claude_code(self):
+        """Test list_providers includes Claude Code in the list."""
+        with patch("shutil.which") as mock_which:
+            mock_which.return_value = "/usr/local/bin/claude"
+
+            providers = list_providers()
+
+            claude_code_provider = next(
+                (p for p in providers if p["type"] == ProviderType.CLAUDE_CODE),
+                None
+            )
+            assert claude_code_provider is not None
+            assert claude_code_provider["name"] == "Claude Code"
+            assert claude_code_provider["available"] is True
+
+    def test_list_providers_claude_code_unavailable(self):
+        """Test list_providers shows Claude Code as unavailable when CLI not found."""
+        with patch("shutil.which") as mock_which:
+            mock_which.return_value = None
+
+            providers = list_providers()
+
+            claude_code_provider = next(
+                (p for p in providers if p["type"] == ProviderType.CLAUDE_CODE),
+                None
+            )
+            assert claude_code_provider is not None
+            assert claude_code_provider["available"] is False
+
+
+class TestClaudeProviderIntegration:
+    """Integration tests for ClaudeProvider with get_provider."""
+
+    def test_get_provider_returns_claude_provider(self, clean_env):
+        """Test get_provider returns ClaudeProvider when configured."""
+        config = LLMConfig(
+            provider=ProviderType.CLAUDE,
+            model="claude-sonnet-4-20250514",
+        )
+
+        provider = get_provider(config)
+
+        assert isinstance(provider, ClaudeProvider)
+        assert provider._model == "claude-sonnet-4-20250514"
+
+    def test_get_provider_with_custom_model(self, clean_env):
+        """Test get_provider uses custom model for ClaudeProvider."""
+        config = LLMConfig(
+            provider=ProviderType.CLAUDE,
+            model="claude-3-haiku",
+        )
+
+        provider = get_provider(config)
+
+        assert isinstance(provider, ClaudeProvider)
+        assert provider._model == "claude-3-haiku"
+
+    def test_get_provider_uses_default_model(self, clean_env):
+        """Test get_provider uses default model when not specified."""
+        config = LLMConfig(
+            provider=ProviderType.CLAUDE,
+            model=None,
+        )
+
+        provider = get_provider(config)
+
+        assert isinstance(provider, ClaudeProvider)
+        assert provider._model == "claude-sonnet-4-20250514"
+
+    def test_list_providers_includes_claude(self, clean_env):
+        """Test list_providers includes Claude API in the list."""
+        os.environ["ANTHROPIC_API_KEY"] = "test-key"
+
+        mock_anthropic = MagicMock()
+        with patch.dict("sys.modules", {"anthropic": mock_anthropic}):
+            providers = list_providers()
+
+            claude_provider = next(
+                (p for p in providers if p["type"] == ProviderType.CLAUDE),
+                None
+            )
+            assert claude_provider is not None
+            assert claude_provider["name"] == "Claude (API)"
+            assert claude_provider["available"] is True
+
+    def test_list_providers_claude_unavailable(self, clean_env):
+        """Test list_providers shows Claude as unavailable without API key."""
+        if "ANTHROPIC_API_KEY" in os.environ:
+            del os.environ["ANTHROPIC_API_KEY"]
+
+        providers = list_providers()
+
+        claude_provider = next(
+            (p for p in providers if p["type"] == ProviderType.CLAUDE),
+            None
+        )
+        assert claude_provider is not None
+        assert claude_provider["available"] is False
