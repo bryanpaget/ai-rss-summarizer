@@ -6764,3 +6764,1031 @@ class TestUsageTrackingConsistency:
 
         assert provider.session_usage["calls"] == 2
         assert provider.session_usage["total_tokens"] == 0
+
+
+# =============================================================================
+# Tests for Provider Unavailable Scenarios
+# =============================================================================
+
+
+class TestProviderUnavailableScenarios:
+    """Tests for scenarios when providers are unavailable."""
+
+    def test_lm_studio_unavailable_when_server_not_running(self, clean_env):
+        """Test LM Studio shows unavailable when server not running."""
+        with patch("httpx.get") as mock_get:
+            mock_get.side_effect = Exception("Connection refused")
+
+            provider = LMStudioProvider()
+            assert provider.is_available() is False
+
+    def test_ollama_unavailable_when_server_not_running(self, clean_env):
+        """Test Ollama shows unavailable when server not running."""
+        with patch("httpx.get") as mock_get:
+            mock_get.side_effect = Exception("Connection refused")
+
+            provider = OllamaProvider()
+            assert provider.is_available() is False
+
+    def test_openai_compatible_unavailable_when_endpoint_unreachable(self):
+        """Test OpenAI-compatible provider unavailable when endpoint unreachable."""
+        with patch("httpx.get") as mock_get:
+            mock_get.side_effect = Exception("Connection refused")
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:9999/v1",
+                model="test-model",
+            )
+            assert provider.is_available() is False
+
+    def test_claude_unavailable_without_api_key(self, clean_env):
+        """Test Claude shows unavailable without ANTHROPIC_API_KEY."""
+        with patch.dict(os.environ, {}, clear=True):
+            # Clear all API keys
+            for key in ["ANTHROPIC_API_KEY"]:
+                if key in os.environ:
+                    del os.environ[key]
+
+            provider = ClaudeProvider()
+            assert provider.is_available() is False
+
+    def test_claude_unavailable_without_sdk(self, clean_env):
+        """Test Claude shows unavailable without anthropic SDK."""
+        os.environ["ANTHROPIC_API_KEY"] = "test-key"
+
+        with patch.dict("sys.modules", {"anthropic": None}):
+            # Import will fail
+            provider = ClaudeProvider()
+            # With mocked import failure, is_available should return False
+            with patch("builtins.__import__", side_effect=ImportError):
+                assert provider.is_available() is False
+
+    def test_claude_code_unavailable_without_cli(self, clean_env):
+        """Test Claude Code shows unavailable without claude CLI."""
+        with patch("shutil.which") as mock_which:
+            mock_which.return_value = None
+
+            provider = ClaudeCodeProvider()
+            assert provider.is_available() is False
+
+    def test_gemini_unavailable_without_api_key(self, clean_env):
+        """Test Gemini shows unavailable without API key."""
+        # Clear all Gemini API keys
+        for key in ["GOOGLE_API_KEY", "GEMINI_API_KEY"]:
+            if key in os.environ:
+                del os.environ[key]
+
+        provider = GeminiProvider()
+        assert provider.is_available() is False
+
+    def test_gemini_cli_unavailable_without_cli(self, clean_env):
+        """Test Gemini CLI shows unavailable without gemini CLI."""
+        with patch("shutil.which") as mock_which:
+            mock_which.return_value = None
+
+            provider = GeminiCLIProvider()
+            assert provider.is_available() is False
+
+    def test_codex_cli_unavailable_without_cli(self, clean_env):
+        """Test Codex CLI shows unavailable without codex CLI."""
+        with patch("shutil.which") as mock_which:
+            mock_which.return_value = None
+
+            provider = CodexCLIProvider()
+            assert provider.is_available() is False
+
+    def test_grok_unavailable_without_api_key(self, clean_env):
+        """Test Grok shows unavailable without API key."""
+        for key in ["XAI_API_KEY", "GROK_API_KEY"]:
+            if key in os.environ:
+                del os.environ[key]
+
+        provider = GrokProvider()
+        assert provider.is_available() is False
+
+    def test_groq_unavailable_without_api_key(self, clean_env):
+        """Test Groq shows unavailable without API key."""
+        if "GROQ_API_KEY" in os.environ:
+            del os.environ["GROQ_API_KEY"]
+
+        provider = GroqProvider()
+        assert provider.is_available() is False
+
+    def test_transformers_unavailable_without_packages(self, clean_env):
+        """Test Transformers shows unavailable without required packages."""
+        with patch.dict("sys.modules", {"transformers": None, "torch": None}):
+            provider = TransformersProvider()
+            # With mocked import failure, is_available should return False
+            with patch("builtins.__import__", side_effect=ImportError):
+                assert provider.is_available() is False
+
+    def test_openai_agents_unavailable_without_api_key(self, clean_env):
+        """Test OpenAI Agents shows unavailable without API key."""
+        if "OPENAI_API_KEY" in os.environ:
+            del os.environ["OPENAI_API_KEY"]
+
+        provider = OpenAIAgentsProvider(model="gpt-4o-mini")
+        assert provider.is_available() is False
+
+
+class TestAllProvidersUnavailable:
+    """Tests for when all providers are unavailable."""
+
+    def test_auto_detect_returns_none_when_all_unavailable(self, clean_env):
+        """Test auto_detect_provider returns None when all providers unavailable."""
+        with patch("httpx.get") as mock_get, \
+             patch("shutil.which") as mock_which, \
+             patch.object(TransformersProvider, "is_available", return_value=False), \
+             patch.object(OpenAIAgentsProvider, "is_available", return_value=False):
+            # All HTTP providers fail
+            mock_get.side_effect = Exception("Connection refused")
+            # All CLI providers missing
+            mock_which.return_value = None
+
+            result = auto_detect_provider()
+
+            assert result is None
+
+    def test_get_provider_raises_when_no_config_and_none_available(self, clean_env):
+        """Test get_provider raises ValueError when no config and no providers available."""
+        with patch("httpx.get") as mock_get, \
+             patch("shutil.which") as mock_which, \
+             patch.object(TransformersProvider, "is_available", return_value=False), \
+             patch.object(OpenAIAgentsProvider, "is_available", return_value=False), \
+             patch.object(LLMConfig, "from_file", return_value=LLMConfig()):
+            mock_get.side_effect = Exception("Connection refused")
+            mock_which.return_value = None
+
+            with pytest.raises(ValueError, match="No LLM provider configured"):
+                get_provider(None)
+
+    def test_validate_llm_ready_returns_not_ready_when_unavailable(self, clean_env):
+        """Test validate_llm_ready returns not ready when provider unavailable."""
+        with patch("httpx.get") as mock_get, \
+             patch("shutil.which") as mock_which, \
+             patch.object(TransformersProvider, "is_available", return_value=False), \
+             patch.object(OpenAIAgentsProvider, "is_available", return_value=False):
+            mock_get.side_effect = Exception("Connection refused")
+            mock_which.return_value = None
+
+            provider, is_ready, error = validate_llm_ready(require_llm=True)
+
+            assert is_ready is False
+            assert error is not None
+            assert "No LLM provider" in error
+
+    def test_validate_llm_ready_includes_setup_instructions(self, clean_env):
+        """Test validate_llm_ready error includes setup instructions."""
+        with patch("httpx.get") as mock_get, \
+             patch("shutil.which") as mock_which, \
+             patch.object(TransformersProvider, "is_available", return_value=False), \
+             patch.object(OpenAIAgentsProvider, "is_available", return_value=False):
+            mock_get.side_effect = Exception("Connection refused")
+            mock_which.return_value = None
+
+            provider, is_ready, error = validate_llm_ready(require_llm=True)
+
+            assert "LM Studio" in error
+            assert "Ollama" in error
+            assert "Gemini" in error
+
+
+class TestProviderBecameUnavailable:
+    """Tests for when provider was available but becomes unavailable."""
+
+    def test_validate_llm_ready_detects_provider_became_unavailable(self, clean_env):
+        """Test validate_llm_ready detects when auto-detected provider becomes unavailable.
+
+        This tests the race condition where is_available() returns True during
+        auto_detect but False when validate_llm_ready does its own check.
+        """
+        # Create a mock provider that was found but is now unavailable
+        mock_provider = MagicMock()
+        mock_provider.is_available.return_value = False
+        mock_provider.name = "Mock Provider"
+
+        with patch("src.llm_providers.get_best_provider") as mock_get_best:
+            # Provider was found (is_llm=True) but is now unavailable
+            mock_get_best.return_value = (mock_provider, True)
+
+            provider, is_ready, error = validate_llm_ready(require_llm=True)
+
+            # Should detect provider is not available
+            assert is_ready is False
+            assert error is not None
+            assert "not currently available" in error
+
+    def test_validate_llm_ready_suggests_troubleshooting(self, clean_env):
+        """Test validate_llm_ready suggests troubleshooting steps when provider unavailable."""
+        mock_provider = MagicMock()
+        mock_provider.is_available.return_value = False
+        mock_provider.name = "LM Studio"
+
+        with patch("src.llm_providers.get_best_provider") as mock_get_best:
+            mock_get_best.return_value = (mock_provider, True)
+
+            provider, is_ready, error = validate_llm_ready(require_llm=True)
+
+            # Should include troubleshooting suggestions
+            assert "Possible issues" in error or "not currently available" in error
+
+
+# =============================================================================
+# Tests for API Error Handling
+# =============================================================================
+
+
+class TestAPIErrorResponses:
+    """Tests for various API error response handling."""
+
+    def test_api_400_bad_request(self):
+        """Test handling of 400 Bad Request response."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "test-model"}]}
+            mock_get.return_value = models_response
+
+            error_response = MagicMock()
+            error_response.status_code = 400
+            error_response.raise_for_status.side_effect = Exception("Bad Request: Invalid parameters")
+            mock_post.return_value = error_response
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                model="test-model",
+            )
+
+            with pytest.raises(Exception, match="Bad Request"):
+                provider.summarize("Test text")
+
+    def test_api_401_unauthorized(self):
+        """Test handling of 401 Unauthorized response."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "test-model"}]}
+            mock_get.return_value = models_response
+
+            error_response = MagicMock()
+            error_response.status_code = 401
+            error_response.raise_for_status.side_effect = Exception("Unauthorized: Invalid API key")
+            mock_post.return_value = error_response
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                api_key="invalid-key",
+                model="test-model",
+            )
+
+            with pytest.raises(Exception, match="Unauthorized"):
+                provider.summarize("Test text")
+
+    def test_api_403_forbidden(self):
+        """Test handling of 403 Forbidden response."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "test-model"}]}
+            mock_get.return_value = models_response
+
+            error_response = MagicMock()
+            error_response.status_code = 403
+            error_response.raise_for_status.side_effect = Exception("Forbidden: Access denied")
+            mock_post.return_value = error_response
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                model="test-model",
+            )
+
+            with pytest.raises(Exception, match="Forbidden"):
+                provider.summarize("Test text")
+
+    def test_api_404_not_found(self):
+        """Test handling of 404 Not Found response."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "test-model"}]}
+            mock_get.return_value = models_response
+
+            error_response = MagicMock()
+            error_response.status_code = 404
+            error_response.raise_for_status.side_effect = Exception("Not Found: Model not found")
+            mock_post.return_value = error_response
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                model="nonexistent-model",
+            )
+
+            with pytest.raises(Exception, match="Not Found"):
+                provider.summarize("Test text")
+
+    def test_api_429_rate_limit(self):
+        """Test handling of 429 Rate Limit response."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "test-model"}]}
+            mock_get.return_value = models_response
+
+            rate_limit_response = MagicMock()
+            rate_limit_response.status_code = 429
+            rate_limit_response.raise_for_status.side_effect = Exception("Rate limit exceeded")
+            mock_post.return_value = rate_limit_response
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                model="test-model",
+            )
+
+            with pytest.raises(Exception, match="Rate limit"):
+                provider.summarize("Test text")
+
+    def test_api_500_internal_server_error(self):
+        """Test handling of 500 Internal Server Error response."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "test-model"}]}
+            mock_get.return_value = models_response
+
+            error_response = MagicMock()
+            error_response.status_code = 500
+            error_response.raise_for_status.side_effect = Exception("Internal Server Error")
+            mock_post.return_value = error_response
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                model="test-model",
+            )
+
+            with pytest.raises(Exception, match="Internal Server Error"):
+                provider.summarize("Test text")
+
+    def test_api_502_bad_gateway(self):
+        """Test handling of 502 Bad Gateway response."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "test-model"}]}
+            mock_get.return_value = models_response
+
+            error_response = MagicMock()
+            error_response.status_code = 502
+            error_response.raise_for_status.side_effect = Exception("Bad Gateway")
+            mock_post.return_value = error_response
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                model="test-model",
+            )
+
+            with pytest.raises(Exception, match="Bad Gateway"):
+                provider.summarize("Test text")
+
+    def test_api_503_service_unavailable(self):
+        """Test handling of 503 Service Unavailable response."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "test-model"}]}
+            mock_get.return_value = models_response
+
+            error_response = MagicMock()
+            error_response.status_code = 503
+            error_response.raise_for_status.side_effect = Exception("Service Unavailable")
+            mock_post.return_value = error_response
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                model="test-model",
+            )
+
+            with pytest.raises(Exception, match="Service Unavailable"):
+                provider.summarize("Test text")
+
+
+class TestAPIConnectionErrors:
+    """Tests for API connection-level errors."""
+
+    def test_connection_refused(self):
+        """Test handling of connection refused error."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "test-model"}]}
+            mock_get.return_value = models_response
+
+            mock_post.side_effect = Exception("Connection refused")
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                model="test-model",
+            )
+
+            with pytest.raises(Exception, match="Connection refused"):
+                provider.summarize("Test text")
+
+    def test_connection_reset(self):
+        """Test handling of connection reset error."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "test-model"}]}
+            mock_get.return_value = models_response
+
+            mock_post.side_effect = Exception("Connection reset by peer")
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                model="test-model",
+            )
+
+            with pytest.raises(Exception, match="Connection reset"):
+                provider.summarize("Test text")
+
+    def test_dns_resolution_failure(self):
+        """Test handling of DNS resolution failure."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "test-model"}]}
+            mock_get.return_value = models_response
+
+            mock_post.side_effect = Exception("Failed to resolve host")
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://nonexistent-host.local/v1",
+                model="test-model",
+            )
+
+            with pytest.raises(Exception, match="resolve"):
+                provider.summarize("Test text")
+
+    def test_network_unreachable(self):
+        """Test handling of network unreachable error."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "test-model"}]}
+            mock_get.return_value = models_response
+
+            mock_post.side_effect = Exception("Network is unreachable")
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                model="test-model",
+            )
+
+            with pytest.raises(Exception, match="unreachable"):
+                provider.summarize("Test text")
+
+
+class TestMalformedAPIResponses:
+    """Tests for malformed API response handling."""
+
+    def test_empty_response_body(self):
+        """Test handling of empty response body."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "test-model"}]}
+            mock_get.return_value = models_response
+
+            empty_response = MagicMock()
+            empty_response.status_code = 200
+            empty_response.json.return_value = {}
+            empty_response.raise_for_status = MagicMock()
+            mock_post.return_value = empty_response
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                model="test-model",
+            )
+
+            with pytest.raises(KeyError):
+                provider.summarize("Test text")
+
+    def test_missing_choices_field(self):
+        """Test handling of response missing 'choices' field."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "test-model"}]}
+            mock_get.return_value = models_response
+
+            malformed_response = MagicMock()
+            malformed_response.status_code = 200
+            malformed_response.json.return_value = {"data": "unexpected"}
+            malformed_response.raise_for_status = MagicMock()
+            mock_post.return_value = malformed_response
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                model="test-model",
+            )
+
+            with pytest.raises(KeyError):
+                provider.summarize("Test text")
+
+    def test_empty_choices_array(self):
+        """Test handling of empty choices array."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "test-model"}]}
+            mock_get.return_value = models_response
+
+            empty_choices_response = MagicMock()
+            empty_choices_response.status_code = 200
+            empty_choices_response.json.return_value = {"choices": []}
+            empty_choices_response.raise_for_status = MagicMock()
+            mock_post.return_value = empty_choices_response
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                model="test-model",
+            )
+
+            with pytest.raises(IndexError):
+                provider.summarize("Test text")
+
+    def test_invalid_json_response(self):
+        """Test handling of invalid JSON response."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "test-model"}]}
+            mock_get.return_value = models_response
+
+            invalid_json_response = MagicMock()
+            invalid_json_response.status_code = 200
+            invalid_json_response.json.side_effect = json.JSONDecodeError("Invalid JSON", "", 0)
+            invalid_json_response.raise_for_status = MagicMock()
+            mock_post.return_value = invalid_json_response
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                model="test-model",
+            )
+
+            with pytest.raises(json.JSONDecodeError):
+                provider.summarize("Test text")
+
+
+# =============================================================================
+# Tests for Timeout Handling
+# =============================================================================
+
+
+class TestTimeoutHandling:
+    """Tests for timeout handling across providers."""
+
+    def test_httpx_read_timeout(self):
+        """Test handling of httpx read timeout."""
+        import httpx
+
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "test-model"}]}
+            mock_get.return_value = models_response
+
+            mock_post.side_effect = httpx.ReadTimeout("Read timed out")
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                model="test-model",
+            )
+
+            with pytest.raises(httpx.ReadTimeout):
+                provider.summarize("Test text")
+
+    def test_httpx_connect_timeout(self):
+        """Test handling of httpx connect timeout."""
+        import httpx
+
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "test-model"}]}
+            mock_get.return_value = models_response
+
+            mock_post.side_effect = httpx.ConnectTimeout("Connect timed out")
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                model="test-model",
+            )
+
+            with pytest.raises(httpx.ConnectTimeout):
+                provider.summarize("Test text")
+
+    def test_httpx_write_timeout(self):
+        """Test handling of httpx write timeout."""
+        import httpx
+
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "test-model"}]}
+            mock_get.return_value = models_response
+
+            mock_post.side_effect = httpx.WriteTimeout("Write timed out")
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                model="test-model",
+            )
+
+            with pytest.raises(httpx.WriteTimeout):
+                provider.summarize("Test text")
+
+    def test_httpx_pool_timeout(self):
+        """Test handling of httpx pool timeout."""
+        import httpx
+
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "test-model"}]}
+            mock_get.return_value = models_response
+
+            mock_post.side_effect = httpx.PoolTimeout("Pool timed out")
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                model="test-model",
+            )
+
+            with pytest.raises(httpx.PoolTimeout):
+                provider.summarize("Test text")
+
+    def test_httpx_generic_timeout(self):
+        """Test handling of generic httpx timeout."""
+        import httpx
+
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "test-model"}]}
+            mock_get.return_value = models_response
+
+            mock_post.side_effect = httpx.TimeoutException("Request timed out")
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                model="test-model",
+            )
+
+            with pytest.raises(httpx.TimeoutException):
+                provider.summarize("Test text")
+
+
+class TestTimeoutOnAvailabilityCheck:
+    """Tests for timeout during availability checks."""
+
+    def test_lm_studio_timeout_on_availability_check(self):
+        """Test LM Studio returns unavailable on timeout during availability check."""
+        import httpx
+
+        with patch("httpx.get") as mock_get:
+            mock_get.side_effect = httpx.TimeoutException("Request timed out")
+
+            provider = LMStudioProvider()
+            assert provider.is_available() is False
+
+    def test_ollama_timeout_on_availability_check(self):
+        """Test Ollama returns unavailable on timeout during availability check."""
+        import httpx
+
+        with patch("httpx.get") as mock_get:
+            mock_get.side_effect = httpx.TimeoutException("Request timed out")
+
+            provider = OllamaProvider()
+            assert provider.is_available() is False
+
+    def test_openai_compatible_timeout_on_availability_check(self):
+        """Test OpenAI-compatible returns unavailable on timeout."""
+        import httpx
+
+        with patch("httpx.get") as mock_get:
+            mock_get.side_effect = httpx.TimeoutException("Request timed out")
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                model="test-model",
+            )
+            assert provider.is_available() is False
+
+
+class TestCLIProviderTimeouts:
+    """Tests for CLI-based provider timeout handling."""
+
+    def test_claude_code_timeout(self, clean_env):
+        """Test Claude Code handles subprocess timeout."""
+        import subprocess
+
+        with patch("shutil.which") as mock_which, \
+             patch("subprocess.run") as mock_run:
+            mock_which.return_value = "/usr/bin/claude"
+            mock_run.side_effect = subprocess.TimeoutExpired(cmd="claude", timeout=60)
+
+            provider = ClaudeCodeProvider()
+
+            with pytest.raises(subprocess.TimeoutExpired):
+                provider.summarize("Test text")
+
+    def test_gemini_cli_timeout(self, clean_env):
+        """Test Gemini CLI handles subprocess timeout."""
+        import subprocess
+
+        with patch("shutil.which") as mock_which, \
+             patch("subprocess.run") as mock_run:
+            mock_which.return_value = "/usr/bin/gemini"
+            mock_run.side_effect = subprocess.TimeoutExpired(cmd="gemini", timeout=60)
+
+            provider = GeminiCLIProvider()
+
+            with pytest.raises(subprocess.TimeoutExpired):
+                provider.summarize("Test text")
+
+    def test_codex_cli_timeout(self, clean_env):
+        """Test Codex CLI handles subprocess timeout."""
+        import subprocess
+
+        with patch("shutil.which") as mock_which, \
+             patch("subprocess.run") as mock_run:
+            mock_which.return_value = "/usr/bin/codex"
+            mock_run.side_effect = subprocess.TimeoutExpired(cmd="codex", timeout=60)
+
+            provider = CodexCLIProvider()
+
+            with pytest.raises(subprocess.TimeoutExpired):
+                provider.summarize("Test text")
+
+
+class TestCLIProviderErrors:
+    """Tests for CLI-based provider error handling."""
+
+    def test_claude_code_nonzero_exit(self, clean_env):
+        """Test Claude Code handles non-zero exit code."""
+        import subprocess
+
+        with patch("shutil.which") as mock_which, \
+             patch("subprocess.run") as mock_run:
+            mock_which.return_value = "/usr/bin/claude"
+            mock_result = MagicMock()
+            mock_result.returncode = 1
+            mock_result.stderr = "Error: Authentication failed"
+            mock_run.return_value = mock_result
+
+            provider = ClaudeCodeProvider()
+
+            with pytest.raises(RuntimeError, match="Claude Code CLI failed"):
+                provider.summarize("Test text")
+
+    def test_gemini_cli_nonzero_exit(self, clean_env):
+        """Test Gemini CLI handles non-zero exit code."""
+        import subprocess
+
+        with patch("shutil.which") as mock_which, \
+             patch("subprocess.run") as mock_run:
+            mock_which.return_value = "/usr/bin/gemini"
+            mock_result = MagicMock()
+            mock_result.returncode = 1
+            mock_result.stderr = "Error: Not authenticated"
+            mock_run.return_value = mock_result
+
+            provider = GeminiCLIProvider()
+
+            with pytest.raises(RuntimeError, match="Gemini CLI failed"):
+                provider.summarize("Test text")
+
+    def test_codex_cli_nonzero_exit(self, clean_env):
+        """Test Codex CLI handles non-zero exit code."""
+        import subprocess
+
+        with patch("shutil.which") as mock_which, \
+             patch("subprocess.run") as mock_run:
+            mock_which.return_value = "/usr/bin/codex"
+            mock_result = MagicMock()
+            mock_result.returncode = 1
+            mock_result.stderr = "Error: Invalid credentials"
+            mock_run.return_value = mock_result
+
+            provider = CodexCLIProvider()
+
+            with pytest.raises(RuntimeError, match="Codex CLI failed"):
+                provider.summarize("Test text")
+
+    def test_codex_cli_invalid_json_output(self, clean_env):
+        """Test Codex CLI handles invalid JSON output."""
+        with patch("shutil.which") as mock_which, \
+             patch("subprocess.run") as mock_run:
+            mock_which.return_value = "/usr/bin/codex"
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            mock_result.stdout = "not valid json at all"
+            mock_run.return_value = mock_result
+
+            provider = CodexCLIProvider()
+
+            with pytest.raises(RuntimeError, match="No valid response"):
+                provider.summarize("Test text")
+
+
+class TestLMStudioAutoLoadErrors:
+    """Tests for LM Studio auto-load error handling."""
+
+    def test_lm_studio_no_models_loaded_error(self):
+        """Test LM Studio handles 'No models loaded' error."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": []}
+            mock_get.return_value = models_response
+
+            # First call returns "No models loaded" error
+            error_response = MagicMock()
+            error_response.status_code = 400
+            error_response.json.return_value = {
+                "error": {"message": "No models loaded"}
+            }
+            error_response.raise_for_status.side_effect = Exception("Bad Request")
+            mock_post.return_value = error_response
+
+            provider = LMStudioProvider()
+
+            with pytest.raises(Exception, match="Bad Request"):
+                provider.summarize("Test text")
+
+    def test_lm_studio_auto_load_fails_gracefully(self):
+        """Test LM Studio auto-load failure is handled gracefully."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post, \
+             patch("shutil.which") as mock_which, \
+             patch("subprocess.run") as mock_subprocess:
+            # Models endpoint returns 200 but empty
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": []}
+            mock_get.return_value = models_response
+
+            # lms CLI is available
+            mock_which.return_value = "/usr/bin/lms"
+
+            # Auto-load fails
+            mock_subprocess.return_value = MagicMock(returncode=1)
+
+            # Chat completion fails with "No models loaded"
+            error_response = MagicMock()
+            error_response.status_code = 400
+            error_response.json.return_value = {
+                "error": {"message": "No models loaded"}
+            }
+            error_response.raise_for_status.side_effect = Exception("Bad Request")
+            mock_post.return_value = error_response
+
+            provider = LMStudioProvider()
+
+            # Should eventually fail but not crash
+            with pytest.raises(Exception):
+                provider.summarize("Test text")
+
+
+class TestProviderNotAvailableForSummarize:
+    """Tests for summarize when provider reports not available."""
+
+    def test_claude_summarize_raises_when_unavailable(self, clean_env):
+        """Test Claude.summarize raises RuntimeError when not available."""
+        # Don't set API key
+        if "ANTHROPIC_API_KEY" in os.environ:
+            del os.environ["ANTHROPIC_API_KEY"]
+
+        provider = ClaudeProvider()
+
+        with pytest.raises(RuntimeError, match="not available"):
+            provider.summarize("Test text")
+
+    def test_claude_code_summarize_raises_when_unavailable(self, clean_env):
+        """Test ClaudeCode.summarize raises RuntimeError when not available."""
+        with patch("shutil.which") as mock_which:
+            mock_which.return_value = None
+
+            provider = ClaudeCodeProvider()
+
+            with pytest.raises(RuntimeError, match="not available"):
+                provider.summarize("Test text")
+
+    def test_gemini_summarize_raises_when_unavailable(self, clean_env):
+        """Test Gemini.summarize raises RuntimeError when not available."""
+        # Clear API keys
+        for key in ["GOOGLE_API_KEY", "GEMINI_API_KEY"]:
+            if key in os.environ:
+                del os.environ[key]
+
+        provider = GeminiProvider()
+
+        with pytest.raises(RuntimeError, match="not available"):
+            provider.summarize("Test text")
+
+    def test_gemini_cli_summarize_raises_when_unavailable(self, clean_env):
+        """Test GeminiCLI.summarize raises RuntimeError when not available."""
+        with patch("shutil.which") as mock_which:
+            mock_which.return_value = None
+
+            provider = GeminiCLIProvider()
+
+            with pytest.raises(RuntimeError, match="not available"):
+                provider.summarize("Test text")
+
+    def test_codex_cli_summarize_raises_when_unavailable(self, clean_env):
+        """Test CodexCLI.summarize raises RuntimeError when not available."""
+        with patch("shutil.which") as mock_which:
+            mock_which.return_value = None
+
+            provider = CodexCLIProvider()
+
+            with pytest.raises(RuntimeError, match="not available"):
+                provider.summarize("Test text")
+
+    def test_transformers_summarize_raises_when_unavailable(self, clean_env):
+        """Test Transformers.summarize raises RuntimeError when not available."""
+        with patch.dict("sys.modules", {"transformers": None, "torch": None}):
+            provider = TransformersProvider()
+
+            with patch.object(provider, "is_available", return_value=False):
+                with pytest.raises(RuntimeError, match="not available"):
+                    provider.summarize("Test text")
+
+
+class TestErrorHandlingIntegration:
+    """Integration tests for error handling across the provider system."""
+
+    def test_get_provider_with_invalid_provider_type(self, clean_env):
+        """Test get_provider raises for invalid provider type."""
+        with pytest.raises(ValueError):
+            # Create config with invalid provider value directly
+            from dataclasses import replace
+            config = LLMConfig()
+            # Manually set invalid provider (bypass enum validation)
+            config.provider = "invalid"
+            get_provider(config)
+
+    def test_get_provider_openai_compatible_missing_base_url(self, clean_env):
+        """Test get_provider raises when OpenAI-compatible missing base_url."""
+        config = LLMConfig(
+            provider=ProviderType.OPENAI_COMPATIBLE,
+            base_url=None,  # Missing required field
+        )
+
+        with pytest.raises(ValueError, match="base_url required"):
+            get_provider(config)
+
+    def test_list_providers_handles_check_failures(self, clean_env):
+        """Test list_providers handles provider check failures gracefully."""
+        with patch("httpx.get") as mock_get:
+            # All HTTP checks fail
+            mock_get.side_effect = Exception("Connection failed")
+
+            # Should not raise, just return providers marked unavailable
+            providers = list_providers()
+
+            assert isinstance(providers, list)
+            # Local HTTP providers should be unavailable
+            lm_studio = next(
+                (p for p in providers if p["type"] == ProviderType.LM_STUDIO),
+                None
+            )
+            if lm_studio:
+                assert lm_studio["available"] is False
+
+    def test_error_does_not_update_usage_stats(self):
+        """Test that errors don't increment usage stats."""
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "test-model"}]}
+            mock_get.return_value = models_response
+
+            mock_post.side_effect = Exception("API Error")
+
+            provider = OpenAICompatibleProvider(
+                base_url="http://localhost:1234/v1",
+                model="test-model",
+            )
+
+            initial_calls = provider.session_usage["calls"]
+            initial_tokens = provider.session_usage["total_tokens"]
+
+            try:
+                provider.summarize("Test text")
+            except Exception:
+                pass
+
+            # Usage should not have been updated
+            assert provider.session_usage["calls"] == initial_calls
+            assert provider.session_usage["total_tokens"] == initial_tokens
