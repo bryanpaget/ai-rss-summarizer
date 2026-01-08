@@ -540,12 +540,130 @@ def _save_provider_config(provider, providers_list) -> None:
         console.print("[red]Could not determine provider type[/red]")
         return
 
-    config = LLMConfig(provider=provider_type)
+    # LM Studio needs additional configuration for safe auto-loading
+    if provider_type == ProviderType.LM_STUDIO:
+        config = _setup_lm_studio_config()
+        if config is None:
+            return  # User cancelled
+    else:
+        config = LLMConfig(provider=provider_type)
+
     config.save()
     console.print(f"[green]Saved {provider.name} as default provider.[/green]")
     console.print(f"[dim]Configuration saved to config/llm.json[/dim]")
     console.print()
     _onboard_feeds()
+
+
+def _setup_lm_studio_config():
+    """
+    Guide user through LM Studio configuration for safe auto-loading.
+
+    Returns configured LLMConfig or None if cancelled.
+    """
+    import shutil
+    import subprocess
+    from .llm_providers import LLMConfig, ProviderType
+
+    console.print()
+    console.print("[bold]LM Studio Configuration[/bold]")
+    console.print()
+
+    # Explain auto-loading
+    console.print("[yellow]How Auto-Loading Works:[/yellow]")
+    console.print("  Unlike cloud providers, local LLMs must be loaded into memory.")
+    console.print("  This app will automatically load your configured model when needed.")
+    console.print("  The model unloads after 5 minutes idle to save resources.")
+    console.print()
+
+    # Check if lms CLI is available
+    if not shutil.which('lms'):
+        console.print("[red]LM Studio CLI (lms) not found.[/red]")
+        console.print("  Make sure LM Studio is installed and running.")
+        console.print("  The lms command should be available in your PATH.")
+        return None
+
+    # Get available models
+    console.print("[dim]Checking available models...[/dim]")
+    try:
+        result = subprocess.run(
+            ["lms", "ls"],
+            capture_output=True,
+            timeout=10,
+            text=True
+        )
+        models_output = result.stdout
+    except Exception as e:
+        console.print(f"[red]Could not list models: {e}[/red]")
+        models_output = ""
+
+    # Recommend lightweight model
+    console.print()
+    console.print("[cyan]Model Selection for Auto-Load:[/cyan]")
+    console.print("  For auto-loading, use a [bold]lightweight model[/bold] that:")
+    console.print("  - Loads quickly (under 30 seconds)")
+    console.print("  - Uses less memory (under 4GB)")
+    console.print("  - Still provides good summarization quality")
+    console.print()
+    console.print("  Recommended: [bold]google/gemma-3n-e4b[/bold]")
+    console.print()
+    console.print("  [dim]For intensive work, you can manually load a larger model")
+    console.print("  in LM Studio - the app will use whatever is loaded.[/dim]")
+    console.print()
+
+    # Get model name from user
+    default_model = "google/gemma-3n-e4b"
+    model_input = console.input(f"[bold]Model for auto-load [{default_model}]: [/bold]").strip()
+    model_name = model_input if model_input else default_model
+
+    # Verify model can be loaded safely
+    console.print()
+    console.print(f"[dim]Checking if {model_name} can be loaded safely...[/dim]")
+
+    try:
+        estimate_result = subprocess.run(
+            ["lms", "load", model_name, "--estimate-only", "--yes"],
+            capture_output=True,
+            timeout=30,
+            text=True
+        )
+        estimate_output = estimate_result.stdout + estimate_result.stderr
+
+        if "cannot be loaded" in estimate_output.lower():
+            console.print()
+            console.print(f"[red]Warning: {model_name} may not have enough resources to load.[/red]")
+            console.print(f"[dim]{estimate_output}[/dim]")
+            console.print()
+            proceed = console.input("Continue anyway? [y/N]: ").strip().lower()
+            if proceed != 'y':
+                console.print("[dim]Setup cancelled. Try a smaller model.[/dim]")
+                return None
+        else:
+            console.print(f"[green]Resource check passed for {model_name}[/green]")
+
+    except Exception as e:
+        console.print(f"[yellow]Could not verify resources: {e}[/yellow]")
+        console.print("Proceeding with configuration anyway.")
+
+    # Create config with model and auto-load settings
+    config = LLMConfig(
+        provider=ProviderType.LM_STUDIO,
+        model=model_name,
+        defaults={
+            "auto_load": {
+                "enabled": True,
+                "ttl_seconds": 300
+            }
+        }
+    )
+
+    console.print()
+    console.print("[green]LM Studio configured![/green]")
+    console.print(f"  Model: {model_name}")
+    console.print(f"  Auto-load: Enabled")
+    console.print(f"  TTL: 300 seconds (5 minutes)")
+
+    return config
 
 
 def _onboard_feeds() -> None:
@@ -1115,13 +1233,37 @@ def _show_local_setup_instructions() -> None:
     console.print()
     console.print("[bold]Local LLM Setup[/bold]")
     console.print()
-    console.print("[cyan]LM Studio (recommended for GPU users):[/cyan]")
+
+    # Explain difference from cloud providers
+    console.print("[yellow]Important: How Local LLMs Differ from Cloud Providers[/yellow]")
+    console.print()
+    console.print("  Cloud providers (Gemini, Claude, OpenAI) are always available.")
+    console.print("  Local LLMs must be [bold]loaded into memory[/bold] before use.")
+    console.print()
+    console.print("  This app will [bold]auto-load[/bold] a model when needed:")
+    console.print("  - Checks if a model is already loaded")
+    console.print("  - If not, automatically loads your configured model")
+    console.print("  - Model auto-unloads after 5 minutes idle (saves resources)")
+    console.print()
+    console.print("  [cyan]Recommended: Use a lighter model for auto-load[/cyan]")
+    console.print("  Auto-loading happens automatically, so use a smaller model")
+    console.print("  that loads quickly and uses less memory. For intensive work,")
+    console.print("  you can manually load a larger model in LM Studio.")
+    console.print()
+
+    console.print("[cyan]LM Studio Setup:[/cyan]")
     console.print("  1. Download from https://lmstudio.ai")
-    console.print("  2. Load any model (e.g., Llama 2, Mistral)")
+    console.print("  2. Download a [bold]lightweight model[/bold] for auto-load:")
+    console.print("     - Recommended: google/gemma-3n-e4b (fast, low memory)")
+    console.print("     - Alternative: Any model under 4GB")
     console.print("  3. Click 'Start Server' in the Local Server tab")
     console.print("  4. Run 'rss setup' again - it will auto-detect")
     console.print()
-    console.print("[cyan]Ollama (simpler setup):[/cyan]")
+    console.print("  [dim]Tip: You can load a larger model manually in LM Studio")
+    console.print("  for better quality when doing intensive analysis.[/dim]")
+    console.print()
+
+    console.print("[cyan]Ollama Setup:[/cyan]")
     console.print("  1. Install from https://ollama.ai")
     console.print("  2. Run: ollama pull llama2")
     console.print("  3. Run: ollama serve")

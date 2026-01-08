@@ -396,13 +396,121 @@ class LMStudioProvider(OpenAICompatibleProvider):
             if result.returncode != 0:
                 return False
 
-            # TODO: Post-load headroom check (Issue 2)
+            # Post-load headroom check
             # After loading, verify system still has adequate resources
             # If overloaded, unload and return False
+            if not self._check_post_load_headroom(model_to_load):
+                return False
 
             return True
         except Exception:
             return False
+
+    def _check_post_load_headroom(self, loaded_model: str) -> bool:
+        """
+        Verify system has adequate resources after model load.
+
+        Checks for minimum memory headroom (1GB by default).
+        If system is resource-constrained, unloads the model and returns False.
+
+        Returns:
+            True if system has adequate headroom
+            False if overloaded (model will be unloaded)
+        """
+        import subprocess
+        import shutil
+
+        # Minimum headroom in MB (2GB required)
+        MIN_HEADROOM_MB = 2048
+
+        try:
+            # Try to get memory info using platform-appropriate method
+            available_mb = self._get_available_memory_mb()
+
+            if available_mb is None:
+                # Can't determine memory - assume OK
+                return True
+
+            if available_mb < MIN_HEADROOM_MB:
+                # System is resource-constrained - unload and return False
+                try:
+                    subprocess.run(
+                        ["lms", "unload", "--yes"],
+                        capture_output=True,
+                        timeout=30,
+                    )
+                except Exception:
+                    pass
+                return False
+
+            return True
+
+        except Exception:
+            # If we can't check, assume OK
+            return True
+
+    def _get_available_memory_mb(self) -> int | None:
+        """
+        Get available system memory in MB.
+
+        Returns:
+            Available memory in MB, or None if can't determine
+        """
+        import sys
+
+        try:
+            if sys.platform == "win32":
+                # Windows: use ctypes to get memory status
+                import ctypes
+
+                class MEMORYSTATUSEX(ctypes.Structure):
+                    _fields_ = [
+                        ("dwLength", ctypes.c_ulong),
+                        ("dwMemoryLoad", ctypes.c_ulong),
+                        ("ullTotalPhys", ctypes.c_ulonglong),
+                        ("ullAvailPhys", ctypes.c_ulonglong),
+                        ("ullTotalPageFile", ctypes.c_ulonglong),
+                        ("ullAvailPageFile", ctypes.c_ulonglong),
+                        ("ullTotalVirtual", ctypes.c_ulonglong),
+                        ("ullAvailVirtual", ctypes.c_ulonglong),
+                        ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+                    ]
+
+                stat = MEMORYSTATUSEX()
+                stat.dwLength = ctypes.sizeof(stat)
+                ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat))
+                return stat.ullAvailPhys // (1024 * 1024)
+
+            else:
+                # Linux/Mac: read from /proc/meminfo or use sysctl
+                try:
+                    with open("/proc/meminfo", "r") as f:
+                        for line in f:
+                            if line.startswith("MemAvailable:"):
+                                # Value is in kB
+                                kb = int(line.split()[1])
+                                return kb // 1024
+                except FileNotFoundError:
+                    # macOS - use vm_stat
+                    import subprocess
+                    result = subprocess.run(
+                        ["vm_stat"],
+                        capture_output=True,
+                        text=True,
+                        timeout=5
+                    )
+                    if result.returncode == 0:
+                        # Parse vm_stat output
+                        # Pages free: XXX
+                        # Page size is typically 4096 bytes
+                        for line in result.stdout.split("\n"):
+                            if "Pages free" in line:
+                                pages = int(line.split(":")[1].strip().rstrip("."))
+                                return (pages * 4096) // (1024 * 1024)
+                return None
+
+        except Exception:
+            return None
 
     def _make_request(self, prompt: str, max_tokens: int, is_summarize: bool = False) -> str:
         """Make a request with auto-load retry on 'No models loaded' error."""
