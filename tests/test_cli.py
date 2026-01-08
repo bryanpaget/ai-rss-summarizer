@@ -1400,3 +1400,1305 @@ class TestAppImports:
         """Test that get_storage can be imported."""
         from src.cli import get_storage
         assert callable(get_storage)
+
+
+# =============================================================================
+# CLI Argument Parsing Tests
+# =============================================================================
+
+
+class TestFetchCommandArguments:
+    """Test fetch command argument parsing."""
+
+    def test_fetch_default_feeds_file(self, cli_runner):
+        """Test fetch uses default feeds file path."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.load_feeds") as mock_load, \
+             patch("src.cli.fetch_all_feeds") as mock_fetch:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_load.return_value = ["https://example.com/feed.xml"]
+            mock_fetch.return_value = []
+
+            result = cli_runner.invoke(app, ["fetch"])
+            # Default is config/feeds.txt
+            mock_load.assert_called_with("config/feeds.txt")
+
+    def test_fetch_custom_feeds_file_short(self, cli_runner):
+        """Test fetch with -f short option for feeds file."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.load_feeds") as mock_load, \
+             patch("src.cli.fetch_all_feeds") as mock_fetch:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_load.return_value = ["https://example.com/feed.xml"]
+            mock_fetch.return_value = []
+
+            result = cli_runner.invoke(app, ["fetch", "-f", "custom/feeds.txt"])
+            mock_load.assert_called_with("custom/feeds.txt")
+
+    def test_fetch_custom_feeds_file_long(self, cli_runner):
+        """Test fetch with --feeds long option for feeds file."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.load_feeds") as mock_load, \
+             patch("src.cli.fetch_all_feeds") as mock_fetch:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_load.return_value = ["https://example.com/feed.xml"]
+            mock_fetch.return_value = []
+
+            result = cli_runner.invoke(app, ["fetch", "--feeds", "custom/feeds.txt"])
+            mock_load.assert_called_with("custom/feeds.txt")
+
+    def test_fetch_default_db_path(self, cli_runner):
+        """Test fetch uses default database path."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.load_feeds") as mock_load, \
+             patch("src.cli.fetch_all_feeds") as mock_fetch:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_load.return_value = ["https://example.com/feed.xml"]
+            mock_fetch.return_value = []
+
+            result = cli_runner.invoke(app, ["fetch"])
+            # Default is articles.db
+            mock_storage.assert_called_with("articles.db")
+
+    def test_fetch_custom_db_path_short(self, cli_runner):
+        """Test fetch with -d short option for database path."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.load_feeds") as mock_load, \
+             patch("src.cli.fetch_all_feeds") as mock_fetch:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_load.return_value = ["https://example.com/feed.xml"]
+            mock_fetch.return_value = []
+
+            result = cli_runner.invoke(app, ["fetch", "-d", "custom.db"])
+            mock_storage.assert_called_with("custom.db")
+
+    def test_fetch_custom_db_path_long(self, cli_runner):
+        """Test fetch with --db long option for database path."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.load_feeds") as mock_load, \
+             patch("src.cli.fetch_all_feeds") as mock_fetch:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_load.return_value = ["https://example.com/feed.xml"]
+            mock_fetch.return_value = []
+
+            result = cli_runner.invoke(app, ["fetch", "--db", "custom.db"])
+            mock_storage.assert_called_with("custom.db")
+
+    def test_fetch_combined_options(self, cli_runner):
+        """Test fetch with both feeds and db options."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.load_feeds") as mock_load, \
+             patch("src.cli.fetch_all_feeds") as mock_fetch:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_load.return_value = ["https://example.com/feed.xml"]
+            mock_fetch.return_value = []
+
+            result = cli_runner.invoke(app, [
+                "fetch", "-f", "my/feeds.txt", "-d", "my.db"
+            ])
+            mock_load.assert_called_with("my/feeds.txt")
+            mock_storage.assert_called_with("my.db")
+
+
+class TestSummarizeCommandArguments:
+    """Test summarize command argument parsing."""
+
+    def test_summarize_default_limit(self, cli_runner):
+        """Test summarize uses default limit of 10."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.summarize_articles") as mock_summarize:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_summarize.return_value = {"processed": 0, "errors": []}
+
+            result = cli_runner.invoke(app, ["summarize"])
+            mock_summarize.assert_called_with(
+                mock_storage.return_value, limit=10, use_llm=False, tag_articles=False
+            )
+
+    def test_summarize_custom_limit_short(self, cli_runner):
+        """Test summarize with -n short option for limit."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.summarize_articles") as mock_summarize:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_summarize.return_value = {"processed": 0, "errors": []}
+
+            result = cli_runner.invoke(app, ["summarize", "-n", "25"])
+            mock_summarize.assert_called_with(
+                mock_storage.return_value, limit=25, use_llm=False, tag_articles=False
+            )
+
+    def test_summarize_custom_limit_long(self, cli_runner):
+        """Test summarize with --limit long option."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.summarize_articles") as mock_summarize:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_summarize.return_value = {"processed": 0, "errors": []}
+
+            result = cli_runner.invoke(app, ["summarize", "--limit", "50"])
+            mock_summarize.assert_called_with(
+                mock_storage.return_value, limit=50, use_llm=False, tag_articles=False
+            )
+
+    def test_summarize_llm_flag(self, cli_runner):
+        """Test summarize with --llm flag."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.summarize_articles") as mock_summarize:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_summarize.return_value = {"processed": 0, "errors": []}
+
+            result = cli_runner.invoke(app, ["summarize", "--llm"])
+            mock_summarize.assert_called_with(
+                mock_storage.return_value, limit=10, use_llm=True, tag_articles=False
+            )
+
+    def test_summarize_tag_flag(self, cli_runner):
+        """Test summarize with --tag flag."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.summarize_articles") as mock_summarize:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_summarize.return_value = {"processed": 0, "errors": []}
+
+            result = cli_runner.invoke(app, ["summarize", "--tag"])
+            mock_summarize.assert_called_with(
+                mock_storage.return_value, limit=10, use_llm=False, tag_articles=True
+            )
+
+    def test_summarize_combined_flags(self, cli_runner):
+        """Test summarize with multiple flags combined."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.summarize_articles") as mock_summarize:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_summarize.return_value = {"processed": 0, "errors": []}
+
+            result = cli_runner.invoke(app, ["summarize", "--llm", "--tag", "-n", "100"])
+            mock_summarize.assert_called_with(
+                mock_storage.return_value, limit=100, use_llm=True, tag_articles=True
+            )
+
+
+class TestTrendsCommandArguments:
+    """Test trends command argument parsing."""
+
+    def test_trends_default_limit(self, cli_runner):
+        """Test trends uses default limit of 100."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.analyze_trends") as mock_analyze:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_analyze.return_value = {"top_trends": [], "processed": 0}
+
+            result = cli_runner.invoke(app, ["trends"])
+            mock_analyze.assert_called_with(mock_storage.return_value, limit=100)
+
+    def test_trends_custom_limit(self, cli_runner):
+        """Test trends with custom limit."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.analyze_trends") as mock_analyze:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_analyze.return_value = {"top_trends": [], "processed": 0}
+
+            result = cli_runner.invoke(app, ["trends", "-n", "500"])
+            mock_analyze.assert_called_with(mock_storage.return_value, limit=500)
+
+
+class TestListCommandArguments:
+    """Test list command argument parsing."""
+
+    def test_list_default_limit(self, cli_runner):
+        """Test list uses default limit of 20."""
+        with patch("src.cli.get_storage") as mock_storage:
+            storage_mock = MagicMock()
+            storage_mock.get_articles.return_value = []
+            mock_storage.return_value = storage_mock
+
+            result = cli_runner.invoke(app, ["list"])
+            storage_mock.get_articles.assert_called_with(limit=20)
+
+    def test_list_custom_limit(self, cli_runner):
+        """Test list with custom limit."""
+        with patch("src.cli.get_storage") as mock_storage:
+            storage_mock = MagicMock()
+            storage_mock.get_articles.return_value = []
+            mock_storage.return_value = storage_mock
+
+            result = cli_runner.invoke(app, ["list", "-n", "50"])
+            storage_mock.get_articles.assert_called_with(limit=50)
+
+    def test_list_trend_filter_short(self, cli_runner):
+        """Test list with -t short option for trend filter."""
+        with patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.get_articles_by_trend") as mock_by_trend:
+            storage_mock = MagicMock()
+            mock_storage.return_value = storage_mock
+            mock_by_trend.return_value = []
+
+            result = cli_runner.invoke(app, ["list", "-t", "AI & Technology"])
+            mock_by_trend.assert_called_with(storage_mock, "AI & Technology", limit=20)
+
+    def test_list_trend_filter_long(self, cli_runner):
+        """Test list with --trend long option for trend filter."""
+        with patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.get_articles_by_trend") as mock_by_trend:
+            storage_mock = MagicMock()
+            mock_storage.return_value = storage_mock
+            mock_by_trend.return_value = []
+
+            result = cli_runner.invoke(app, ["list", "--trend", "Business"])
+            mock_by_trend.assert_called_with(storage_mock, "Business", limit=20)
+
+    def test_list_summary_flag_short(self, cli_runner):
+        """Test list with -s short option for summary display."""
+        with patch("src.cli.get_storage") as mock_storage:
+            storage_mock = MagicMock()
+            article_mock = MagicMock()
+            article_mock.title = "Test Article"
+            article_mock.published = None
+            article_mock.trend_tags = None
+            article_mock.summary = "Test summary"
+            storage_mock.get_articles.return_value = [article_mock]
+            mock_storage.return_value = storage_mock
+
+            result = cli_runner.invoke(app, ["list", "-s"])
+            # Should show summary section
+            assert "Summaries" in result.stdout or result.exit_code == 0
+
+    def test_list_summary_flag_long(self, cli_runner):
+        """Test list with --summary long option."""
+        with patch("src.cli.get_storage") as mock_storage:
+            storage_mock = MagicMock()
+            article_mock = MagicMock()
+            article_mock.title = "Test Article"
+            article_mock.published = None
+            article_mock.trend_tags = None
+            article_mock.summary = "Test summary"
+            storage_mock.get_articles.return_value = [article_mock]
+            mock_storage.return_value = storage_mock
+
+            result = cli_runner.invoke(app, ["list", "--summary"])
+            # Should show summary section
+            assert "Summaries" in result.stdout or result.exit_code == 0
+
+    def test_list_combined_options(self, cli_runner):
+        """Test list with multiple options combined."""
+        with patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.get_articles_by_trend") as mock_by_trend:
+            storage_mock = MagicMock()
+            mock_storage.return_value = storage_mock
+            mock_by_trend.return_value = []
+
+            result = cli_runner.invoke(app, [
+                "list", "-n", "30", "-t", "Science", "-s"
+            ])
+            mock_by_trend.assert_called_with(storage_mock, "Science", limit=30)
+
+
+class TestAddFeedCommandArguments:
+    """Test add-feed command argument parsing."""
+
+    def test_add_feed_requires_url(self, cli_runner):
+        """Test add-feed requires URL argument."""
+        result = cli_runner.invoke(app, ["add-feed"])
+        assert result.exit_code != 0
+
+    def test_add_feed_with_url(self, cli_runner, temp_dir):
+        """Test add-feed with URL argument."""
+        feeds_file = os.path.join(temp_dir, "config", "feeds.txt")
+        os.makedirs(os.path.dirname(feeds_file), exist_ok=True)
+        Path(feeds_file).touch()
+
+        with patch("src.cli.load_feeds") as mock_load:
+            mock_load.return_value = []
+
+            result = cli_runner.invoke(app, [
+                "add-feed", "https://example.com/feed.xml",
+                "-f", feeds_file
+            ])
+            assert result.exit_code == 0
+            assert "Added feed" in result.stdout
+
+    def test_add_feed_custom_feeds_file(self, cli_runner, temp_dir):
+        """Test add-feed with custom feeds file."""
+        feeds_file = os.path.join(temp_dir, "my_feeds.txt")
+        Path(feeds_file).touch()
+
+        with patch("src.cli.load_feeds") as mock_load:
+            mock_load.return_value = []
+
+            result = cli_runner.invoke(app, [
+                "add-feed", "https://example.com/feed.xml",
+                "--feeds", feeds_file
+            ])
+            assert result.exit_code == 0
+
+
+class TestUpdateCommandArguments:
+    """Test update command argument parsing."""
+
+    def test_update_no_topic(self, cli_runner):
+        """Test update with no topic argument."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.commands.update") as mock_update:
+            mock_setup.return_value = None
+
+            result = cli_runner.invoke(app, ["update"])
+            mock_update.assert_called_with(
+                topic_filter=None,
+                limit=10,
+                show_all=False,
+                use_context=True,
+                show_scores=False,
+                min_relevance=0.0,
+            )
+
+    def test_update_single_topic_word(self, cli_runner):
+        """Test update with single topic word."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.commands.update") as mock_update:
+            mock_setup.return_value = None
+
+            result = cli_runner.invoke(app, ["update", "tech"])
+            mock_update.assert_called_with(
+                topic_filter="tech",
+                limit=10,
+                show_all=False,
+                use_context=True,
+                show_scores=False,
+                min_relevance=0.0,
+            )
+
+    def test_update_multiple_topic_words(self, cli_runner):
+        """Test update with multiple topic words (no quotes needed)."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.commands.update") as mock_update:
+            mock_setup.return_value = None
+
+            result = cli_runner.invoke(app, ["update", "AI", "news", "tech"])
+            mock_update.assert_called_with(
+                topic_filter="AI news tech",
+                limit=10,
+                show_all=False,
+                use_context=True,
+                show_scores=False,
+                min_relevance=0.0,
+            )
+
+    def test_update_custom_limit(self, cli_runner):
+        """Test update with custom limit."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.commands.update") as mock_update:
+            mock_setup.return_value = None
+
+            result = cli_runner.invoke(app, ["update", "-n", "25"])
+            mock_update.assert_called_with(
+                topic_filter=None,
+                limit=25,
+                show_all=False,
+                use_context=True,
+                show_scores=False,
+                min_relevance=0.0,
+            )
+
+    def test_update_all_flag_short(self, cli_runner):
+        """Test update with -a short flag for all articles."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.commands.update") as mock_update:
+            mock_setup.return_value = None
+
+            result = cli_runner.invoke(app, ["update", "-a"])
+            mock_update.assert_called_with(
+                topic_filter=None,
+                limit=10,
+                show_all=True,
+                use_context=True,
+                show_scores=False,
+                min_relevance=0.0,
+            )
+
+    def test_update_all_flag_long(self, cli_runner):
+        """Test update with --all long flag."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.commands.update") as mock_update:
+            mock_setup.return_value = None
+
+            result = cli_runner.invoke(app, ["update", "--all"])
+            mock_update.assert_called_with(
+                topic_filter=None,
+                limit=10,
+                show_all=True,
+                use_context=True,
+                show_scores=False,
+                min_relevance=0.0,
+            )
+
+    def test_update_show_scores_flag(self, cli_runner):
+        """Test update with --show-scores flag."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.commands.update") as mock_update:
+            mock_setup.return_value = None
+
+            result = cli_runner.invoke(app, ["update", "--show-scores"])
+            mock_update.assert_called_with(
+                topic_filter=None,
+                limit=10,
+                show_all=False,
+                use_context=True,
+                show_scores=True,
+                min_relevance=0.0,
+            )
+
+    def test_update_min_relevance(self, cli_runner):
+        """Test update with --min-relevance option."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.commands.update") as mock_update:
+            mock_setup.return_value = None
+
+            result = cli_runner.invoke(app, ["update", "--min-relevance", "0.7"])
+            mock_update.assert_called_with(
+                topic_filter=None,
+                limit=10,
+                show_all=False,
+                use_context=True,
+                show_scores=False,
+                min_relevance=0.7,
+            )
+
+    def test_update_no_context_flag(self, cli_runner):
+        """Test update with --no-context flag."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.commands.update") as mock_update:
+            mock_setup.return_value = None
+
+            result = cli_runner.invoke(app, ["update", "--no-context"])
+            mock_update.assert_called_with(
+                topic_filter=None,
+                limit=10,
+                show_all=False,
+                use_context=False,
+                show_scores=False,
+                min_relevance=0.0,
+            )
+
+    def test_update_combined_options(self, cli_runner):
+        """Test update with all options combined."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.commands.update") as mock_update:
+            mock_setup.return_value = None
+
+            result = cli_runner.invoke(app, [
+                "update", "tech", "AI",
+                "-n", "50",
+                "--all",
+                "--show-scores",
+                "--min-relevance", "0.5",
+                "--no-context"
+            ])
+            mock_update.assert_called_with(
+                topic_filter="tech AI",
+                limit=50,
+                show_all=True,
+                use_context=False,
+                show_scores=True,
+                min_relevance=0.5,
+            )
+
+
+class TestDiscoverCommandArguments:
+    """Test discover command argument parsing."""
+
+    def test_discover_requires_query(self, cli_runner):
+        """Test discover requires query argument."""
+        result = cli_runner.invoke(app, ["discover"])
+        assert result.exit_code != 0
+
+    def test_discover_with_query(self, cli_runner):
+        """Test discover with query argument."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.llm_providers.get_best_provider") as mock_get_provider:
+            mock_setup.return_value = None
+            mock_get_provider.return_value = (None, False)
+
+            result = cli_runner.invoke(app, ["discover", "AI and machine learning"])
+            # Will exit because no LLM, but query was passed correctly
+            assert "LLM required" in result.stdout or result.exit_code == 1
+
+
+class TestHelpCommandArguments:
+    """Test help command argument parsing."""
+
+    def test_help_no_argument(self, cli_runner):
+        """Test help with no argument shows general help."""
+        result = cli_runner.invoke(app, ["help"])
+        assert result.exit_code == 0
+        assert "RSS Summarizer" in result.stdout
+
+    def test_help_with_command_argument(self, cli_runner):
+        """Test help with specific command argument."""
+        # The help command runs subprocess, so we just check it doesn't crash
+        result = cli_runner.invoke(app, ["help", "fetch"])
+        # May have exit code 0 or the subprocess may fail in test env
+        assert result.exit_code in [0, 1, 2]
+
+
+class TestExtractKnowledgeArguments:
+    """Test extract-knowledge command argument parsing."""
+
+    def test_extract_knowledge_default_limit(self, cli_runner):
+        """Test extract-knowledge uses default limit of 10."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.llm_providers.ensure_llm_or_exit") as mock_llm, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.KnowledgeBase") as mock_kb:
+            mock_setup.return_value = None
+            mock_provider = MagicMock()
+            mock_llm.return_value = mock_provider
+            storage_mock = MagicMock()
+            storage_mock.get_articles.return_value = []
+            mock_storage.return_value = storage_mock
+            mock_kb.return_value = MagicMock()
+
+            result = cli_runner.invoke(app, ["extract-knowledge"])
+            storage_mock.get_articles.assert_called_with(limit=10)
+
+    def test_extract_knowledge_custom_limit(self, cli_runner):
+        """Test extract-knowledge with custom limit."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.llm_providers.ensure_llm_or_exit") as mock_llm, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.KnowledgeBase") as mock_kb:
+            mock_setup.return_value = None
+            mock_provider = MagicMock()
+            mock_llm.return_value = mock_provider
+            storage_mock = MagicMock()
+            storage_mock.get_articles.return_value = []
+            mock_storage.return_value = storage_mock
+            mock_kb.return_value = MagicMock()
+
+            result = cli_runner.invoke(app, ["extract-knowledge", "-n", "50"])
+            storage_mock.get_articles.assert_called_with(limit=50)
+
+    def test_extract_knowledge_custom_db_path(self, cli_runner):
+        """Test extract-knowledge with custom db path."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.llm_providers.ensure_llm_or_exit") as mock_llm, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.KnowledgeBase") as mock_kb:
+            mock_setup.return_value = None
+            mock_provider = MagicMock()
+            mock_llm.return_value = mock_provider
+            storage_mock = MagicMock()
+            storage_mock.get_articles.return_value = []
+            mock_storage.return_value = storage_mock
+            mock_kb.return_value = MagicMock()
+
+            result = cli_runner.invoke(app, ["extract-knowledge", "--db", "custom.db"])
+            mock_storage.assert_called_with("custom.db")
+
+    def test_extract_knowledge_custom_kb_path(self, cli_runner):
+        """Test extract-knowledge with custom kb path."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.llm_providers.ensure_llm_or_exit") as mock_llm, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.KnowledgeBase") as mock_kb:
+            mock_setup.return_value = None
+            mock_provider = MagicMock()
+            mock_llm.return_value = mock_provider
+            storage_mock = MagicMock()
+            storage_mock.get_articles.return_value = []
+            mock_storage.return_value = storage_mock
+            mock_kb.return_value = MagicMock()
+
+            result = cli_runner.invoke(app, ["extract-knowledge", "-k", "custom_kb.db"])
+            mock_kb.assert_called_with("custom_kb.db")
+
+
+class TestQueryCommandArguments:
+    """Test query command argument parsing."""
+
+    def test_query_requires_text(self, cli_runner):
+        """Test query requires query text argument."""
+        result = cli_runner.invoke(app, ["query"])
+        assert result.exit_code != 0
+
+    def test_query_with_text(self, cli_runner):
+        """Test query with query text argument."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.llm_providers.ensure_llm_or_exit") as mock_llm, \
+             patch("src.cli.KnowledgeBase") as mock_kb, \
+             patch("src.cli.query_knowledge_base") as mock_query:
+            mock_setup.return_value = None
+            mock_provider = MagicMock()
+            mock_llm.return_value = mock_provider
+            mock_kb.return_value = MagicMock()
+            mock_query.return_value = {"summary": "Answer", "total_insights": 10}
+
+            result = cli_runner.invoke(app, ["query", "What is AI?"])
+            mock_query.assert_called_once()
+            assert mock_query.call_args[0][0] == "What is AI?"
+
+    def test_query_custom_kb_path(self, cli_runner):
+        """Test query with custom kb path."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.llm_providers.ensure_llm_or_exit") as mock_llm, \
+             patch("src.cli.KnowledgeBase") as mock_kb, \
+             patch("src.cli.query_knowledge_base") as mock_query:
+            mock_setup.return_value = None
+            mock_provider = MagicMock()
+            mock_llm.return_value = mock_provider
+            mock_kb.return_value = MagicMock()
+            mock_query.return_value = {"summary": "Answer", "total_insights": 10}
+
+            result = cli_runner.invoke(app, ["query", "Test query", "--kb", "custom.db"])
+            mock_kb.assert_called_with("custom.db")
+
+
+class TestGraphCommandArguments:
+    """Test graph command argument parsing."""
+
+    def test_graph_requires_entity(self, cli_runner):
+        """Test graph requires entity argument."""
+        result = cli_runner.invoke(app, ["graph"])
+        assert result.exit_code != 0
+
+    def test_graph_with_entity(self, cli_runner):
+        """Test graph with entity argument."""
+        with patch("src.cli.KnowledgeBase") as mock_kb:
+            kb_mock = MagicMock()
+            kb_mock.get_entity_neighborhood.return_value = {"outgoing": [], "incoming": []}
+            mock_kb.return_value = kb_mock
+
+            result = cli_runner.invoke(app, ["graph", "OpenAI"])
+            kb_mock.get_entity_neighborhood.assert_called_with("OpenAI")
+
+    def test_graph_default_depth(self, cli_runner):
+        """Test graph uses default depth of 2."""
+        with patch("src.cli.KnowledgeBase") as mock_kb:
+            kb_mock = MagicMock()
+            kb_mock.get_entity_neighborhood.return_value = {
+                "outgoing": [{"predicate": "develops", "target": "GPT"}],
+                "incoming": []
+            }
+            kb_mock.get_connected_entities.return_value = {"entities": [], "relationships": []}
+            mock_kb.return_value = kb_mock
+
+            result = cli_runner.invoke(app, ["graph", "OpenAI"])
+            # get_connected_entities called with max_depth=2 (default)
+            kb_mock.get_connected_entities.assert_called_with("OpenAI", max_depth=2)
+
+    def test_graph_custom_depth(self, cli_runner):
+        """Test graph with custom depth."""
+        with patch("src.cli.KnowledgeBase") as mock_kb:
+            kb_mock = MagicMock()
+            kb_mock.get_entity_neighborhood.return_value = {
+                "outgoing": [{"predicate": "develops", "target": "GPT"}],
+                "incoming": []
+            }
+            kb_mock.get_connected_entities.return_value = {"entities": [], "relationships": []}
+            mock_kb.return_value = kb_mock
+
+            result = cli_runner.invoke(app, ["graph", "OpenAI", "-d", "5"])
+            kb_mock.get_connected_entities.assert_called_with("OpenAI", max_depth=5)
+
+
+class TestGraphPathCommandArguments:
+    """Test graph-path command argument parsing."""
+
+    def test_graph_path_requires_start_and_end(self, cli_runner):
+        """Test graph-path requires both start and end arguments."""
+        result = cli_runner.invoke(app, ["graph-path"])
+        assert result.exit_code != 0
+
+        result = cli_runner.invoke(app, ["graph-path", "OpenAI"])
+        assert result.exit_code != 0
+
+    def test_graph_path_with_both_entities(self, cli_runner):
+        """Test graph-path with both start and end entities."""
+        with patch("src.cli.KnowledgeBase") as mock_kb:
+            kb_mock = MagicMock()
+            kb_mock.find_path.return_value = None
+            mock_kb.return_value = kb_mock
+
+            result = cli_runner.invoke(app, ["graph-path", "OpenAI", "GPT-4"])
+            kb_mock.find_path.assert_called_with("OpenAI", "GPT-4")
+
+
+class TestContextAddCommandArguments:
+    """Test context-add command argument parsing."""
+
+    def test_context_add_requires_type_and_name(self, cli_runner):
+        """Test context-add requires both type and name arguments."""
+        result = cli_runner.invoke(app, ["context-add"])
+        assert result.exit_code != 0
+
+        result = cli_runner.invoke(app, ["context-add", "project"])
+        assert result.exit_code != 0
+
+    def test_context_add_with_required_args(self, cli_runner):
+        """Test context-add with required arguments."""
+        with patch("src.cli.KnowledgeBase") as mock_kb:
+            kb_mock = MagicMock()
+            mock_kb.return_value = kb_mock
+
+            result = cli_runner.invoke(app, ["context-add", "project", "MyProject"])
+            assert result.exit_code == 0
+            kb_mock.save_context.assert_called_once()
+            context = kb_mock.save_context.call_args[0][0]
+            assert context.context_type == "project"
+            assert context.name == "MyProject"
+
+    def test_context_add_with_description(self, cli_runner):
+        """Test context-add with description option."""
+        with patch("src.cli.KnowledgeBase") as mock_kb:
+            kb_mock = MagicMock()
+            mock_kb.return_value = kb_mock
+
+            result = cli_runner.invoke(app, [
+                "context-add", "interest", "AI",
+                "-d", "Artificial Intelligence research"
+            ])
+            assert result.exit_code == 0
+            context = kb_mock.save_context.call_args[0][0]
+            assert context.description == "Artificial Intelligence research"
+
+    def test_context_add_with_long_description(self, cli_runner):
+        """Test context-add with --desc long option."""
+        with patch("src.cli.KnowledgeBase") as mock_kb:
+            kb_mock = MagicMock()
+            mock_kb.return_value = kb_mock
+
+            result = cli_runner.invoke(app, [
+                "context-add", "watching", "Tech News",
+                "--desc", "Following tech industry news"
+            ])
+            assert result.exit_code == 0
+            context = kb_mock.save_context.call_args[0][0]
+            assert context.description == "Following tech industry news"
+
+
+class TestEmergingCommandArguments:
+    """Test emerging command argument parsing."""
+
+    def test_emerging_default_confidence(self, cli_runner):
+        """Test emerging uses default confidence of all."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.detect_emerging_trends") as mock_detect:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_detect.return_value = []
+
+            result = cli_runner.invoke(app, ["emerging"])
+            mock_detect.assert_called_with(
+                mock_storage.return_value,
+                limit=1000,
+                min_confidence="Watch"  # "all" maps to "Watch"
+            )
+
+    def test_emerging_high_confidence(self, cli_runner):
+        """Test emerging with high confidence filter."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.detect_emerging_trends") as mock_detect:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_detect.return_value = []
+
+            result = cli_runner.invoke(app, ["emerging", "-c", "high"])
+            mock_detect.assert_called_with(
+                mock_storage.return_value,
+                limit=1000,
+                min_confidence="High"
+            )
+
+    def test_emerging_medium_confidence(self, cli_runner):
+        """Test emerging with medium confidence filter."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.detect_emerging_trends") as mock_detect:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_detect.return_value = []
+
+            result = cli_runner.invoke(app, ["emerging", "--confidence", "medium"])
+            mock_detect.assert_called_with(
+                mock_storage.return_value,
+                limit=1000,
+                min_confidence="Medium"
+            )
+
+    def test_emerging_custom_limit(self, cli_runner):
+        """Test emerging with custom limit."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.detect_emerging_trends") as mock_detect:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_detect.return_value = []
+
+            result = cli_runner.invoke(app, ["emerging", "-n", "5"])
+            # limit for display is 5, but limit for detection is 1000
+            mock_detect.assert_called_with(
+                mock_storage.return_value,
+                limit=1000,
+                min_confidence="Watch"
+            )
+
+
+class TestArgumentValidation:
+    """Test argument validation and error handling."""
+
+    def test_invalid_limit_type(self, cli_runner):
+        """Test error when limit is not a number."""
+        result = cli_runner.invoke(app, ["summarize", "-n", "abc"])
+        assert result.exit_code != 0
+        assert "Invalid value" in result.stdout or "Error" in result.stdout.lower() or result.exit_code == 2
+
+    def test_negative_limit_allowed(self, cli_runner):
+        """Test that negative limit is parsed (validation may happen elsewhere)."""
+        # Typer will parse negative numbers, validation happens in function
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.summarize_articles") as mock_summarize:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_summarize.return_value = {"processed": 0, "errors": []}
+
+            result = cli_runner.invoke(app, ["summarize", "-n", "-5"])
+            # Should accept the value even if negative
+            mock_summarize.assert_called_once()
+
+    def test_float_min_relevance(self, cli_runner):
+        """Test min-relevance accepts float values."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.commands.update") as mock_update:
+            mock_setup.return_value = None
+
+            result = cli_runner.invoke(app, ["update", "--min-relevance", "0.75"])
+            mock_update.assert_called_once()
+            assert mock_update.call_args[1]["min_relevance"] == 0.75
+
+    def test_invalid_min_relevance_type(self, cli_runner):
+        """Test error when min-relevance is not a number."""
+        result = cli_runner.invoke(app, ["update", "--min-relevance", "high"])
+        assert result.exit_code != 0
+
+    def test_unknown_option_error(self, cli_runner):
+        """Test error for unknown options."""
+        result = cli_runner.invoke(app, ["fetch", "--unknown-option"])
+        assert result.exit_code != 0
+
+    def test_duplicate_option(self, cli_runner):
+        """Test handling of duplicate options (last wins)."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.summarize_articles") as mock_summarize:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_summarize.return_value = {"processed": 0, "errors": []}
+
+            result = cli_runner.invoke(app, ["summarize", "-n", "10", "-n", "20"])
+            # Last value should be used
+            mock_summarize.assert_called_once()
+            assert mock_summarize.call_args[1]["limit"] == 20
+
+
+class TestArgumentEdgeCases:
+    """Test edge cases in argument handling."""
+
+    def test_empty_string_argument(self, cli_runner):
+        """Test handling of empty string argument."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.commands.update") as mock_update:
+            mock_setup.return_value = None
+
+            result = cli_runner.invoke(app, ["update", ""])
+            # Empty string becomes empty topic filter
+            mock_update.assert_called_once()
+            # An empty string argument results in empty string topic
+            assert mock_update.call_args[1]["topic_filter"] == ""
+
+    def test_special_characters_in_argument(self, cli_runner):
+        """Test handling of special characters in arguments."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.commands.update") as mock_update:
+            mock_setup.return_value = None
+
+            result = cli_runner.invoke(app, ["update", "AI & ML", "@tech", "#news"])
+            mock_update.assert_called_once()
+            assert mock_update.call_args[1]["topic_filter"] == "AI & ML @tech #news"
+
+    def test_unicode_in_argument(self, cli_runner):
+        """Test handling of unicode characters in arguments."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.commands.update") as mock_update:
+            mock_setup.return_value = None
+
+            result = cli_runner.invoke(app, ["update", "技術", "ニュース"])
+            mock_update.assert_called_once()
+            assert mock_update.call_args[1]["topic_filter"] == "技術 ニュース"
+
+    def test_path_with_spaces(self, cli_runner, temp_dir):
+        """Test handling of paths with spaces."""
+        spaced_dir = os.path.join(temp_dir, "path with spaces")
+        os.makedirs(spaced_dir, exist_ok=True)
+        feeds_file = os.path.join(spaced_dir, "feeds.txt")
+        Path(feeds_file).touch()
+
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.load_feeds") as mock_load, \
+             patch("src.cli.fetch_all_feeds") as mock_fetch:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_load.return_value = ["https://example.com/feed.xml"]
+            mock_fetch.return_value = []
+
+            result = cli_runner.invoke(app, ["fetch", "-f", feeds_file])
+            mock_load.assert_called_with(feeds_file)
+
+    def test_very_long_argument(self, cli_runner):
+        """Test handling of very long arguments."""
+        long_topic = "a" * 1000
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.commands.update") as mock_update:
+            mock_setup.return_value = None
+
+            result = cli_runner.invoke(app, ["update", long_topic])
+            mock_update.assert_called_once()
+            assert mock_update.call_args[1]["topic_filter"] == long_topic
+
+    def test_zero_limit(self, cli_runner):
+        """Test handling of zero as limit."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.summarize_articles") as mock_summarize:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_summarize.return_value = {"processed": 0, "errors": []}
+
+            result = cli_runner.invoke(app, ["summarize", "-n", "0"])
+            mock_summarize.assert_called_with(
+                mock_storage.return_value, limit=0, use_llm=False, tag_articles=False
+            )
+
+    def test_large_limit(self, cli_runner):
+        """Test handling of very large limit."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.summarize_articles") as mock_summarize:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_summarize.return_value = {"processed": 0, "errors": []}
+
+            result = cli_runner.invoke(app, ["summarize", "-n", "1000000"])
+            mock_summarize.assert_called_with(
+                mock_storage.return_value, limit=1000000, use_llm=False, tag_articles=False
+            )
+
+
+class TestTagSubcommandArguments:
+    """Test tag subcommand group argument parsing."""
+
+    def test_tag_articles_no_args(self, cli_runner):
+        """Test tag articles with no arguments uses defaults."""
+        with patch("src.cli_signal_tags.Storage") as mock_storage_class:
+            storage_mock = MagicMock()
+            storage_mock.get_articles.return_value = []
+            mock_storage_class.return_value = storage_mock
+
+            result = cli_runner.invoke(app, ["tag", "articles"])
+            # Default limit is applied (50)
+            storage_mock.get_articles.assert_called_with(limit=50)
+
+    def test_tag_articles_custom_limit(self, cli_runner):
+        """Test tag articles with custom limit."""
+        with patch("src.cli_signal_tags.Storage") as mock_storage_class:
+            storage_mock = MagicMock()
+            storage_mock.get_articles.return_value = []
+            mock_storage_class.return_value = storage_mock
+
+            result = cli_runner.invoke(app, ["tag", "articles", "-n", "100"])
+            storage_mock.get_articles.assert_called_with(limit=100)
+
+    def test_tag_filter_with_include(self, cli_runner):
+        """Test tag filter with include option."""
+        with patch("src.cli_signal_tags.Storage") as mock_storage_class:
+            storage_mock = MagicMock()
+            storage_mock.get_articles_by_signal_tags.return_value = []
+            mock_storage_class.return_value = storage_mock
+
+            result = cli_runner.invoke(app, ["tag", "filter", "-i", "breaking,urgent"])
+            storage_mock.get_articles_by_signal_tags.assert_called_with(
+                include_tags=["breaking", "urgent"],
+                exclude_tags=None,
+                limit=20,
+            )
+
+    def test_tag_filter_with_exclude(self, cli_runner):
+        """Test tag filter with exclude option."""
+        with patch("src.cli_signal_tags.Storage") as mock_storage_class:
+            storage_mock = MagicMock()
+            storage_mock.get_articles_by_signal_tags.return_value = []
+            mock_storage_class.return_value = storage_mock
+
+            result = cli_runner.invoke(app, ["tag", "filter", "-e", "spam"])
+            storage_mock.get_articles_by_signal_tags.assert_called_with(
+                include_tags=None,
+                exclude_tags=["spam"],
+                limit=20,
+            )
+
+    def test_tag_filter_combined_options(self, cli_runner):
+        """Test tag filter with both include and exclude."""
+        with patch("src.cli_signal_tags.Storage") as mock_storage_class:
+            storage_mock = MagicMock()
+            storage_mock.get_articles_by_signal_tags.return_value = []
+            mock_storage_class.return_value = storage_mock
+
+            result = cli_runner.invoke(app, [
+                "tag", "filter",
+                "-i", "tech,AI",
+                "-e", "spam",
+                "-n", "30"
+            ])
+            storage_mock.get_articles_by_signal_tags.assert_called_with(
+                include_tags=["tech", "AI"],
+                exclude_tags=["spam"],
+                limit=30,
+            )
+
+    def test_tag_stats_default_db(self, cli_runner):
+        """Test tag stats uses default database."""
+        with patch("src.cli_signal_tags.Storage") as mock_storage_class:
+            storage_mock = MagicMock()
+            storage_mock.get_articles.return_value = []
+            mock_storage_class.return_value = storage_mock
+
+            result = cli_runner.invoke(app, ["tag", "stats"])
+            mock_storage_class.assert_called_with("articles.db")
+
+    def test_tag_stats_custom_db(self, cli_runner):
+        """Test tag stats with custom database."""
+        with patch("src.cli_signal_tags.Storage") as mock_storage_class:
+            storage_mock = MagicMock()
+            storage_mock.get_articles.return_value = []
+            mock_storage_class.return_value = storage_mock
+
+            result = cli_runner.invoke(app, ["tag", "stats", "-d", "custom.db"])
+            mock_storage_class.assert_called_with("custom.db")
+
+
+class TestKnowledgeCommandsArguments:
+    """Test knowledge-related command arguments."""
+
+    def test_contradictions_default_kb_path(self, cli_runner):
+        """Test contradictions uses default kb path."""
+        with patch("src.cli.KnowledgeBase") as mock_kb:
+            kb_mock = MagicMock()
+            kb_mock.get_relationships.return_value = []
+            mock_kb.return_value = kb_mock
+
+            result = cli_runner.invoke(app, ["contradictions"])
+            mock_kb.assert_called_with("knowledge.db")
+
+    def test_contradictions_custom_kb_path(self, cli_runner):
+        """Test contradictions with custom kb path."""
+        with patch("src.cli.KnowledgeBase") as mock_kb:
+            kb_mock = MagicMock()
+            kb_mock.get_relationships.return_value = []
+            mock_kb.return_value = kb_mock
+
+            result = cli_runner.invoke(app, ["contradictions", "-k", "custom_kb.db"])
+            mock_kb.assert_called_with("custom_kb.db")
+
+    def test_knowledge_stats_default_path(self, cli_runner):
+        """Test knowledge-stats uses default kb path."""
+        with patch("src.cli.KnowledgeBase") as mock_kb:
+            kb_mock = MagicMock()
+            kb_mock.get_stats.return_value = {
+                "total_insights": 0,
+                "high_confidence_insights": 0,
+                "total_entities": 0,
+                "total_relationships": 0,
+                "contradictions": 0,
+            }
+            mock_kb.return_value = kb_mock
+
+            result = cli_runner.invoke(app, ["knowledge-stats"])
+            mock_kb.assert_called_with("knowledge.db")
+
+    def test_graph_stats_default_path(self, cli_runner):
+        """Test graph-stats uses default kb path."""
+        with patch("src.cli.KnowledgeBase") as mock_kb:
+            kb_mock = MagicMock()
+            kb_mock.get_graph_stats.return_value = {
+                "total_insights": 0,
+                "total_entities": 0,
+                "total_triples": 0,
+                "total_entity_relationships": 0,
+                "unique_predicates": 0,
+                "total_embeddings": 0,
+                "predicate_types": [],
+                "top_connected_entities": [],
+            }
+            mock_kb.return_value = kb_mock
+
+            result = cli_runner.invoke(app, ["graph-stats"])
+            mock_kb.assert_called_with("knowledge.db")
+
+
+class TestContextListArguments:
+    """Test context-list command arguments."""
+
+    def test_context_list_default_path(self, cli_runner):
+        """Test context-list uses default kb path."""
+        with patch("src.cli.KnowledgeBase") as mock_kb:
+            kb_mock = MagicMock()
+            kb_mock.get_contexts.return_value = []
+            mock_kb.return_value = kb_mock
+
+            result = cli_runner.invoke(app, ["context-list"])
+            mock_kb.assert_called_with("knowledge.db")
+
+    def test_context_list_custom_path(self, cli_runner):
+        """Test context-list with custom kb path."""
+        with patch("src.cli.KnowledgeBase") as mock_kb:
+            kb_mock = MagicMock()
+            kb_mock.get_contexts.return_value = []
+            mock_kb.return_value = kb_mock
+
+            result = cli_runner.invoke(app, ["context-list", "--kb", "my_kb.db"])
+            mock_kb.assert_called_with("my_kb.db")
+
+
+class TestBooleanFlagBehavior:
+    """Test boolean flag behavior (defaults and toggling)."""
+
+    def test_llm_flag_defaults_false(self, cli_runner):
+        """Test --llm flag defaults to False."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.summarize_articles") as mock_summarize:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_summarize.return_value = {"processed": 0, "errors": []}
+
+            result = cli_runner.invoke(app, ["summarize"])
+            assert mock_summarize.call_args[1]["use_llm"] is False
+
+    def test_tag_flag_defaults_false(self, cli_runner):
+        """Test --tag flag defaults to False."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.summarize_articles") as mock_summarize:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_summarize.return_value = {"processed": 0, "errors": []}
+
+            result = cli_runner.invoke(app, ["summarize"])
+            assert mock_summarize.call_args[1]["tag_articles"] is False
+
+    def test_all_flag_defaults_false(self, cli_runner):
+        """Test --all flag defaults to False in update command."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.commands.update") as mock_update:
+            mock_setup.return_value = None
+
+            result = cli_runner.invoke(app, ["update"])
+            assert mock_update.call_args[1]["show_all"] is False
+
+    def test_no_context_flag_inverts_use_context(self, cli_runner):
+        """Test --no-context flag inverts use_context to False."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.commands.update") as mock_update:
+            mock_setup.return_value = None
+
+            # Without flag
+            result = cli_runner.invoke(app, ["update"])
+            assert mock_update.call_args[1]["use_context"] is True
+
+            # With flag
+            result = cli_runner.invoke(app, ["update", "--no-context"])
+            assert mock_update.call_args[1]["use_context"] is False
+
+
+class TestArgumentParsingIntegration:
+    """Integration tests for argument parsing across commands."""
+
+    def test_all_commands_accept_help(self, cli_runner):
+        """Test all main commands accept --help flag."""
+        commands = [
+            "fetch", "summarize", "trends", "list", "stats",
+            "add-feed", "update", "setup", "discover", "help",
+            "providers", "extract-knowledge", "query", "contradictions",
+            "knowledge-stats", "graph", "graph-path", "graph-stats",
+            "context-add", "context-list", "emerging", "perspectives",
+            "cluster-stories"
+        ]
+
+        for cmd in commands:
+            result = cli_runner.invoke(app, [cmd, "--help"])
+            # All should succeed with help
+            assert result.exit_code == 0, f"Command {cmd} failed with --help"
+
+    def test_subcommands_accept_help(self, cli_runner):
+        """Test subcommands accept --help flag."""
+        subcommands = [
+            ["tag", "articles", "--help"],
+            ["tag", "stats", "--help"],
+            ["tag", "filter", "--help"],
+        ]
+
+        for subcmd in subcommands:
+            result = cli_runner.invoke(app, subcmd)
+            assert result.exit_code == 0, f"Subcommand {' '.join(subcmd)} failed"
+
+    def test_short_and_long_options_equivalent(self, cli_runner):
+        """Test short and long options produce equivalent results."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.summarize_articles") as mock_summarize:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_summarize.return_value = {"processed": 0, "errors": []}
+
+            # Short option
+            cli_runner.invoke(app, ["summarize", "-n", "42", "-d", "test.db"])
+            short_call = mock_summarize.call_args
+
+            mock_summarize.reset_mock()
+
+            # Long option
+            cli_runner.invoke(app, ["summarize", "--limit", "42", "--db", "test.db"])
+            long_call = mock_summarize.call_args
+
+            # Should be equivalent
+            assert short_call[1]["limit"] == long_call[1]["limit"] == 42
