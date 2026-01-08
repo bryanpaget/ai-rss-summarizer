@@ -4737,3 +4737,564 @@ class TestGeminiCLIProviderIntegration:
 
         assert config.provider == ProviderType.GEMINI_CLI
         assert config.model == "gemini-2.0-flash"
+
+
+# =============================================================================
+# GroqProvider Tests
+# =============================================================================
+
+
+class TestGroqProviderInitialization:
+    """Tests for GroqProvider initialization."""
+
+    def test_initialization_with_default_model(self, clean_env):
+        """Test GroqProvider initializes with default model."""
+        provider = GroqProvider()
+
+        assert provider.model == "llama-3.3-70b-versatile"
+        assert provider.name == "Groq"
+        assert provider.base_url == "https://api.groq.com/openai/v1"
+
+    def test_initialization_with_custom_model(self, clean_env):
+        """Test GroqProvider initializes with custom model."""
+        provider = GroqProvider(model="mixtral-8x7b-32768")
+
+        assert provider.model == "mixtral-8x7b-32768"
+        assert provider.name == "Groq"
+
+    def test_model_name_property(self, clean_env):
+        """Test model_name property returns configured model."""
+        provider = GroqProvider(model="llama3-8b-8192")
+        assert provider.model_name == "llama3-8b-8192"
+
+    def test_model_name_property_default(self, clean_env):
+        """Test model_name property returns default model."""
+        provider = GroqProvider()
+        assert provider.model_name == "llama-3.3-70b-versatile"
+
+    def test_inherits_from_openai_compatible(self, clean_env):
+        """Test GroqProvider inherits from OpenAICompatibleProvider."""
+        provider = GroqProvider()
+        assert isinstance(provider, OpenAICompatibleProvider)
+        assert isinstance(provider, LLMProvider)
+
+    def test_session_usage_initialized(self, clean_env):
+        """Test session usage is initialized correctly."""
+        provider = GroqProvider()
+        assert provider.session_usage == {"calls": 0, "total_tokens": 0}
+        assert provider.last_usage is None
+
+    def test_api_key_from_env(self, clean_env):
+        """Test API key is read from GROQ_API_KEY environment variable."""
+        os.environ["GROQ_API_KEY"] = "test-groq-key-12345"
+        provider = GroqProvider()
+        assert provider.api_key == "test-groq-key-12345"
+
+
+class TestGroqProviderIsAvailable:
+    """Tests for GroqProvider.is_available() method."""
+
+    def test_is_available_returns_true_with_api_key(self, clean_env):
+        """Test is_available returns True when GROQ_API_KEY is set."""
+        os.environ["GROQ_API_KEY"] = "test-groq-key"
+        provider = GroqProvider()
+        assert provider.is_available() is True
+
+    def test_is_available_returns_false_without_api_key(self, clean_env):
+        """Test is_available returns False when GROQ_API_KEY not set."""
+        if "GROQ_API_KEY" in os.environ:
+            del os.environ["GROQ_API_KEY"]
+        provider = GroqProvider()
+        assert provider.is_available() is False
+
+    def test_is_available_returns_false_with_empty_api_key(self, clean_env):
+        """Test is_available returns False when GROQ_API_KEY is empty string."""
+        os.environ["GROQ_API_KEY"] = ""
+        provider = GroqProvider()
+        assert provider.is_available() is False
+
+    def test_is_available_with_whitespace_api_key(self, clean_env):
+        """Test is_available with whitespace-only API key (truthy)."""
+        os.environ["GROQ_API_KEY"] = "   "
+        provider = GroqProvider()
+        # Whitespace is truthy in Python
+        assert provider.is_available() is True
+
+    def test_is_available_not_affected_by_other_env_vars(self, clean_env):
+        """Test is_available ignores other provider API keys."""
+        os.environ["OPENAI_API_KEY"] = "openai-key"
+        os.environ["ANTHROPIC_API_KEY"] = "anthropic-key"
+        os.environ["GOOGLE_API_KEY"] = "google-key"
+        if "GROQ_API_KEY" in os.environ:
+            del os.environ["GROQ_API_KEY"]
+
+        provider = GroqProvider()
+        assert provider.is_available() is False
+
+    def test_is_available_no_sdk_required(self, clean_env):
+        """Test is_available does not require SDK installation."""
+        # GroqProvider uses OpenAI-compatible API, no SDK needed
+        os.environ["GROQ_API_KEY"] = "test-groq-key"
+        provider = GroqProvider()
+        # Should work without any SDK imports
+        assert provider.is_available() is True
+
+
+class TestGroqProviderAPIKeyHandling:
+    """Tests for GroqProvider API key handling."""
+
+    def test_api_key_from_groq_api_key_env(self, clean_env):
+        """Test API key is read from GROQ_API_KEY environment variable."""
+        os.environ["GROQ_API_KEY"] = "gsk_test123456789"
+        provider = GroqProvider()
+        assert provider.api_key == "gsk_test123456789"
+
+    def test_api_key_not_from_other_env_vars(self, clean_env):
+        """Test API key is not read from other provider env vars."""
+        os.environ["OPENAI_API_KEY"] = "sk-openai"
+        os.environ["XAI_API_KEY"] = "xai-key"
+        if "GROQ_API_KEY" in os.environ:
+            del os.environ["GROQ_API_KEY"]
+
+        provider = GroqProvider()
+        # Without GROQ_API_KEY, OpenAICompatibleProvider defaults api_key to "not-needed"
+        # This is the base class behavior for local providers that don't require API keys
+        assert provider.api_key == "not-needed"
+
+    def test_api_key_with_special_characters(self, clean_env):
+        """Test API key with special characters is handled correctly."""
+        special_key = "gsk_test+key/with=special&chars"
+        os.environ["GROQ_API_KEY"] = special_key
+        provider = GroqProvider()
+        assert provider.api_key == special_key
+
+    def test_api_key_very_long(self, clean_env):
+        """Test very long API key is handled correctly."""
+        long_key = "gsk_" + "a" * 1000
+        os.environ["GROQ_API_KEY"] = long_key
+        provider = GroqProvider()
+        assert provider.api_key == long_key
+
+    def test_api_key_unicode(self, clean_env):
+        """Test unicode in API key (edge case)."""
+        unicode_key = "gsk_test_キー_тест"
+        os.environ["GROQ_API_KEY"] = unicode_key
+        provider = GroqProvider()
+        assert provider.api_key == unicode_key
+
+
+class TestGroqProviderSummarize:
+    """Tests for GroqProvider.summarize() method with mocked responses."""
+
+    def test_summarize_returns_empty_for_empty_input(self, clean_env):
+        """Test summarize returns empty string for empty input."""
+        os.environ["GROQ_API_KEY"] = "test-groq-key"
+        provider = GroqProvider()
+        result = provider.summarize("")
+        assert result == ""
+
+    def test_summarize_makes_correct_api_call(self, clean_env, mock_httpx_success):
+        """Test summarize makes correct API call to Groq endpoint."""
+        os.environ["GROQ_API_KEY"] = "test-groq-key"
+        provider = GroqProvider()
+
+        result = provider.summarize("Test article content", max_length=150)
+
+        assert result == "Test summary"
+        mock_httpx_success["post"].assert_called_once()
+
+        # Verify the call was made to Groq's endpoint
+        call_args = mock_httpx_success["post"].call_args
+        assert "https://api.groq.com/openai/v1/chat/completions" in call_args[0]
+
+    def test_summarize_with_custom_model(self, clean_env, mock_httpx_success):
+        """Test summarize uses custom model in API call."""
+        os.environ["GROQ_API_KEY"] = "test-groq-key"
+        provider = GroqProvider(model="mixtral-8x7b-32768")
+
+        provider.summarize("Test text")
+
+        call_args = mock_httpx_success["post"].call_args
+        payload = call_args[1]["json"]
+        assert payload["model"] == "mixtral-8x7b-32768"
+
+    def test_summarize_records_usage_from_response(self, clean_env, mock_httpx_success):
+        """Test summarize records usage stats from API response."""
+        os.environ["GROQ_API_KEY"] = "test-groq-key"
+        provider = GroqProvider()
+
+        provider.summarize("Test text")
+
+        assert provider.last_usage is not None
+        assert provider.last_usage.input_tokens == 100
+        assert provider.last_usage.output_tokens == 20
+        assert provider.last_usage.total_tokens == 120
+        assert provider.last_usage.provider == "Groq"
+
+    def test_summarize_accumulates_session_usage(self, clean_env, mock_httpx_success):
+        """Test multiple summarize calls accumulate session usage."""
+        os.environ["GROQ_API_KEY"] = "test-groq-key"
+        provider = GroqProvider()
+
+        provider.summarize("First text")
+        provider.summarize("Second text")
+
+        assert provider.session_usage["calls"] == 2
+        assert provider.session_usage["total_tokens"] == 240  # 120 * 2
+
+    def test_summarize_strips_whitespace(self, clean_env):
+        """Test summarize strips whitespace from response."""
+        os.environ["GROQ_API_KEY"] = "test-groq-key"
+
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "llama-3.3-70b-versatile"}]}
+            mock_get.return_value = models_response
+
+            completion_response = MagicMock()
+            completion_response.status_code = 200
+            completion_response.json.return_value = {
+                "choices": [{"message": {"content": "  Summary with whitespace  \n"}}],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+            }
+            completion_response.raise_for_status = MagicMock()
+            mock_post.return_value = completion_response
+
+            provider = GroqProvider()
+            result = provider.summarize("Test")
+
+            assert result == "Summary with whitespace"
+
+    def test_summarize_includes_authorization_header(self, clean_env):
+        """Test summarize includes correct Authorization header."""
+        os.environ["GROQ_API_KEY"] = "gsk_test123"
+
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "llama-3.3-70b-versatile"}]}
+            mock_get.return_value = models_response
+
+            completion_response = MagicMock()
+            completion_response.status_code = 200
+            completion_response.json.return_value = {
+                "choices": [{"message": {"content": "Summary"}}],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+            }
+            completion_response.raise_for_status = MagicMock()
+            mock_post.return_value = completion_response
+
+            provider = GroqProvider()
+            provider.summarize("Test")
+
+            call_args = mock_post.call_args
+            headers = call_args[1]["headers"]
+            assert headers["Authorization"] == "Bearer gsk_test123"
+
+
+class TestGroqProviderRateLimitHandling:
+    """Tests for GroqProvider rate limit handling."""
+
+    def test_summarize_raises_on_rate_limit_429(self, clean_env, mock_httpx_rate_limit):
+        """Test summarize raises exception on 429 rate limit response."""
+        os.environ["GROQ_API_KEY"] = "test-groq-key"
+
+        with patch("httpx.get") as mock_get:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "llama-3.3-70b-versatile"}]}
+            mock_get.return_value = models_response
+
+            provider = GroqProvider()
+
+            with pytest.raises(Exception, match="Rate limit exceeded"):
+                provider.summarize("Test text")
+
+    def test_rate_limit_response_structure(self, clean_env):
+        """Test rate limit response has expected structure."""
+        os.environ["GROQ_API_KEY"] = "test-groq-key"
+
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "llama-3.3-70b-versatile"}]}
+            mock_get.return_value = models_response
+
+            rate_limit_response = MagicMock()
+            rate_limit_response.status_code = 429
+            rate_limit_response.headers = {
+                "retry-after": "60",
+                "x-ratelimit-limit-requests": "30",
+                "x-ratelimit-remaining-requests": "0",
+            }
+            rate_limit_response.json.return_value = {
+                "error": {
+                    "message": "Rate limit exceeded. Please retry after 60 seconds.",
+                    "type": "rate_limit_error",
+                }
+            }
+            rate_limit_response.raise_for_status.side_effect = Exception(
+                "Rate limit exceeded"
+            )
+            mock_post.return_value = rate_limit_response
+
+            provider = GroqProvider()
+
+            with pytest.raises(Exception, match="Rate limit exceeded"):
+                provider.summarize("Test text")
+
+    def test_rate_limit_does_not_affect_session_stats(self, clean_env):
+        """Test rate limit error does not increment session stats."""
+        os.environ["GROQ_API_KEY"] = "test-groq-key"
+
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "llama-3.3-70b-versatile"}]}
+            mock_get.return_value = models_response
+
+            rate_limit_response = MagicMock()
+            rate_limit_response.status_code = 429
+            rate_limit_response.raise_for_status.side_effect = Exception("Rate limit exceeded")
+            mock_post.return_value = rate_limit_response
+
+            provider = GroqProvider()
+            initial_calls = provider.session_usage["calls"]
+
+            try:
+                provider.summarize("Test text")
+            except Exception:
+                pass
+
+            # Session stats should not have changed
+            assert provider.session_usage["calls"] == initial_calls
+
+
+class TestGroqProviderErrorHandling:
+    """Tests for GroqProvider error handling."""
+
+    def test_summarize_raises_on_api_error(self, clean_env):
+        """Test summarize raises when API returns error."""
+        os.environ["GROQ_API_KEY"] = "test-groq-key"
+
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "llama-3.3-70b-versatile"}]}
+            mock_get.return_value = models_response
+
+            error_response = MagicMock()
+            error_response.status_code = 500
+            error_response.raise_for_status.side_effect = Exception("Internal Server Error")
+            mock_post.return_value = error_response
+
+            provider = GroqProvider()
+
+            with pytest.raises(Exception, match="Internal Server Error"):
+                provider.summarize("Test text")
+
+    def test_summarize_raises_on_connection_error(self, clean_env):
+        """Test summarize raises on connection error."""
+        os.environ["GROQ_API_KEY"] = "test-groq-key"
+
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "llama-3.3-70b-versatile"}]}
+            mock_get.return_value = models_response
+
+            mock_post.side_effect = Exception("Connection refused")
+
+            provider = GroqProvider()
+
+            with pytest.raises(Exception, match="Connection refused"):
+                provider.summarize("Test text")
+
+    def test_summarize_raises_on_timeout(self, clean_env):
+        """Test summarize raises on timeout."""
+        os.environ["GROQ_API_KEY"] = "test-groq-key"
+        import httpx
+
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "llama-3.3-70b-versatile"}]}
+            mock_get.return_value = models_response
+
+            mock_post.side_effect = httpx.TimeoutException("Request timed out")
+
+            provider = GroqProvider()
+
+            with pytest.raises(httpx.TimeoutException):
+                provider.summarize("Test text")
+
+    def test_summarize_raises_on_invalid_api_key(self, clean_env):
+        """Test summarize raises on invalid API key."""
+        os.environ["GROQ_API_KEY"] = "invalid-key"
+
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "llama-3.3-70b-versatile"}]}
+            mock_get.return_value = models_response
+
+            error_response = MagicMock()
+            error_response.status_code = 401
+            error_response.json.return_value = {
+                "error": {"message": "Invalid API key", "type": "authentication_error"}
+            }
+            error_response.raise_for_status.side_effect = Exception("Invalid API key")
+            mock_post.return_value = error_response
+
+            provider = GroqProvider()
+
+            with pytest.raises(Exception, match="Invalid API key"):
+                provider.summarize("Test text")
+
+    def test_summarize_handles_malformed_response(self, clean_env):
+        """Test summarize handles malformed API response gracefully."""
+        os.environ["GROQ_API_KEY"] = "test-groq-key"
+
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+            models_response = MagicMock()
+            models_response.status_code = 200
+            models_response.json.return_value = {"data": [{"id": "llama-3.3-70b-versatile"}]}
+            mock_get.return_value = models_response
+
+            # Response missing expected structure
+            malformed_response = MagicMock()
+            malformed_response.status_code = 200
+            malformed_response.json.return_value = {"unexpected": "response"}
+            malformed_response.raise_for_status = MagicMock()
+            mock_post.return_value = malformed_response
+
+            provider = GroqProvider()
+
+            with pytest.raises(KeyError):
+                provider.summarize("Test text")
+
+
+class TestGroqProviderGenerate:
+    """Tests for GroqProvider.generate() method."""
+
+    def test_generate_returns_empty_for_empty_input(self, clean_env):
+        """Test generate returns empty string for empty input."""
+        os.environ["GROQ_API_KEY"] = "test-groq-key"
+        provider = GroqProvider()
+        result = provider.generate("")
+        assert result == ""
+
+    def test_generate_makes_api_call(self, clean_env, mock_httpx_success):
+        """Test generate makes API call to Groq endpoint."""
+        os.environ["GROQ_API_KEY"] = "test-groq-key"
+        provider = GroqProvider()
+
+        result = provider.generate("Classify this text", max_tokens=100)
+
+        assert result == "Test summary"
+        mock_httpx_success["post"].assert_called_once()
+
+    def test_generate_records_usage(self, clean_env, mock_httpx_success):
+        """Test generate records usage stats."""
+        os.environ["GROQ_API_KEY"] = "test-groq-key"
+        provider = GroqProvider()
+
+        provider.generate("Test prompt")
+
+        assert provider.last_usage is not None
+        assert provider.session_usage["calls"] == 1
+
+
+class TestGroqProviderIntegration:
+    """Integration tests for GroqProvider with get_provider and list_providers."""
+
+    def test_get_provider_returns_groq_provider(self, clean_env):
+        """Test get_provider returns GroqProvider when configured."""
+        config = LLMConfig(
+            provider=ProviderType.GROQ,
+            model="llama-3.3-70b-versatile",
+        )
+
+        provider = get_provider(config)
+
+        assert isinstance(provider, GroqProvider)
+        assert provider.model == "llama-3.3-70b-versatile"
+
+    def test_get_provider_with_custom_model(self, clean_env):
+        """Test get_provider uses custom model for GroqProvider."""
+        config = LLMConfig(
+            provider=ProviderType.GROQ,
+            model="mixtral-8x7b-32768",
+        )
+
+        provider = get_provider(config)
+
+        assert isinstance(provider, GroqProvider)
+        assert provider.model == "mixtral-8x7b-32768"
+
+    def test_get_provider_uses_default_model(self, clean_env):
+        """Test get_provider uses default model when not specified."""
+        config = LLMConfig(
+            provider=ProviderType.GROQ,
+            model=None,
+        )
+
+        provider = get_provider(config)
+
+        assert isinstance(provider, GroqProvider)
+        assert provider.model == "llama-3.3-70b-versatile"
+
+    def test_list_providers_includes_groq(self, clean_env):
+        """Test list_providers includes Groq in the list."""
+        os.environ["GROQ_API_KEY"] = "test-groq-key"
+
+        providers = list_providers()
+
+        groq_provider = next(
+            (p for p in providers if p["type"] == ProviderType.GROQ),
+            None
+        )
+        assert groq_provider is not None
+        assert groq_provider["name"] == "Groq"
+        assert groq_provider["available"] is True
+        assert "FREE" in groq_provider["description"]
+
+    def test_list_providers_groq_unavailable(self, clean_env):
+        """Test list_providers shows Groq as unavailable when API key not set."""
+        if "GROQ_API_KEY" in os.environ:
+            del os.environ["GROQ_API_KEY"]
+
+        providers = list_providers()
+
+        groq_provider = next(
+            (p for p in providers if p["type"] == ProviderType.GROQ),
+            None
+        )
+        assert groq_provider is not None
+        assert groq_provider["available"] is False
+
+    def test_config_with_groq_provider_type(self, clean_env):
+        """Test LLMConfig can be created with GROQ provider type."""
+        config = LLMConfig(
+            provider=ProviderType.GROQ,
+            model="llama-3.3-70b-versatile",
+        )
+
+        assert config.provider == ProviderType.GROQ
+        assert config.model == "llama-3.3-70b-versatile"
+
+    def test_groq_from_env_vars(self, env_groq):
+        """Test GroqProvider is selected based on environment variables."""
+        config = LLMConfig.from_env()
+
+        assert config.provider == ProviderType.GROQ
+        assert config.model == "llama-3.3-70b-versatile"
+
+        provider = get_provider(config)
+        assert isinstance(provider, GroqProvider)
+
+    def test_groq_provider_type_value(self, clean_env):
+        """Test ProviderType.GROQ has correct string value."""
+        assert ProviderType.GROQ.value == "groq"
+        assert ProviderType.GROQ == "groq"  # str enum comparison
