@@ -4034,3 +4034,485 @@ class TestGraphTraversalIntegration:
         assert len(neighborhood["outgoing"]) <= 100
         # 50 incoming with same predicate should aggregate
         assert len(neighborhood["incoming"]) >= 1
+
+
+# =============================================================================
+# Embedding Operations Tests
+# =============================================================================
+
+
+class TestSaveEmbedding:
+    """Tests for KnowledgeBase.save_embedding() method."""
+
+    def test_save_embedding_success(self, knowledge_base, sample_embedding):
+        """Test saving a new embedding returns True."""
+        result = knowledge_base.save_embedding(sample_embedding)
+        assert result is True
+
+    def test_save_embedding_persists_all_fields(self, knowledge_base, sample_embedding):
+        """Test that all embedding fields are persisted correctly."""
+        knowledge_base.save_embedding(sample_embedding)
+        retrieved = knowledge_base.get_embedding(
+            sample_embedding.target_id, sample_embedding.target_type
+        )
+
+        assert retrieved is not None
+        assert retrieved.id == sample_embedding.id
+        assert retrieved.target_id == sample_embedding.target_id
+        assert retrieved.target_type == sample_embedding.target_type
+        assert retrieved.vector == sample_embedding.vector
+        assert retrieved.model == sample_embedding.model
+
+    def test_save_embedding_replace_existing(self, knowledge_base, sample_embedding):
+        """Test saving embedding with same id replaces existing (INSERT OR REPLACE)."""
+        knowledge_base.save_embedding(sample_embedding)
+
+        # Create updated embedding with same id
+        updated_vector = bytes([100, 101, 102, 103] * 25)
+        updated_embedding = Embedding(
+            id=sample_embedding.id,
+            target_id=sample_embedding.target_id,
+            target_type=sample_embedding.target_type,
+            vector=updated_vector,
+            model="text-embedding-3-large",
+        )
+        result = knowledge_base.save_embedding(updated_embedding)
+        assert result is True
+
+        # Verify it was replaced
+        retrieved = knowledge_base.get_embedding(
+            sample_embedding.target_id, sample_embedding.target_type
+        )
+        assert retrieved.vector == updated_vector
+        assert retrieved.model == "text-embedding-3-large"
+
+    def test_save_multiple_embeddings_different_targets(self, knowledge_base, sample_embeddings):
+        """Test saving multiple embeddings for different targets."""
+        results = []
+        for embedding in sample_embeddings:
+            results.append(knowledge_base.save_embedding(embedding))
+
+        assert all(results), "All embeddings should save successfully"
+
+    def test_save_embedding_different_target_types(self, knowledge_base):
+        """Test saving embeddings for different target types (insight, entity, article)."""
+        mock_vector = bytes([1, 2, 3, 4, 5] * 20)
+
+        embeddings = [
+            Embedding(
+                id="embed-insight",
+                target_id="insight-001",
+                target_type="insight",
+                vector=mock_vector,
+                model="ada-002",
+            ),
+            Embedding(
+                id="embed-entity",
+                target_id="entity-001",
+                target_type="entity",
+                vector=mock_vector,
+                model="ada-002",
+            ),
+            Embedding(
+                id="embed-article",
+                target_id="article-001",
+                target_type="article",
+                vector=mock_vector,
+                model="ada-002",
+            ),
+        ]
+
+        for emb in embeddings:
+            result = knowledge_base.save_embedding(emb)
+            assert result is True
+
+        # Verify all can be retrieved
+        for emb in embeddings:
+            retrieved = knowledge_base.get_embedding(emb.target_id, emb.target_type)
+            assert retrieved is not None
+            assert retrieved.target_type == emb.target_type
+
+    def test_save_embedding_empty_vector(self, knowledge_base):
+        """Test saving embedding with empty vector bytes."""
+        embedding = Embedding(
+            id="embed-empty",
+            target_id="target-empty",
+            target_type="insight",
+            vector=bytes(),
+            model="ada-002",
+        )
+        result = knowledge_base.save_embedding(embedding)
+        assert result is True
+
+        retrieved = knowledge_base.get_embedding("target-empty", "insight")
+        assert retrieved is not None
+        assert retrieved.vector == bytes()
+
+    def test_save_embedding_large_vector(self, knowledge_base):
+        """Test saving embedding with large vector (1536 dimensions = 6144 bytes float32)."""
+        # Simulate a large embedding vector
+        large_vector = bytes(range(256)) * 24  # 6144 bytes
+        embedding = Embedding(
+            id="embed-large",
+            target_id="target-large",
+            target_type="entity",
+            vector=large_vector,
+            model="text-embedding-ada-002",
+        )
+        result = knowledge_base.save_embedding(embedding)
+        assert result is True
+
+        retrieved = knowledge_base.get_embedding("target-large", "entity")
+        assert retrieved is not None
+        assert len(retrieved.vector) == len(large_vector)
+        assert retrieved.vector == large_vector
+
+
+class TestGetEmbedding:
+    """Tests for KnowledgeBase.get_embedding() method."""
+
+    def test_get_embedding_existing(self, knowledge_base, sample_embedding):
+        """Test retrieving an existing embedding."""
+        knowledge_base.save_embedding(sample_embedding)
+        result = knowledge_base.get_embedding(
+            sample_embedding.target_id, sample_embedding.target_type
+        )
+
+        assert result is not None
+        assert result.id == sample_embedding.id
+        assert result.target_id == sample_embedding.target_id
+        assert result.target_type == sample_embedding.target_type
+
+    def test_get_embedding_nonexistent_target_id(self, knowledge_base, sample_embedding):
+        """Test retrieving embedding for nonexistent target_id returns None."""
+        knowledge_base.save_embedding(sample_embedding)
+        result = knowledge_base.get_embedding("nonexistent-id", sample_embedding.target_type)
+        assert result is None
+
+    def test_get_embedding_nonexistent_target_type(self, knowledge_base, sample_embedding):
+        """Test retrieving embedding for wrong target_type returns None."""
+        knowledge_base.save_embedding(sample_embedding)
+        result = knowledge_base.get_embedding(sample_embedding.target_id, "article")
+        assert result is None
+
+    def test_get_embedding_both_params_wrong(self, knowledge_base, sample_embedding):
+        """Test retrieving embedding with both wrong params returns None."""
+        knowledge_base.save_embedding(sample_embedding)
+        result = knowledge_base.get_embedding("wrong-id", "wrong-type")
+        assert result is None
+
+    def test_get_embedding_empty_database(self, knowledge_base):
+        """Test retrieving from empty database returns None."""
+        result = knowledge_base.get_embedding("any-id", "any-type")
+        assert result is None
+
+    def test_get_embedding_case_sensitive_target_id(self, knowledge_base):
+        """Test that target_id matching is case-sensitive."""
+        embedding = Embedding(
+            id="embed-case",
+            target_id="Target-001",
+            target_type="insight",
+            vector=bytes([1, 2, 3]),
+            model="ada-002",
+        )
+        knowledge_base.save_embedding(embedding)
+
+        # Exact match should work
+        result = knowledge_base.get_embedding("Target-001", "insight")
+        assert result is not None
+
+        # Different case should not match
+        result_lower = knowledge_base.get_embedding("target-001", "insight")
+        assert result_lower is None
+
+    def test_get_embedding_case_sensitive_target_type(self, knowledge_base):
+        """Test that target_type matching is case-sensitive."""
+        embedding = Embedding(
+            id="embed-case-type",
+            target_id="target-002",
+            target_type="Insight",
+            vector=bytes([1, 2, 3]),
+            model="ada-002",
+        )
+        knowledge_base.save_embedding(embedding)
+
+        # Exact match should work
+        result = knowledge_base.get_embedding("target-002", "Insight")
+        assert result is not None
+
+        # Different case should not match
+        result_lower = knowledge_base.get_embedding("target-002", "insight")
+        assert result_lower is None
+
+    def test_get_embedding_returns_created_at(self, knowledge_base, sample_embedding):
+        """Test that get_embedding returns created_at timestamp."""
+        knowledge_base.save_embedding(sample_embedding)
+        result = knowledge_base.get_embedding(
+            sample_embedding.target_id, sample_embedding.target_type
+        )
+
+        assert result is not None
+        # created_at is set by SQLite DEFAULT CURRENT_TIMESTAMP
+        assert result.created_at is not None
+
+    def test_get_embedding_specific_target_type(self, knowledge_base):
+        """Test getting embedding when same target_id exists for different types."""
+        mock_vector = bytes([1, 2, 3])
+
+        # Save embeddings for same target_id but different target_types
+        emb_insight = Embedding(
+            id="embed-insight-same",
+            target_id="shared-id",
+            target_type="insight",
+            vector=mock_vector,
+            model="ada-002",
+        )
+        emb_entity = Embedding(
+            id="embed-entity-same",
+            target_id="shared-id",
+            target_type="entity",
+            vector=bytes([4, 5, 6]),
+            model="ada-002",
+        )
+
+        knowledge_base.save_embedding(emb_insight)
+        knowledge_base.save_embedding(emb_entity)
+
+        # Get specifically by type
+        result_insight = knowledge_base.get_embedding("shared-id", "insight")
+        result_entity = knowledge_base.get_embedding("shared-id", "entity")
+
+        assert result_insight is not None
+        assert result_entity is not None
+        assert result_insight.id == "embed-insight-same"
+        assert result_entity.id == "embed-entity-same"
+        assert result_insight.vector == bytes([1, 2, 3])
+        assert result_entity.vector == bytes([4, 5, 6])
+
+
+class TestHasEmbeddings:
+    """Tests for KnowledgeBase.has_embeddings() method."""
+
+    def test_has_embeddings_empty_database(self, knowledge_base):
+        """Test has_embeddings returns False for empty database."""
+        result = knowledge_base.has_embeddings()
+        assert result is False
+
+    def test_has_embeddings_with_one_embedding(self, knowledge_base, sample_embedding):
+        """Test has_embeddings returns True when one embedding exists."""
+        knowledge_base.save_embedding(sample_embedding)
+        result = knowledge_base.has_embeddings()
+        assert result is True
+
+    def test_has_embeddings_with_multiple_embeddings(self, knowledge_base, sample_embeddings):
+        """Test has_embeddings returns True when multiple embeddings exist."""
+        for embedding in sample_embeddings:
+            knowledge_base.save_embedding(embedding)
+        result = knowledge_base.has_embeddings()
+        assert result is True
+
+    def test_has_embeddings_after_replace(self, knowledge_base, sample_embedding):
+        """Test has_embeddings still returns True after replacing an embedding."""
+        knowledge_base.save_embedding(sample_embedding)
+
+        # Replace the embedding
+        updated_embedding = Embedding(
+            id=sample_embedding.id,
+            target_id=sample_embedding.target_id,
+            target_type=sample_embedding.target_type,
+            vector=bytes([99, 98, 97]),
+            model="new-model",
+        )
+        knowledge_base.save_embedding(updated_embedding)
+
+        result = knowledge_base.has_embeddings()
+        assert result is True
+
+    def test_has_embeddings_only_checks_embeddings_table(self, knowledge_base, sample_insight):
+        """Test that has_embeddings only checks embeddings, not other tables."""
+        # Add insight but no embeddings
+        knowledge_base.save_insight(sample_insight)
+
+        result = knowledge_base.has_embeddings()
+        assert result is False
+
+    def test_has_embeddings_with_other_data(self, knowledge_base, sample_insight, sample_embedding):
+        """Test has_embeddings works correctly with other data present."""
+        # Add both insight and embedding
+        knowledge_base.save_insight(sample_insight)
+        knowledge_base.save_embedding(sample_embedding)
+
+        result = knowledge_base.has_embeddings()
+        assert result is True
+
+
+class TestEmbeddingIntegration:
+    """Integration tests for embedding operations with other knowledge base features."""
+
+    def test_embedding_with_insights(self, knowledge_base, sample_insight, sample_embedding):
+        """Test embedding operations work alongside insight operations."""
+        # Save insight first
+        knowledge_base.save_insight(sample_insight)
+
+        # Save embedding referencing the insight
+        knowledge_base.save_embedding(sample_embedding)
+
+        # Both should be retrievable
+        insight = knowledge_base.get_insight(sample_insight.id)
+        embedding = knowledge_base.get_embedding(
+            sample_embedding.target_id, sample_embedding.target_type
+        )
+
+        assert insight is not None
+        assert embedding is not None
+        assert embedding.target_id == sample_insight.id
+
+    def test_embedding_with_entities(self, knowledge_base, sample_entity_tool, sample_embedding_entity):
+        """Test embedding operations work alongside entity operations."""
+        # Save entity first
+        knowledge_base.save_entity(sample_entity_tool)
+
+        # Save embedding referencing the entity
+        knowledge_base.save_embedding(sample_embedding_entity)
+
+        # Both should be retrievable
+        entity = knowledge_base.get_entity(sample_entity_tool.id)
+        embedding = knowledge_base.get_embedding(
+            sample_embedding_entity.target_id, sample_embedding_entity.target_type
+        )
+
+        assert entity is not None
+        assert embedding is not None
+        assert embedding.target_id == sample_entity_tool.id
+
+    def test_multiple_embeddings_different_models(self, knowledge_base):
+        """Test storing embeddings from different models."""
+        embeddings = [
+            Embedding(
+                id="embed-ada",
+                target_id="target-001",
+                target_type="insight",
+                vector=bytes([1, 2, 3]),
+                model="text-embedding-ada-002",
+            ),
+            Embedding(
+                id="embed-3-small",
+                target_id="target-002",
+                target_type="insight",
+                vector=bytes([4, 5, 6]),
+                model="text-embedding-3-small",
+            ),
+            Embedding(
+                id="embed-3-large",
+                target_id="target-003",
+                target_type="insight",
+                vector=bytes([7, 8, 9]),
+                model="text-embedding-3-large",
+            ),
+        ]
+
+        for emb in embeddings:
+            assert knowledge_base.save_embedding(emb) is True
+
+        # All should be retrievable with correct models
+        for emb in embeddings:
+            retrieved = knowledge_base.get_embedding(emb.target_id, emb.target_type)
+            assert retrieved is not None
+            assert retrieved.model == emb.model
+
+    def test_embedding_statistics(self, knowledge_base, sample_embeddings):
+        """Test that embeddings are counted in graph stats."""
+        for embedding in sample_embeddings:
+            knowledge_base.save_embedding(embedding)
+
+        stats = knowledge_base.get_graph_stats()
+        assert "total_embeddings" in stats
+        assert stats["total_embeddings"] == len(sample_embeddings)
+
+    def test_embedding_with_special_characters_in_ids(self, knowledge_base):
+        """Test embedding operations with special characters in target_id."""
+        special_ids = [
+            "target/with/slashes",
+            "target-with-dashes",
+            "target_with_underscores",
+            "target:with:colons",
+            "target.with.dots",
+        ]
+
+        for i, target_id in enumerate(special_ids):
+            embedding = Embedding(
+                id=f"embed-special-{i}",
+                target_id=target_id,
+                target_type="insight",
+                vector=bytes([i] * 10),
+                model="ada-002",
+            )
+            result = knowledge_base.save_embedding(embedding)
+            assert result is True
+
+            retrieved = knowledge_base.get_embedding(target_id, "insight")
+            assert retrieved is not None
+            assert retrieved.target_id == target_id
+
+    def test_embedding_workflow_complete(self, knowledge_base):
+        """Test complete embedding workflow: create, retrieve, update, check existence."""
+        # Start with no embeddings
+        assert knowledge_base.has_embeddings() is False
+
+        # Create first embedding
+        embedding1 = Embedding(
+            id="workflow-001",
+            target_id="article-001",
+            target_type="article",
+            vector=bytes([1, 2, 3, 4, 5]),
+            model="ada-002",
+        )
+        assert knowledge_base.save_embedding(embedding1) is True
+        assert knowledge_base.has_embeddings() is True
+
+        # Retrieve and verify
+        retrieved = knowledge_base.get_embedding("article-001", "article")
+        assert retrieved is not None
+        assert retrieved.vector == bytes([1, 2, 3, 4, 5])
+
+        # Update with new embedding (same id)
+        embedding_updated = Embedding(
+            id="workflow-001",
+            target_id="article-001",
+            target_type="article",
+            vector=bytes([10, 20, 30, 40, 50]),
+            model="text-embedding-3-small",
+        )
+        assert knowledge_base.save_embedding(embedding_updated) is True
+
+        # Verify update
+        retrieved_updated = knowledge_base.get_embedding("article-001", "article")
+        assert retrieved_updated is not None
+        assert retrieved_updated.vector == bytes([10, 20, 30, 40, 50])
+        assert retrieved_updated.model == "text-embedding-3-small"
+
+        # Still has embeddings
+        assert knowledge_base.has_embeddings() is True
+
+    def test_embedding_binary_data_integrity(self, knowledge_base):
+        """Test that binary vector data maintains integrity through save/retrieve cycle."""
+        # Create vector with all possible byte values
+        all_bytes = bytes(range(256))
+
+        embedding = Embedding(
+            id="binary-test",
+            target_id="binary-target",
+            target_type="insight",
+            vector=all_bytes,
+            model="test-model",
+        )
+
+        knowledge_base.save_embedding(embedding)
+        retrieved = knowledge_base.get_embedding("binary-target", "insight")
+
+        assert retrieved is not None
+        assert len(retrieved.vector) == 256
+        assert retrieved.vector == all_bytes
+        # Verify each byte value
+        for i in range(256):
+            assert retrieved.vector[i] == i
