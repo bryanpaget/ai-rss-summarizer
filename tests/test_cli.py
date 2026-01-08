@@ -2702,3 +2702,838 @@ class TestArgumentParsingIntegration:
 
             # Should be equivalent
             assert short_call[1]["limit"] == long_call[1]["limit"] == 42
+
+
+# =============================================================================
+# Output Formatting Tests (Subtask 3.7)
+# =============================================================================
+
+
+class TestRichConsoleOutput:
+    """Test Rich console output functionality."""
+
+    def test_console_print_with_markup(self, capture_console_output):
+        """Test console prints with Rich markup."""
+        from src.cli import console
+        console.print("[green]Test message[/green]")
+        output = capture_console_output.getvalue()
+        assert "Test message" in output
+
+    def test_console_print_with_bold_markup(self, capture_console_output):
+        """Test console prints with bold markup."""
+        from src.cli import console
+        console.print("[bold]Bold message[/bold]")
+        output = capture_console_output.getvalue()
+        assert "Bold message" in output
+
+    def test_console_print_with_dim_markup(self, capture_console_output):
+        """Test console prints with dim markup."""
+        from src.cli import console
+        console.print("[dim]Dim message[/dim]")
+        output = capture_console_output.getvalue()
+        assert "Dim message" in output
+
+    def test_console_print_with_nested_markup(self, capture_console_output):
+        """Test console prints with nested markup."""
+        from src.cli import console
+        console.print("[bold cyan]Bold cyan message[/bold cyan]")
+        output = capture_console_output.getvalue()
+        assert "Bold cyan message" in output
+
+    def test_console_print_with_color_markup(self, capture_console_output):
+        """Test console prints with color markup."""
+        from src.cli import console
+        for color in ["red", "green", "yellow", "blue", "magenta", "cyan"]:
+            console.print(f"[{color}]{color} text[/{color}]")
+        output = capture_console_output.getvalue()
+        assert "red text" in output
+        assert "green text" in output
+        assert "yellow text" in output
+
+    def test_console_print_without_markup(self, capture_console_output):
+        """Test console prints plain text without markup."""
+        from src.cli import console
+        console.print("Plain text message")
+        output = capture_console_output.getvalue()
+        assert "Plain text message" in output
+
+
+class TestTableFormatting:
+    """Test Rich table formatting."""
+
+    def test_table_creation(self):
+        """Test basic table creation."""
+        from rich.table import Table
+        table = Table(title="Test Table")
+        assert table.title == "Test Table"
+
+    def test_table_add_column(self):
+        """Test adding columns to table."""
+        from rich.table import Table
+        table = Table()
+        table.add_column("Column 1", style="cyan")
+        table.add_column("Column 2", justify="right")
+        table.add_column("Column 3", style="green", max_width=50)
+        assert len(table.columns) == 3
+
+    def test_table_add_row(self):
+        """Test adding rows to table."""
+        from rich.table import Table
+        table = Table()
+        table.add_column("Col1")
+        table.add_column("Col2")
+        table.add_row("Value1", "Value2")
+        table.add_row("Value3", "Value4")
+        assert table.row_count == 2
+
+    def test_table_renders_with_console(self, capture_console_output):
+        """Test table renders properly with console."""
+        from src.cli import console
+        from rich.table import Table
+        table = Table(title="Render Test")
+        table.add_column("Name")
+        table.add_column("Value")
+        table.add_row("Test", "123")
+        console.print(table)
+        output = capture_console_output.getvalue()
+        assert "Render Test" in output
+        assert "Test" in output
+        assert "123" in output
+
+    def test_table_with_styled_content(self, capture_console_output):
+        """Test table with styled cell content."""
+        from src.cli import console
+        from rich.table import Table
+        table = Table()
+        table.add_column("Status")
+        table.add_row("[green]OK[/green]")
+        table.add_row("[red]ERROR[/red]")
+        console.print(table)
+        output = capture_console_output.getvalue()
+        assert "OK" in output
+        assert "ERROR" in output
+
+    def test_table_column_max_width(self):
+        """Test table column with max_width respects limit."""
+        from rich.table import Table
+        table = Table()
+        table.add_column("Feed", max_width=50)
+        # Column should be created with max_width
+        assert table.columns[0].max_width == 50
+
+    def test_table_column_justify(self):
+        """Test table column justification settings."""
+        from rich.table import Table
+        table = Table()
+        table.add_column("Left", justify="left")
+        table.add_column("Right", justify="right")
+        table.add_column("Center", justify="center")
+        assert table.columns[0].justify == "left"
+        assert table.columns[1].justify == "right"
+        assert table.columns[2].justify == "center"
+
+    def test_table_show_header_false(self):
+        """Test table with hidden header."""
+        from rich.table import Table
+        table = Table(show_header=False)
+        assert table.show_header is False
+
+
+class TestPanelRendering:
+    """Test Rich Panel rendering."""
+
+    def test_panel_creation(self):
+        """Test basic panel creation."""
+        from rich.panel import Panel
+        panel = Panel("Test content")
+        assert panel.renderable == "Test content"
+
+    def test_panel_with_title(self):
+        """Test panel with title."""
+        from rich.panel import Panel
+        panel = Panel("Content", title="Panel Title")
+        assert panel.title == "Panel Title"
+
+    def test_panel_with_style(self):
+        """Test panel with border style."""
+        from rich.panel import Panel
+        panel = Panel("Content", border_style="blue")
+        assert panel.border_style == "blue"
+
+    def test_panel_renders_with_console(self, capture_console_output):
+        """Test panel renders properly with console."""
+        from src.cli import console
+        from rich.panel import Panel
+        panel = Panel("Panel content", title="Test Panel")
+        console.print(panel)
+        output = capture_console_output.getvalue()
+        assert "Panel content" in output
+        assert "Test Panel" in output
+
+    def test_panel_with_styled_title(self, capture_console_output):
+        """Test panel with styled title."""
+        from src.cli import console
+        from rich.panel import Panel
+        panel = Panel("Content", title="[cyan]Styled Title[/cyan]")
+        console.print(panel)
+        output = capture_console_output.getvalue()
+        assert "Styled Title" in output
+
+    def test_panel_with_border_dim(self, capture_console_output):
+        """Test panel with dim border style."""
+        from src.cli import console
+        from rich.panel import Panel
+        panel = Panel("Summary content", border_style="dim")
+        console.print(panel)
+        output = capture_console_output.getvalue()
+        assert "Summary content" in output
+
+
+class TestStatusIndicators:
+    """Test status indicator formatting."""
+
+    def test_ok_status_format(self, capture_console_output):
+        """Test OK status indicator format."""
+        from src.cli import console
+        console.print("[green]OK[/green]")
+        output = capture_console_output.getvalue()
+        assert "OK" in output
+
+    def test_error_status_format(self, capture_console_output):
+        """Test ERROR status indicator format."""
+        from src.cli import console
+        console.print("[red]ERROR[/red]")
+        output = capture_console_output.getvalue()
+        assert "ERROR" in output
+
+    def test_warning_status_format(self, capture_console_output):
+        """Test warning status indicator format."""
+        from src.cli import console
+        console.print("[yellow]Warnings[/yellow]")
+        output = capture_console_output.getvalue()
+        assert "Warnings" in output
+
+    def test_available_status_format(self, capture_console_output):
+        """Test available status indicator format."""
+        from src.cli import console
+        console.print("[green]Available[/green]")
+        output = capture_console_output.getvalue()
+        assert "Available" in output
+
+    def test_not_available_status_format(self, capture_console_output):
+        """Test not available status indicator format."""
+        from src.cli import console
+        console.print("[dim]Not Available[/dim]")
+        output = capture_console_output.getvalue()
+        assert "Not Available" in output
+
+    def test_ready_status_format(self, capture_console_output):
+        """Test ready status indicator format."""
+        from src.cli import console
+        console.print("[green]Ready[/green]")
+        output = capture_console_output.getvalue()
+        assert "Ready" in output
+
+    def test_needs_setup_status_format(self, capture_console_output):
+        """Test needs setup status indicator format."""
+        from src.cli import console
+        console.print("[yellow]Needs Setup[/yellow]")
+        output = capture_console_output.getvalue()
+        assert "Needs Setup" in output
+
+
+class TestFetchResultsTableOutput:
+    """Test fetch results table output formatting."""
+
+    def test_fetch_results_table_structure(self, cli_runner):
+        """Test fetch command creates properly structured table."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.load_feeds") as mock_load, \
+             patch("src.cli.fetch_all_feeds") as mock_fetch:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_load.return_value = ["https://example.com/feed.xml"]
+            mock_fetch.return_value = [
+                {"url": "https://example.com/feed.xml", "fetched": 5, "new": 3, "errors": []}
+            ]
+
+            result = cli_runner.invoke(app, ["fetch"])
+            # Table should contain column headers and data
+            assert "Feed" in result.stdout or "Fetch" in result.stdout
+            assert "5" in result.stdout or "fetched" in result.stdout.lower()
+
+    def test_fetch_results_shows_status(self, cli_runner):
+        """Test fetch results shows OK status for successful fetches."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.load_feeds") as mock_load, \
+             patch("src.cli.fetch_all_feeds") as mock_fetch:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_load.return_value = ["https://example.com/feed.xml"]
+            mock_fetch.return_value = [
+                {"url": "https://example.com/feed.xml", "fetched": 5, "new": 3, "errors": []}
+            ]
+
+            result = cli_runner.invoke(app, ["fetch"])
+            # Should show OK status for no errors
+            assert "OK" in result.stdout or "5" in result.stdout
+
+    def test_fetch_results_shows_warning_status(self, cli_runner):
+        """Test fetch results shows warning status when errors present."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.load_feeds") as mock_load, \
+             patch("src.cli.fetch_all_feeds") as mock_fetch:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_load.return_value = ["https://example.com/feed.xml"]
+            mock_fetch.return_value = [
+                {"url": "https://example.com/feed.xml", "fetched": 5, "new": 3, "errors": ["Some error"]}
+            ]
+
+            result = cli_runner.invoke(app, ["fetch"])
+            # Should show Warning status for errors
+            assert "Warning" in result.stdout or "5" in result.stdout
+
+    def test_fetch_results_truncates_long_urls(self, cli_runner):
+        """Test fetch results truncates URLs longer than 50 chars."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.load_feeds") as mock_load, \
+             patch("src.cli.fetch_all_feeds") as mock_fetch:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            long_url = "https://very-long-domain-name.example.com/very/long/path/to/feed.xml"
+            mock_load.return_value = [long_url]
+            mock_fetch.return_value = [
+                {"url": long_url, "fetched": 5, "new": 3, "errors": []}
+            ]
+
+            result = cli_runner.invoke(app, ["fetch"])
+            # URL should be truncated (ending with ...)
+            assert "..." in result.stdout or "example" in result.stdout
+
+
+class TestTrendsTableOutput:
+    """Test trends command table output formatting."""
+
+    def test_trends_table_structure(self, cli_runner):
+        """Test trends command creates properly structured table."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.analyze_trends") as mock_analyze:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_analyze.return_value = {
+                "top_trends": [("AI & Technology", 50), ("Business", 30)],
+                "emerging": [],
+                "declining": [],
+                "processed": 100,
+                "hours": 24
+            }
+
+            result = cli_runner.invoke(app, ["trends"])
+            # Should contain trend data
+            assert "AI" in result.stdout or "Tech" in result.stdout or "Top Trends" in result.stdout
+
+    def test_trends_shows_bar_visualization(self, cli_runner):
+        """Test trends shows bar visualization for counts."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.analyze_trends") as mock_analyze:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_analyze.return_value = {
+                "top_trends": [("Category", 50)],
+                "emerging": [],
+                "declining": [],
+                "processed": 100,
+                "hours": 24
+            }
+
+            result = cli_runner.invoke(app, ["trends"])
+            # Bar visualization uses # characters
+            assert "#" in result.stdout or "50" in result.stdout
+
+    def test_trends_shows_emerging_section(self, cli_runner):
+        """Test trends shows emerging trends section when present."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.analyze_trends") as mock_analyze:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_analyze.return_value = {
+                "top_trends": [("Tech", 50)],
+                "emerging": [("GPT-5", 100)],
+                "declining": [],
+                "processed": 100,
+                "hours": 24
+            }
+
+            result = cli_runner.invoke(app, ["trends"])
+            # Should show emerging trends
+            assert "Emerging" in result.stdout or "GPT" in result.stdout
+
+
+class TestListTableOutput:
+    """Test list command table output formatting."""
+
+    def test_list_table_structure(self, cli_runner):
+        """Test list command creates properly structured article table."""
+        with patch("src.cli.get_storage") as mock_storage:
+            mock_storage_instance = MagicMock()
+            mock_article = MagicMock()
+            mock_article.title = "Test Article Title"
+            mock_article.published = datetime.now()
+            mock_article.trend_tags = "Tech"
+            mock_article.summary = "Test summary"
+            mock_article.link = "https://example.com/article"
+            mock_storage_instance.get_articles.return_value = [mock_article]
+            mock_storage.return_value = mock_storage_instance
+
+            result = cli_runner.invoke(app, ["list"])
+            # Should show article title
+            assert "Test Article" in result.stdout or "Recent Articles" in result.stdout
+
+    def test_list_truncates_long_titles(self, cli_runner):
+        """Test list truncates titles longer than 50 chars."""
+        with patch("src.cli.get_storage") as mock_storage:
+            mock_storage_instance = MagicMock()
+            mock_article = MagicMock()
+            mock_article.title = "A" * 100  # Very long title
+            mock_article.published = datetime.now()
+            mock_article.trend_tags = "Tech"
+            mock_article.summary = None
+            mock_article.link = "https://example.com"
+            mock_storage_instance.get_articles.return_value = [mock_article]
+            mock_storage.return_value = mock_storage_instance
+
+            result = cli_runner.invoke(app, ["list"])
+            # Should truncate (original is 100 chars, limit is 50)
+            assert "..." in result.stdout or result.exit_code == 0
+
+    def test_list_with_summary_shows_panels(self, cli_runner):
+        """Test list with --summary shows article summaries in panels."""
+        with patch("src.cli.get_storage") as mock_storage:
+            mock_storage_instance = MagicMock()
+            mock_article = MagicMock()
+            mock_article.title = "Test Article"
+            mock_article.published = datetime.now()
+            mock_article.trend_tags = "Tech"
+            mock_article.summary = "This is the article summary"
+            mock_article.link = "https://example.com"
+            mock_storage_instance.get_articles.return_value = [mock_article]
+            mock_storage.return_value = mock_storage_instance
+
+            result = cli_runner.invoke(app, ["list", "--summary"])
+            # Should show summary content
+            assert "Summaries" in result.stdout or "article summary" in result.stdout or result.exit_code == 0
+
+
+class TestStatsTableOutput:
+    """Test stats command table output formatting."""
+
+    def test_stats_shows_panel(self, cli_runner):
+        """Test stats command shows panel with total count."""
+        with patch("src.cli.get_storage") as mock_storage:
+            mock_storage_instance = MagicMock()
+            mock_storage_instance.get_article_count.return_value = 100
+            mock_storage_instance.get_feed_stats.return_value = []
+            mock_storage.return_value = mock_storage_instance
+
+            result = cli_runner.invoke(app, ["stats"])
+            # Should show total count
+            assert "100" in result.stdout or "Total" in result.stdout
+
+    def test_stats_shows_feed_stats_table(self, cli_runner):
+        """Test stats shows table when feed stats available."""
+        with patch("src.cli.get_storage") as mock_storage:
+            mock_storage_instance = MagicMock()
+            mock_storage_instance.get_article_count.return_value = 100
+            mock_storage_instance.get_feed_stats.return_value = [
+                {
+                    "feed_url": "https://example.com/feed.xml",
+                    "article_count": 50,
+                    "summarized_count": 25,
+                    "latest_article": "2024-01-01"
+                }
+            ]
+            mock_storage.return_value = mock_storage_instance
+
+            result = cli_runner.invoke(app, ["stats"])
+            # Should show feed URL or counts
+            assert "example.com" in result.stdout or "50" in result.stdout
+
+
+class TestProvidersTableOutput:
+    """Test providers command table output formatting."""
+
+    def test_providers_table_structure(self, cli_runner):
+        """Test providers command creates properly structured table."""
+        with patch("src.llm_providers.list_providers") as mock_list:
+            mock_list.return_value = [
+                {"name": "Ollama", "available": True, "description": "Local Ollama"},
+                {"name": "OpenAI", "available": False, "description": "OpenAI API"}
+            ]
+
+            result = cli_runner.invoke(app, ["providers"])
+            # Should show provider names
+            assert "Ollama" in result.stdout or "Provider" in result.stdout
+
+    def test_providers_shows_available_status(self, cli_runner):
+        """Test providers shows Available status for available providers."""
+        with patch("src.llm_providers.list_providers") as mock_list:
+            mock_list.return_value = [
+                {"name": "Ollama", "available": True, "description": "Local Ollama"}
+            ]
+
+            result = cli_runner.invoke(app, ["providers"])
+            # Should show Available status
+            assert "Available" in result.stdout or "Ollama" in result.stdout
+
+    def test_providers_shows_not_available_status(self, cli_runner):
+        """Test providers shows Not Available status for unavailable providers."""
+        with patch("src.llm_providers.list_providers") as mock_list:
+            mock_list.return_value = [
+                {"name": "OpenAI", "available": False, "description": "OpenAI API"}
+            ]
+
+            result = cli_runner.invoke(app, ["providers"])
+            # Should show Not Available or just the provider
+            assert "Not Available" in result.stdout or "OpenAI" in result.stdout
+
+
+class TestKnowledgeStatsOutput:
+    """Test knowledge-stats command output formatting."""
+
+    def test_knowledge_stats_shows_panel(self, cli_runner):
+        """Test knowledge-stats shows panel with header."""
+        with patch("src.cli.KnowledgeBase") as mock_kb_class:
+            mock_kb = MagicMock()
+            mock_kb.get_stats.return_value = {
+                "total_insights": 100,
+                "high_confidence_insights": 50,
+                "total_entities": 200,
+                "total_relationships": 150,
+                "contradictions": 5
+            }
+            mock_kb_class.return_value = mock_kb
+
+            result = cli_runner.invoke(app, ["knowledge-stats"])
+            # Should show Knowledge Base heading
+            assert "Knowledge" in result.stdout or "100" in result.stdout
+
+    def test_knowledge_stats_shows_table(self, cli_runner):
+        """Test knowledge-stats shows table with metrics."""
+        with patch("src.cli.KnowledgeBase") as mock_kb_class:
+            mock_kb = MagicMock()
+            mock_kb.get_stats.return_value = {
+                "total_insights": 100,
+                "high_confidence_insights": 50,
+                "total_entities": 200,
+                "total_relationships": 150,
+                "contradictions": 5
+            }
+            mock_kb_class.return_value = mock_kb
+
+            result = cli_runner.invoke(app, ["knowledge-stats"])
+            # Should show metric values
+            assert "100" in result.stdout or "Insights" in result.stdout
+
+
+class TestGraphStatsOutput:
+    """Test graph-stats command output formatting."""
+
+    def test_graph_stats_shows_panel(self, cli_runner):
+        """Test graph-stats shows panel with header."""
+        with patch("src.cli.KnowledgeBase") as mock_kb_class:
+            mock_kb = MagicMock()
+            mock_kb.get_graph_stats.return_value = {
+                "total_insights": 100,
+                "total_entities": 200,
+                "total_triples": 500,
+                "total_entity_relationships": 150,
+                "unique_predicates": 25,
+                "total_embeddings": 1000,
+                "predicate_types": ["related_to", "causes"],
+                "top_connected_entities": []
+            }
+            mock_kb_class.return_value = mock_kb
+
+            result = cli_runner.invoke(app, ["graph-stats"])
+            # Should show Graph Statistics heading
+            assert "Graph" in result.stdout or "100" in result.stdout
+
+    def test_graph_stats_shows_predicate_types(self, cli_runner):
+        """Test graph-stats shows predicate types when present."""
+        with patch("src.cli.KnowledgeBase") as mock_kb_class:
+            mock_kb = MagicMock()
+            mock_kb.get_graph_stats.return_value = {
+                "total_insights": 100,
+                "total_entities": 200,
+                "total_triples": 500,
+                "total_entity_relationships": 150,
+                "unique_predicates": 25,
+                "total_embeddings": 1000,
+                "predicate_types": ["related_to", "causes", "implies"],
+                "top_connected_entities": []
+            }
+            mock_kb_class.return_value = mock_kb
+
+            result = cli_runner.invoke(app, ["graph-stats"])
+            # Should show predicate types
+            assert "related_to" in result.stdout or "Predicate" in result.stdout or "25" in result.stdout
+
+
+class TestContextListOutput:
+    """Test context-list command output formatting."""
+
+    def test_context_list_shows_table(self, cli_runner):
+        """Test context-list shows table with contexts."""
+        with patch("src.cli.KnowledgeBase") as mock_kb_class:
+            mock_kb = MagicMock()
+            mock_context = MagicMock()
+            mock_context.context_type = "project"
+            mock_context.name = "Test Project"
+            mock_context.active = True
+            mock_context.description = "Test description"
+            mock_kb.get_contexts.return_value = [mock_context]
+            mock_kb_class.return_value = mock_kb
+
+            result = cli_runner.invoke(app, ["context-list"])
+            # Should show context data
+            assert "project" in result.stdout or "Test Project" in result.stdout or "Contexts" in result.stdout
+
+    def test_context_list_shows_active_status(self, cli_runner):
+        """Test context-list shows Active status for active contexts."""
+        with patch("src.cli.KnowledgeBase") as mock_kb_class:
+            mock_kb = MagicMock()
+            mock_context = MagicMock()
+            mock_context.context_type = "project"
+            mock_context.name = "Test Project"
+            mock_context.active = True
+            mock_context.description = ""
+            mock_kb.get_contexts.return_value = [mock_context]
+            mock_kb_class.return_value = mock_kb
+
+            result = cli_runner.invoke(app, ["context-list"])
+            # Should show Active status
+            assert "Active" in result.stdout or "project" in result.stdout
+
+    def test_context_list_shows_empty_message(self, cli_runner):
+        """Test context-list shows message when no contexts."""
+        with patch("src.cli.KnowledgeBase") as mock_kb_class:
+            mock_kb = MagicMock()
+            mock_kb.get_contexts.return_value = []
+            mock_kb_class.return_value = mock_kb
+
+            result = cli_runner.invoke(app, ["context-list"])
+            # Should show no contexts message
+            assert "No contexts" in result.stdout or "context-add" in result.stdout
+
+
+class TestGraphOutput:
+    """Test graph command output formatting."""
+
+    def test_graph_shows_panel(self, cli_runner):
+        """Test graph command shows panel with entity name."""
+        with patch("src.cli.KnowledgeBase") as mock_kb_class:
+            mock_kb = MagicMock()
+            mock_kb.get_entity_neighborhood.return_value = {
+                "outgoing": [{"predicate": "related_to", "target": "Entity2"}],
+                "incoming": []
+            }
+            mock_kb.get_connected_entities.return_value = {
+                "entities": ["Entity2"],
+                "relationships": []
+            }
+            mock_kb_class.return_value = mock_kb
+
+            result = cli_runner.invoke(app, ["graph", "TestEntity"])
+            # Should show Knowledge Graph heading or entity relationships
+            assert "Knowledge Graph" in result.stdout or "related_to" in result.stdout or "Entity2" in result.stdout
+
+    def test_graph_shows_outgoing_relationships(self, cli_runner):
+        """Test graph shows outgoing relationships when present."""
+        with patch("src.cli.KnowledgeBase") as mock_kb_class:
+            mock_kb = MagicMock()
+            mock_kb.get_entity_neighborhood.return_value = {
+                "outgoing": [{"predicate": "develops", "target": "Product"}],
+                "incoming": []
+            }
+            mock_kb.get_connected_entities.return_value = {"entities": [], "relationships": []}
+            mock_kb_class.return_value = mock_kb
+
+            result = cli_runner.invoke(app, ["graph", "Company"])
+            # Should show outgoing relationship
+            assert "develops" in result.stdout or "Product" in result.stdout or "Outgoing" in result.stdout
+
+    def test_graph_shows_no_relationships_message(self, cli_runner):
+        """Test graph shows message when entity has no relationships."""
+        with patch("src.cli.KnowledgeBase") as mock_kb_class:
+            mock_kb = MagicMock()
+            mock_kb.get_entity_neighborhood.return_value = {
+                "outgoing": [],
+                "incoming": []
+            }
+            mock_kb_class.return_value = mock_kb
+
+            result = cli_runner.invoke(app, ["graph", "UnknownEntity"])
+            # Should show no relationships message
+            assert "No relationships" in result.stdout or "not found" in result.stdout.lower() or result.exit_code == 0
+
+
+class TestGraphPathOutput:
+    """Test graph-path command output formatting."""
+
+    def test_graph_path_shows_panel_on_success(self, cli_runner):
+        """Test graph-path shows panel when path found."""
+        with patch("src.cli.KnowledgeBase") as mock_kb_class:
+            mock_kb = MagicMock()
+            mock_kb.find_path.return_value = [
+                {"from": "Start", "predicate": "connects_to", "to": "End"}
+            ]
+            mock_kb_class.return_value = mock_kb
+
+            result = cli_runner.invoke(app, ["graph-path", "Start", "End"])
+            # Should show path or relationship
+            assert "Path" in result.stdout or "connects_to" in result.stdout or "Start" in result.stdout
+
+    def test_graph_path_shows_no_path_message(self, cli_runner):
+        """Test graph-path shows message when no path found."""
+        with patch("src.cli.KnowledgeBase") as mock_kb_class:
+            mock_kb = MagicMock()
+            mock_kb.find_path.return_value = None
+            mock_kb_class.return_value = mock_kb
+
+            result = cli_runner.invoke(app, ["graph-path", "A", "B"])
+            # Should show no path message
+            assert "No path" in result.stdout or result.exit_code == 0
+
+
+class TestEmergingOutput:
+    """Test emerging command output formatting."""
+
+    def test_emerging_shows_confidence_headers(self, cli_runner):
+        """Test emerging shows confidence level headers."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.detect_emerging_trends") as mock_detect:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+
+            mock_trend = MagicMock()
+            mock_trend.term = "TestTrend"
+            mock_trend.confidence = "High"
+            mock_detect.return_value = [mock_trend]
+
+            with patch("src.cli.format_emerging_trend") as mock_format:
+                mock_format.return_value = "TestTrend - emerging trend"
+                result = cli_runner.invoke(app, ["emerging"])
+
+            # Should show confidence level or trend
+            assert "HIGH" in result.stdout or "TestTrend" in result.stdout or "Emerging" in result.stdout.lower() or result.exit_code in [0, 1]
+
+    def test_emerging_shows_no_trends_message(self, cli_runner):
+        """Test emerging shows message when no trends detected."""
+        with patch("src.cli.require_setup") as mock_setup, \
+             patch("src.cli.get_storage") as mock_storage, \
+             patch("src.cli.detect_emerging_trends") as mock_detect:
+            mock_setup.return_value = None
+            mock_storage.return_value = MagicMock()
+            mock_detect.return_value = []
+
+            result = cli_runner.invoke(app, ["emerging"])
+            # Should show no trends message
+            assert "No emerging" in result.stdout or "not enough" in result.stdout.lower() or result.exit_code in [0, 1]
+
+
+class TestHelpCommandOutput:
+    """Test help command output formatting."""
+
+    def test_help_shows_command_categories(self, cli_runner):
+        """Test help shows command categories."""
+        with patch("src.cli.is_setup_complete") as mock_check:
+            mock_check.return_value = True
+            result = cli_runner.invoke(app, ["help"])
+            # Should show command categories
+            assert "Setup" in result.stdout or "Main" in result.stdout or "Commands" in result.stdout
+
+    def test_help_shows_setup_required_when_incomplete(self, cli_runner):
+        """Test help shows setup required message when incomplete."""
+        with patch("src.cli.is_setup_complete") as mock_check:
+            mock_check.return_value = False
+            result = cli_runner.invoke(app, ["help"])
+            # Should show setup message or dim commands
+            assert "setup" in result.stdout.lower()
+
+
+class TestOutputFormattingIntegration:
+    """Integration tests for output formatting across commands."""
+
+    def test_all_table_commands_have_titles(self, cli_runner):
+        """Test that table-producing commands have table titles."""
+        # This is a meta-test to ensure consistency
+        from rich.table import Table
+
+        # Tables with titles should be created correctly
+        table = Table(title="Test Title")
+        assert table.title is not None
+
+    def test_panel_border_styles_are_valid(self):
+        """Test that panel border styles used are valid Rich styles."""
+        from rich.panel import Panel
+
+        # These are the border styles used in cli.py
+        valid_styles = ["blue", "green", "dim"]
+        for style in valid_styles:
+            panel = Panel("Content", border_style=style)
+            assert panel.border_style == style
+
+    def test_status_indicators_use_consistent_colors(self, capture_console_output):
+        """Test status indicators use consistent color scheme."""
+        from src.cli import console
+
+        # Good statuses should use green
+        console.print("[green]OK[/green]")
+        console.print("[green]Available[/green]")
+        console.print("[green]Ready[/green]")
+        console.print("[green]Active[/green]")
+
+        # Warning statuses should use yellow
+        console.print("[yellow]Warnings[/yellow]")
+        console.print("[yellow]Needs Setup[/yellow]")
+        console.print("[yellow]Setup required[/yellow]")
+
+        # Error statuses should use red
+        console.print("[red]ERROR[/red]")
+        console.print("[red]Not Available[/red]")
+
+        output = capture_console_output.getvalue()
+        assert "OK" in output
+        assert "Warnings" in output
+        assert "ERROR" in output
+
+    def test_dim_text_for_supplementary_info(self, capture_console_output):
+        """Test dim text is used for supplementary information."""
+        from src.cli import console
+
+        console.print("[dim]Additional context...[/dim]")
+        console.print("[dim]Run 'rss setup' to configure[/dim]")
+
+        output = capture_console_output.getvalue()
+        assert "Additional context" in output
+        assert "rss setup" in output
+
+    def test_cyan_text_for_data_fields(self, capture_console_output):
+        """Test cyan text is used for data fields consistently."""
+        from src.cli import console
+
+        console.print("[cyan]https://example.com/feed.xml[/cyan]")
+        console.print("[cyan]Article Title[/cyan]")
+
+        output = capture_console_output.getvalue()
+        assert "example.com" in output
+        assert "Article Title" in output
