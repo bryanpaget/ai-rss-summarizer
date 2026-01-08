@@ -2592,3 +2592,552 @@ class TestTripleIntegration:
         # Pattern should match both Apple and Pineapple
         pattern_triples = knowledge_base.query_triples_pattern(subject_pattern="Apple")
         assert len(pattern_triples) == 3  # Both Apple and Pineapple contain "Apple"
+
+
+# =============================================================================
+# Test Classes - Entity Relationship Operations
+# =============================================================================
+
+
+class TestSaveEntityRelationship:
+    """Tests for KnowledgeBase.save_entity_relationship() method."""
+
+    def test_save_entity_relationship_success(self, knowledge_base, sample_entity_relationship_acquired):
+        """Test saving a new entity relationship returns True."""
+        result = knowledge_base.save_entity_relationship(sample_entity_relationship_acquired)
+        assert result is True
+
+    def test_save_entity_relationship_duplicate_id_fails(self, knowledge_base, sample_entity_relationship_acquired):
+        """Test saving entity relationship with duplicate ID returns False."""
+        knowledge_base.save_entity_relationship(sample_entity_relationship_acquired)
+        result = knowledge_base.save_entity_relationship(sample_entity_relationship_acquired)
+        assert result is False
+
+    def test_save_entity_relationship_persists_all_fields(self, knowledge_base, sample_entity_relationship_acquired):
+        """Test that all entity relationship fields are persisted correctly."""
+        knowledge_base.save_entity_relationship(sample_entity_relationship_acquired)
+
+        relationships = knowledge_base.get_entity_relationships()
+
+        assert len(relationships) == 1
+        retrieved = relationships[0]
+        assert retrieved.id == sample_entity_relationship_acquired.id
+        assert retrieved.source_entity_id == sample_entity_relationship_acquired.source_entity_id
+        assert retrieved.target_entity_id == sample_entity_relationship_acquired.target_entity_id
+        assert retrieved.relationship_type == sample_entity_relationship_acquired.relationship_type
+        assert retrieved.properties == sample_entity_relationship_acquired.properties
+        assert retrieved.source_article_id == sample_entity_relationship_acquired.source_article_id
+
+    def test_save_entity_relationship_with_properties(self, knowledge_base):
+        """Test saving entity relationship with JSON properties."""
+        relationship = EntityRelationship(
+            id="ent-rel-props",
+            source_entity_id="entity-001",
+            target_entity_id="entity-002",
+            relationship_type="partners_with",
+            properties='{"started": "2023", "type": "strategic", "revenue_share": 0.5}',
+            source_article_id="article-001",
+        )
+        result = knowledge_base.save_entity_relationship(relationship)
+        assert result is True
+
+        relationships = knowledge_base.get_entity_relationships()
+        assert len(relationships) == 1
+        assert relationships[0].properties == '{"started": "2023", "type": "strategic", "revenue_share": 0.5}'
+
+    def test_save_entity_relationship_without_properties(self, knowledge_base, sample_entity_relationship_competes):
+        """Test saving entity relationship without properties (None)."""
+        result = knowledge_base.save_entity_relationship(sample_entity_relationship_competes)
+        assert result is True
+
+        relationships = knowledge_base.get_entity_relationships()
+        assert len(relationships) == 1
+        assert relationships[0].properties is None
+
+    def test_save_entity_relationship_without_source_article(self, knowledge_base):
+        """Test saving entity relationship without source_article_id."""
+        relationship = EntityRelationship(
+            id="ent-rel-no-source",
+            source_entity_id="entity-001",
+            target_entity_id="entity-002",
+            relationship_type="acquired",
+            properties=None,
+            source_article_id=None,
+        )
+        result = knowledge_base.save_entity_relationship(relationship)
+        assert result is True
+
+        relationships = knowledge_base.get_entity_relationships()
+        assert len(relationships) == 1
+        assert relationships[0].source_article_id is None
+
+    def test_save_multiple_entity_relationships(self, knowledge_base, sample_entity_relationships):
+        """Test saving multiple different entity relationships."""
+        results = []
+        for relationship in sample_entity_relationships:
+            results.append(knowledge_base.save_entity_relationship(relationship))
+
+        assert all(results), "All unique entity relationships should save successfully"
+
+        relationships = knowledge_base.get_entity_relationships()
+        assert len(relationships) == len(sample_entity_relationships)
+
+    def test_save_entity_relationship_different_types(self, knowledge_base):
+        """Test saving entity relationships with various relationship types."""
+        types = ["acquired", "created", "competes_with", "partners_with", "invested_in", "employs"]
+
+        for i, rel_type in enumerate(types):
+            relationship = EntityRelationship(
+                id=f"ent-rel-type-{i}",
+                source_entity_id=f"entity-{i}",
+                target_entity_id=f"entity-{i+10}",
+                relationship_type=rel_type,
+            )
+            result = knowledge_base.save_entity_relationship(relationship)
+            assert result is True
+
+        relationships = knowledge_base.get_entity_relationships()
+        assert len(relationships) == len(types)
+
+
+class TestGetEntityRelationships:
+    """Tests for KnowledgeBase.get_entity_relationships() method."""
+
+    def test_get_entity_relationships_empty_database(self, empty_knowledge_base):
+        """Test get_entity_relationships on empty database returns empty list."""
+        result = empty_knowledge_base.get_entity_relationships()
+        assert result == []
+
+    def test_get_entity_relationships_all(self, knowledge_base, sample_entity_relationships):
+        """Test retrieving all entity relationships without filters."""
+        for relationship in sample_entity_relationships:
+            knowledge_base.save_entity_relationship(relationship)
+
+        relationships = knowledge_base.get_entity_relationships()
+        assert len(relationships) == len(sample_entity_relationships)
+
+    def test_get_entity_relationships_by_source_entity_id(self, knowledge_base, sample_entity_relationships):
+        """Test filtering entity relationships by entity_id (as source)."""
+        for relationship in sample_entity_relationships:
+            knowledge_base.save_entity_relationship(relationship)
+
+        # entity-002 (OpenAI) is source in acquired and competes_with relationships
+        relationships = knowledge_base.get_entity_relationships(entity_id="entity-002")
+        assert len(relationships) == 2
+        for rel in relationships:
+            assert rel.source_entity_id == "entity-002" or rel.target_entity_id == "entity-002"
+
+    def test_get_entity_relationships_by_target_entity_id(self, knowledge_base, sample_entity_relationships):
+        """Test filtering entity relationships by entity_id (as target)."""
+        for relationship in sample_entity_relationships:
+            knowledge_base.save_entity_relationship(relationship)
+
+        # entity-001 (Python) is target in the 'created' relationship
+        relationships = knowledge_base.get_entity_relationships(entity_id="entity-001")
+        assert len(relationships) == 1
+        assert relationships[0].target_entity_id == "entity-001"
+
+    def test_get_entity_relationships_entity_matches_both_source_and_target(self, knowledge_base):
+        """Test entity_id filter matches when entity is both source and target."""
+        # Create relationships where entity-001 is source, target, and both
+        relationships = [
+            EntityRelationship(
+                id="rel-1",
+                source_entity_id="entity-001",
+                target_entity_id="entity-002",
+                relationship_type="created",
+            ),
+            EntityRelationship(
+                id="rel-2",
+                source_entity_id="entity-003",
+                target_entity_id="entity-001",
+                relationship_type="competes_with",
+            ),
+            EntityRelationship(
+                id="rel-3",
+                source_entity_id="entity-004",
+                target_entity_id="entity-005",
+                relationship_type="acquired",
+            ),
+        ]
+        for rel in relationships:
+            knowledge_base.save_entity_relationship(rel)
+
+        # entity-001 appears in rel-1 (source) and rel-2 (target)
+        filtered = knowledge_base.get_entity_relationships(entity_id="entity-001")
+        assert len(filtered) == 2
+
+    def test_get_entity_relationships_by_type(self, knowledge_base, sample_entity_relationships):
+        """Test filtering entity relationships by relationship_type."""
+        for relationship in sample_entity_relationships:
+            knowledge_base.save_entity_relationship(relationship)
+
+        # Filter by 'created' type
+        relationships = knowledge_base.get_entity_relationships(relationship_type="created")
+        assert len(relationships) == 1
+        assert relationships[0].relationship_type == "created"
+
+    def test_get_entity_relationships_by_type_multiple_matches(self, knowledge_base):
+        """Test filtering by type returns multiple matches."""
+        relationships = [
+            EntityRelationship(
+                id="rel-1",
+                source_entity_id="entity-001",
+                target_entity_id="entity-002",
+                relationship_type="acquired",
+            ),
+            EntityRelationship(
+                id="rel-2",
+                source_entity_id="entity-003",
+                target_entity_id="entity-004",
+                relationship_type="acquired",
+            ),
+            EntityRelationship(
+                id="rel-3",
+                source_entity_id="entity-005",
+                target_entity_id="entity-006",
+                relationship_type="partners_with",
+            ),
+        ]
+        for rel in relationships:
+            knowledge_base.save_entity_relationship(rel)
+
+        acquired = knowledge_base.get_entity_relationships(relationship_type="acquired")
+        assert len(acquired) == 2
+        assert all(r.relationship_type == "acquired" for r in acquired)
+
+    def test_get_entity_relationships_combined_filters(self, knowledge_base, sample_entity_relationships):
+        """Test filtering by both entity_id and relationship_type."""
+        for relationship in sample_entity_relationships:
+            knowledge_base.save_entity_relationship(relationship)
+
+        # Filter by entity-002 (OpenAI) AND acquired type
+        relationships = knowledge_base.get_entity_relationships(
+            entity_id="entity-002",
+            relationship_type="acquired",
+        )
+        assert len(relationships) == 1
+        assert relationships[0].relationship_type == "acquired"
+        assert relationships[0].source_entity_id == "entity-002"
+
+    def test_get_entity_relationships_combined_filters_no_match(self, knowledge_base, sample_entity_relationships):
+        """Test combined filters with no matches."""
+        for relationship in sample_entity_relationships:
+            knowledge_base.save_entity_relationship(relationship)
+
+        # entity-001 (Python) with 'acquired' type doesn't exist
+        relationships = knowledge_base.get_entity_relationships(
+            entity_id="entity-001",
+            relationship_type="acquired",
+        )
+        assert len(relationships) == 0
+
+    def test_get_entity_relationships_nonexistent_entity(self, knowledge_base, sample_entity_relationships):
+        """Test filtering by nonexistent entity_id returns empty list."""
+        for relationship in sample_entity_relationships:
+            knowledge_base.save_entity_relationship(relationship)
+
+        relationships = knowledge_base.get_entity_relationships(entity_id="nonexistent-entity")
+        assert len(relationships) == 0
+
+    def test_get_entity_relationships_nonexistent_type(self, knowledge_base, sample_entity_relationships):
+        """Test filtering by nonexistent type returns empty list."""
+        for relationship in sample_entity_relationships:
+            knowledge_base.save_entity_relationship(relationship)
+
+        relationships = knowledge_base.get_entity_relationships(relationship_type="unknown_type")
+        assert len(relationships) == 0
+
+    def test_get_entity_relationships_has_detected_at_timestamp(self, knowledge_base):
+        """Test that relationships have detected_at timestamp set by the database.
+
+        Note: detected_at is set by SQLite's DEFAULT CURRENT_TIMESTAMP at insertion time,
+        not from the Python object's detected_at field.
+        """
+        relationships = [
+            EntityRelationship(
+                id="rel-first",
+                source_entity_id="entity-001",
+                target_entity_id="entity-002",
+                relationship_type="created",
+            ),
+            EntityRelationship(
+                id="rel-second",
+                source_entity_id="entity-003",
+                target_entity_id="entity-004",
+                relationship_type="acquired",
+            ),
+            EntityRelationship(
+                id="rel-third",
+                source_entity_id="entity-005",
+                target_entity_id="entity-006",
+                relationship_type="partners_with",
+            ),
+        ]
+
+        for rel in relationships:
+            knowledge_base.save_entity_relationship(rel)
+
+        result = knowledge_base.get_entity_relationships()
+        assert len(result) == 3
+
+        # Verify all relationships are present
+        result_ids = {r.id for r in result}
+        assert result_ids == {"rel-first", "rel-second", "rel-third"}
+
+        # Verify each has a detected_at timestamp set by the database
+        for rel in result:
+            assert rel.detected_at is not None
+
+    def test_get_entity_relationships_case_sensitive_type(self, knowledge_base):
+        """Test that relationship_type filter is case-sensitive."""
+        relationship = EntityRelationship(
+            id="rel-case",
+            source_entity_id="entity-001",
+            target_entity_id="entity-002",
+            relationship_type="Acquired",  # Capital A
+        )
+        knowledge_base.save_entity_relationship(relationship)
+
+        # Exact case match
+        results_exact = knowledge_base.get_entity_relationships(relationship_type="Acquired")
+        assert len(results_exact) == 1
+
+        # Different case - should not match
+        results_lower = knowledge_base.get_entity_relationships(relationship_type="acquired")
+        assert len(results_lower) == 0
+
+
+class TestEntityRelationshipIntegration:
+    """Integration tests for entity relationship operations."""
+
+    def test_entity_relationship_with_saved_entities(self, knowledge_base, sample_entities):
+        """Test creating entity relationships with previously saved entities."""
+        # Save entities first
+        for entity in sample_entities:
+            knowledge_base.save_entity(entity)
+
+        # Create relationships between saved entities
+        relationship = EntityRelationship(
+            id="rel-with-entities",
+            source_entity_id=sample_entities[2].id,  # Guido van Rossum
+            target_entity_id=sample_entities[0].id,  # Python
+            relationship_type="created",
+            properties='{"year": "1991"}',
+        )
+        result = knowledge_base.save_entity_relationship(relationship)
+        assert result is True
+
+        # Verify relationship can be retrieved
+        relationships = knowledge_base.get_entity_relationships(entity_id=sample_entities[2].id)
+        assert len(relationships) == 1
+        assert relationships[0].relationship_type == "created"
+
+    def test_complex_entity_relationship_graph(self, knowledge_base):
+        """Test building a complex graph of entity relationships."""
+        # Create a network: Company A acquired Company B, which competes with Company C
+        relationships = [
+            EntityRelationship(
+                id="rel-graph-1",
+                source_entity_id="company-a",
+                target_entity_id="company-b",
+                relationship_type="acquired",
+                properties='{"year": "2023", "amount": "$5B"}',
+            ),
+            EntityRelationship(
+                id="rel-graph-2",
+                source_entity_id="company-b",
+                target_entity_id="company-c",
+                relationship_type="competes_with",
+            ),
+            EntityRelationship(
+                id="rel-graph-3",
+                source_entity_id="company-a",
+                target_entity_id="company-c",
+                relationship_type="partners_with",
+            ),
+            EntityRelationship(
+                id="rel-graph-4",
+                source_entity_id="founder-x",
+                target_entity_id="company-a",
+                relationship_type="founded",
+            ),
+        ]
+
+        for rel in relationships:
+            knowledge_base.save_entity_relationship(rel)
+
+        # Verify all relationships saved
+        all_rels = knowledge_base.get_entity_relationships()
+        assert len(all_rels) == 4
+
+        # Find all relationships involving company-a
+        company_a_rels = knowledge_base.get_entity_relationships(entity_id="company-a")
+        assert len(company_a_rels) == 3  # acquired, partners_with, founded
+
+        # Find all competes_with relationships
+        competition_rels = knowledge_base.get_entity_relationships(relationship_type="competes_with")
+        assert len(competition_rels) == 1
+
+    def test_entity_relationship_bidirectional_query(self, knowledge_base):
+        """Test that entity_id filter finds relationships where entity is source OR target."""
+        # Create A -> B and C -> A relationships
+        knowledge_base.save_entity_relationship(
+            EntityRelationship(
+                id="rel-a-to-b",
+                source_entity_id="entity-a",
+                target_entity_id="entity-b",
+                relationship_type="created",
+            )
+        )
+        knowledge_base.save_entity_relationship(
+            EntityRelationship(
+                id="rel-c-to-a",
+                source_entity_id="entity-c",
+                target_entity_id="entity-a",
+                relationship_type="acquired",
+            )
+        )
+        knowledge_base.save_entity_relationship(
+            EntityRelationship(
+                id="rel-b-to-c",
+                source_entity_id="entity-b",
+                target_entity_id="entity-c",
+                relationship_type="partners_with",
+            )
+        )
+
+        # Query for entity-a should return 2 relationships
+        entity_a_rels = knowledge_base.get_entity_relationships(entity_id="entity-a")
+        assert len(entity_a_rels) == 2
+
+        # Query for entity-b should also return 2 relationships
+        entity_b_rels = knowledge_base.get_entity_relationships(entity_id="entity-b")
+        assert len(entity_b_rels) == 2
+
+        # Query for entity-c should return 2 relationships
+        entity_c_rels = knowledge_base.get_entity_relationships(entity_id="entity-c")
+        assert len(entity_c_rels) == 2
+
+    def test_entity_relationship_with_multiple_types_same_entities(self, knowledge_base):
+        """Test multiple relationship types between the same entities."""
+        # Companies can have multiple types of relationships
+        knowledge_base.save_entity_relationship(
+            EntityRelationship(
+                id="rel-multi-1",
+                source_entity_id="company-x",
+                target_entity_id="company-y",
+                relationship_type="invested_in",
+            )
+        )
+        knowledge_base.save_entity_relationship(
+            EntityRelationship(
+                id="rel-multi-2",
+                source_entity_id="company-x",
+                target_entity_id="company-y",
+                relationship_type="partners_with",
+            )
+        )
+        knowledge_base.save_entity_relationship(
+            EntityRelationship(
+                id="rel-multi-3",
+                source_entity_id="company-x",
+                target_entity_id="company-y",
+                relationship_type="competes_with",
+            )
+        )
+
+        # All three should be retrievable
+        all_rels = knowledge_base.get_entity_relationships(entity_id="company-x")
+        assert len(all_rels) == 3
+
+        # Filter by specific type
+        invested_rels = knowledge_base.get_entity_relationships(
+            entity_id="company-x",
+            relationship_type="invested_in",
+        )
+        assert len(invested_rels) == 1
+
+    def test_entity_relationship_with_special_characters(self, knowledge_base):
+        """Test entity relationships with special characters in IDs and types."""
+        relationship = EntityRelationship(
+            id="rel-special-!@#",
+            source_entity_id="entity-with spaces",
+            target_entity_id="entity-with-dashes",
+            relationship_type="related_to (complex)",
+            properties='{"key": "value with \\"quotes\\""}',
+        )
+        result = knowledge_base.save_entity_relationship(relationship)
+        assert result is True
+
+        relationships = knowledge_base.get_entity_relationships()
+        assert len(relationships) == 1
+        assert relationships[0].id == "rel-special-!@#"
+        assert relationships[0].source_entity_id == "entity-with spaces"
+        assert relationships[0].relationship_type == "related_to (complex)"
+
+    def test_entity_relationship_empty_properties(self, knowledge_base):
+        """Test entity relationship with empty string properties."""
+        relationship = EntityRelationship(
+            id="rel-empty-props",
+            source_entity_id="entity-001",
+            target_entity_id="entity-002",
+            relationship_type="related",
+            properties="",
+        )
+        result = knowledge_base.save_entity_relationship(relationship)
+        assert result is True
+
+        relationships = knowledge_base.get_entity_relationships()
+        assert len(relationships) == 1
+        assert relationships[0].properties == ""
+
+    def test_large_number_of_entity_relationships(self, knowledge_base):
+        """Test handling a large number of entity relationships."""
+        num_relationships = 100
+
+        for i in range(num_relationships):
+            relationship = EntityRelationship(
+                id=f"rel-bulk-{i:03d}",
+                source_entity_id=f"entity-source-{i % 10}",  # 10 unique sources
+                target_entity_id=f"entity-target-{i % 20}",  # 20 unique targets
+                relationship_type=["acquired", "created", "competes_with", "partners_with"][i % 4],
+            )
+            knowledge_base.save_entity_relationship(relationship)
+
+        # Verify all saved
+        all_rels = knowledge_base.get_entity_relationships()
+        assert len(all_rels) == num_relationships
+
+        # Filter by a specific source
+        source_0_rels = knowledge_base.get_entity_relationships(entity_id="entity-source-0")
+        assert len(source_0_rels) >= 10  # At least 10 relationships with source-0
+
+        # Filter by type
+        acquired_rels = knowledge_base.get_entity_relationships(relationship_type="acquired")
+        assert len(acquired_rels) == 25  # 100/4 = 25
+
+    def test_entity_relationship_after_insight_operations(self, knowledge_base, sample_insight, sample_entity_tool):
+        """Test entity relationships work alongside insight operations."""
+        # Save insight and entity
+        knowledge_base.save_insight(sample_insight)
+        knowledge_base.save_entity(sample_entity_tool)
+
+        # Save entity relationship referencing the same article
+        relationship = EntityRelationship(
+            id="rel-with-insight",
+            source_entity_id=sample_entity_tool.id,
+            target_entity_id="entity-related",
+            relationship_type="mentioned_in",
+            source_article_id=sample_insight.article_id,
+        )
+        result = knowledge_base.save_entity_relationship(relationship)
+        assert result is True
+
+        # Verify both can be retrieved
+        insights = knowledge_base.get_insights()
+        assert len(insights) == 1
+
+        entity_rels = knowledge_base.get_entity_relationships()
+        assert len(entity_rels) == 1
+        assert entity_rels[0].source_article_id == sample_insight.article_id
