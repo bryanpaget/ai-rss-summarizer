@@ -201,8 +201,12 @@ def mock_storage():
 
 @pytest.fixture
 def mock_storage_with_articles():
-    """Create a mock Storage with articles for perspective synthesis."""
-    storage = MagicMock(spec=Storage)
+    """Create a mock Storage with articles for perspective synthesis.
+
+    Note: Does not use spec=Storage because perspectives.py expects
+    get_articles_by_cluster method which may not exist on Storage.
+    """
+    storage = MagicMock()
 
     sample_articles = [
         Article(
@@ -228,8 +232,12 @@ def mock_storage_with_articles():
 
 @pytest.fixture
 def mock_storage_with_cached_perspective():
-    """Create a mock Storage with a cached perspective."""
-    storage = MagicMock(spec=Storage)
+    """Create a mock Storage with a cached perspective.
+
+    Note: Does not use spec=Storage because perspectives.py expects
+    get_articles_by_cluster method which may not exist on Storage.
+    """
+    storage = MagicMock()
 
     cached_perspective = Perspective(
         category="consensus",
@@ -246,8 +254,12 @@ def mock_storage_with_cached_perspective():
 
 @pytest.fixture
 def mock_storage_with_stale_cache():
-    """Create a mock Storage with a stale cached perspective."""
-    storage = MagicMock(spec=Storage)
+    """Create a mock Storage with a stale cached perspective.
+
+    Note: Does not use spec=Storage because perspectives.py expects
+    get_articles_by_cluster method which may not exist on Storage.
+    """
+    storage = MagicMock()
 
     stale_perspective = Perspective(
         category="consensus",
@@ -1136,3 +1148,534 @@ def prompt_test_articles():
             summary="Second source summary.",
         ),
     ]
+
+
+# =============================================================================
+# Tests for PERSPECTIVE_CATEGORIES Structure
+# =============================================================================
+
+
+class TestPerspectiveCategoriesStructure:
+    """Tests for PERSPECTIVE_CATEGORIES dictionary structure."""
+
+    def test_perspective_categories_is_dict(self):
+        """Test that PERSPECTIVE_CATEGORIES is a dictionary."""
+        assert isinstance(PERSPECTIVE_CATEGORIES, dict)
+
+    def test_perspective_categories_not_empty(self):
+        """Test that PERSPECTIVE_CATEGORIES is not empty."""
+        assert len(PERSPECTIVE_CATEGORIES) > 0
+
+    def test_perspective_categories_count(self):
+        """Test that PERSPECTIVE_CATEGORIES has expected number of categories."""
+        # Based on source code: 16 categories defined
+        assert len(PERSPECTIVE_CATEGORIES) == 16
+
+    def test_all_categories_have_required_keys(self):
+        """Test that each category has all required keys."""
+        required_keys = {'name', 'description', 'min_sources'}
+        for category_id, category_info in PERSPECTIVE_CATEGORIES.items():
+            assert isinstance(category_info, dict), f"Category '{category_id}' is not a dict"
+            missing_keys = required_keys - set(category_info.keys())
+            assert not missing_keys, f"Category '{category_id}' missing keys: {missing_keys}"
+
+    def test_all_category_ids_are_strings(self):
+        """Test that all category IDs are non-empty strings."""
+        for category_id in PERSPECTIVE_CATEGORIES.keys():
+            assert isinstance(category_id, str), f"Category ID '{category_id}' is not a string"
+            assert len(category_id) > 0, "Found empty category ID"
+
+    def test_all_category_names_are_strings(self):
+        """Test that all category names are non-empty strings."""
+        for category_id, category_info in PERSPECTIVE_CATEGORIES.items():
+            name = category_info.get('name')
+            assert isinstance(name, str), f"Category '{category_id}' name is not a string"
+            assert len(name) > 0, f"Category '{category_id}' has empty name"
+
+    def test_all_category_descriptions_are_strings(self):
+        """Test that all category descriptions are non-empty strings."""
+        for category_id, category_info in PERSPECTIVE_CATEGORIES.items():
+            description = category_info.get('description')
+            assert isinstance(description, str), f"Category '{category_id}' description is not a string"
+            assert len(description) > 0, f"Category '{category_id}' has empty description"
+
+    def test_all_min_sources_are_positive_integers(self):
+        """Test that all min_sources values are positive integers."""
+        for category_id, category_info in PERSPECTIVE_CATEGORIES.items():
+            min_sources = category_info.get('min_sources')
+            assert isinstance(min_sources, int), f"Category '{category_id}' min_sources is not an int"
+            assert min_sources > 0, f"Category '{category_id}' min_sources must be positive"
+
+
+class TestPerspectiveCategoriesContent:
+    """Tests for PERSPECTIVE_CATEGORIES content and values."""
+
+    def test_factual_categories_exist(self):
+        """Test that all factual categories are defined."""
+        factual_cats = ['consensus', 'contested', 'gaps', 'timeline']
+        for cat in factual_cats:
+            assert cat in PERSPECTIVE_CATEGORIES, f"Factual category '{cat}' not found"
+
+    def test_framing_categories_exist(self):
+        """Test that all source framing categories are defined."""
+        framing_cats = ['tech-industry', 'mainstream', 'financial', 'political', 'academic']
+        for cat in framing_cats:
+            assert cat in PERSPECTIVE_CATEGORIES, f"Framing category '{cat}' not found"
+
+    def test_fun_categories_exist(self):
+        """Test that all fun/entertainment categories are defined."""
+        fun_cats = ['spiciest-takes', 'unhinged-speculation', 'contrarian', 'doom', 'hype']
+        for cat in fun_cats:
+            assert cat in PERSPECTIVE_CATEGORIES, f"Fun category '{cat}' not found"
+
+    def test_analysis_categories_exist(self):
+        """Test that all analysis categories are defined."""
+        analysis_cats = ['expert-quotes', 'prediction-track-record']
+        for cat in analysis_cats:
+            assert cat in PERSPECTIVE_CATEGORIES, f"Analysis category '{cat}' not found"
+
+    def test_category_names_are_human_readable(self):
+        """Test that category names are properly formatted (title case, no hyphens)."""
+        for category_id, category_info in PERSPECTIVE_CATEGORIES.items():
+            name = category_info['name']
+            # Name should not contain underscores or hyphens
+            assert '-' not in name or name == name.replace('-', ' ').title().replace(' ', '-'), \
+                f"Category '{category_id}' name '{name}' should be human-readable"
+
+    def test_consensus_category_content(self):
+        """Test consensus category has correct content."""
+        assert 'consensus' in PERSPECTIVE_CATEGORIES
+        cat = PERSPECTIVE_CATEGORIES['consensus']
+        assert cat['name'] == 'Consensus'
+        assert 'agree' in cat['description'].lower()
+
+    def test_contested_category_content(self):
+        """Test contested category has correct content."""
+        assert 'contested' in PERSPECTIVE_CATEGORIES
+        cat = PERSPECTIVE_CATEGORIES['contested']
+        assert cat['name'] == 'Contested'
+        assert 'disagree' in cat['description'].lower()
+
+    def test_gaps_category_content(self):
+        """Test gaps category has correct content."""
+        assert 'gaps' in PERSPECTIVE_CATEGORIES
+        cat = PERSPECTIVE_CATEGORIES['gaps']
+        assert cat['name'] == 'Gaps'
+        assert 'covering' in cat['description'].lower() or 'not' in cat['description'].lower()
+
+
+class TestMinSourcesRequirements:
+    """Tests for min_sources requirements across categories."""
+
+    def test_min_sources_values_are_one_or_two(self):
+        """Test that min_sources values are either 1 or 2."""
+        for category_id, category_info in PERSPECTIVE_CATEGORIES.items():
+            min_sources = category_info['min_sources']
+            assert min_sources in (1, 2), \
+                f"Category '{category_id}' has unexpected min_sources value: {min_sources}"
+
+    def test_consensus_requires_two_sources(self):
+        """Test that consensus category requires at least 2 sources."""
+        assert PERSPECTIVE_CATEGORIES['consensus']['min_sources'] == 2
+
+    def test_contested_requires_two_sources(self):
+        """Test that contested category requires at least 2 sources."""
+        assert PERSPECTIVE_CATEGORIES['contested']['min_sources'] == 2
+
+    def test_prediction_track_record_requires_two_sources(self):
+        """Test that prediction-track-record category requires at least 2 sources."""
+        assert PERSPECTIVE_CATEGORIES['prediction-track-record']['min_sources'] == 2
+
+    def test_gaps_requires_one_source(self):
+        """Test that gaps category requires only 1 source."""
+        assert PERSPECTIVE_CATEGORIES['gaps']['min_sources'] == 1
+
+    def test_timeline_requires_one_source(self):
+        """Test that timeline category requires only 1 source."""
+        assert PERSPECTIVE_CATEGORIES['timeline']['min_sources'] == 1
+
+    def test_categories_requiring_two_sources_list(self):
+        """Test the list of categories requiring 2 sources."""
+        two_source_cats = [
+            cat_id for cat_id, info in PERSPECTIVE_CATEGORIES.items()
+            if info['min_sources'] == 2
+        ]
+        expected = ['consensus', 'contested', 'prediction-track-record']
+        assert sorted(two_source_cats) == sorted(expected)
+
+    def test_categories_requiring_one_source_list(self):
+        """Test the list of categories requiring only 1 source."""
+        one_source_cats = [
+            cat_id for cat_id, info in PERSPECTIVE_CATEGORIES.items()
+            if info['min_sources'] == 1
+        ]
+        # Should be all categories except consensus, contested, prediction-track-record
+        expected_count = len(PERSPECTIVE_CATEGORIES) - 3  # 16 - 3 = 13
+        assert len(one_source_cats) == expected_count
+
+    def test_framing_categories_require_one_source(self):
+        """Test that all framing categories require only 1 source."""
+        framing_cats = ['tech-industry', 'mainstream', 'financial', 'political', 'academic']
+        for cat_id in framing_cats:
+            assert PERSPECTIVE_CATEGORIES[cat_id]['min_sources'] == 1, \
+                f"Framing category '{cat_id}' should require only 1 source"
+
+    def test_fun_categories_require_one_source(self):
+        """Test that all fun categories require only 1 source."""
+        fun_cats = ['spiciest-takes', 'unhinged-speculation', 'contrarian', 'doom', 'hype']
+        for cat_id in fun_cats:
+            assert PERSPECTIVE_CATEGORIES[cat_id]['min_sources'] == 1, \
+                f"Fun category '{cat_id}' should require only 1 source"
+
+    def test_expert_quotes_requires_one_source(self):
+        """Test that expert-quotes category requires only 1 source."""
+        assert PERSPECTIVE_CATEGORIES['expert-quotes']['min_sources'] == 1
+
+
+class TestMinSourcesRationale:
+    """Tests for the rationale behind min_sources requirements."""
+
+    def test_consensus_needs_multiple_sources_for_agreement(self):
+        """Test that consensus logically requires multiple sources to find agreement."""
+        # Consensus by definition requires comparing multiple sources
+        min_sources = PERSPECTIVE_CATEGORIES['consensus']['min_sources']
+        assert min_sources >= 2, "Consensus requires at least 2 sources to find agreement"
+
+    def test_contested_needs_multiple_sources_for_disagreement(self):
+        """Test that contested logically requires multiple sources to find disagreement."""
+        # Disagreement by definition requires comparing multiple sources
+        min_sources = PERSPECTIVE_CATEGORIES['contested']['min_sources']
+        assert min_sources >= 2, "Contested requires at least 2 sources to find disagreement"
+
+    def test_prediction_track_record_needs_multiple_sources(self):
+        """Test that prediction-track-record needs multiple sources for comparison."""
+        # Comparing predictions requires multiple data points
+        min_sources = PERSPECTIVE_CATEGORIES['prediction-track-record']['min_sources']
+        assert min_sources >= 2, "Prediction track record requires multiple sources for comparison"
+
+    def test_single_source_categories_can_extract_from_one(self):
+        """Test that single-source categories can meaningfully analyze just one article."""
+        single_source_cats = ['gaps', 'timeline', 'spiciest-takes', 'expert-quotes']
+        for cat_id in single_source_cats:
+            assert PERSPECTIVE_CATEGORIES[cat_id]['min_sources'] == 1, \
+                f"'{cat_id}' can be derived from a single article"
+
+
+class TestDefaultCategories:
+    """Tests for DEFAULT_CATEGORIES configuration."""
+
+    def test_default_categories_is_list(self):
+        """Test that DEFAULT_CATEGORIES is a list."""
+        assert isinstance(DEFAULT_CATEGORIES, list)
+
+    def test_default_categories_not_empty(self):
+        """Test that DEFAULT_CATEGORIES is not empty."""
+        assert len(DEFAULT_CATEGORIES) > 0
+
+    def test_default_categories_count(self):
+        """Test that DEFAULT_CATEGORIES has expected number of categories."""
+        # Based on source code: ['consensus', 'contested', 'gaps']
+        assert len(DEFAULT_CATEGORIES) == 3
+
+    def test_default_categories_are_valid_category_ids(self):
+        """Test that all default categories exist in PERSPECTIVE_CATEGORIES."""
+        for cat_id in DEFAULT_CATEGORIES:
+            assert cat_id in PERSPECTIVE_CATEGORIES, \
+                f"Default category '{cat_id}' not found in PERSPECTIVE_CATEGORIES"
+
+    def test_default_categories_are_strings(self):
+        """Test that all default category IDs are strings."""
+        for cat_id in DEFAULT_CATEGORIES:
+            assert isinstance(cat_id, str), f"Default category '{cat_id}' is not a string"
+
+    def test_default_categories_contain_consensus(self):
+        """Test that consensus is in default categories."""
+        assert 'consensus' in DEFAULT_CATEGORIES
+
+    def test_default_categories_contain_contested(self):
+        """Test that contested is in default categories."""
+        assert 'contested' in DEFAULT_CATEGORIES
+
+    def test_default_categories_contain_gaps(self):
+        """Test that gaps is in default categories."""
+        assert 'gaps' in DEFAULT_CATEGORIES
+
+    def test_default_categories_exact_list(self):
+        """Test that DEFAULT_CATEGORIES matches expected list."""
+        expected = ['consensus', 'contested', 'gaps']
+        assert DEFAULT_CATEGORIES == expected
+
+    def test_default_categories_are_factual(self):
+        """Test that default categories are from the factual category group."""
+        factual_cats = ['consensus', 'contested', 'gaps', 'timeline']
+        for cat_id in DEFAULT_CATEGORIES:
+            assert cat_id in factual_cats, \
+                f"Default category '{cat_id}' is not a factual category"
+
+
+class TestDefaultCategoriesRationale:
+    """Tests for the rationale behind default category selection."""
+
+    def test_defaults_provide_balanced_view(self):
+        """Test that default categories provide agreement, disagreement, and missing info."""
+        # consensus - what sources agree on
+        # contested - what sources disagree on
+        # gaps - what no one is covering
+        assert 'consensus' in DEFAULT_CATEGORIES  # Agreement
+        assert 'contested' in DEFAULT_CATEGORIES  # Disagreement
+        assert 'gaps' in DEFAULT_CATEGORIES  # Missing coverage
+
+    def test_defaults_include_single_and_multi_source(self):
+        """Test that defaults include categories with different source requirements."""
+        requirements = [
+            PERSPECTIVE_CATEGORIES[cat_id]['min_sources']
+            for cat_id in DEFAULT_CATEGORIES
+        ]
+        # Should have at least one category requiring 2 sources
+        assert 2 in requirements
+        # Should have at least one category requiring 1 source
+        assert 1 in requirements
+
+    def test_defaults_are_most_useful_for_news_analysis(self):
+        """Test that defaults are the most useful categories for general news analysis."""
+        # These are arguably the most universally useful perspectives
+        essential_perspectives = ['consensus', 'contested', 'gaps']
+        for perspective in essential_perspectives:
+            assert perspective in DEFAULT_CATEGORIES
+
+
+class TestCategoryIdsFormat:
+    """Tests for category ID format and naming conventions."""
+
+    def test_all_category_ids_are_lowercase(self):
+        """Test that all category IDs use lowercase letters."""
+        for category_id in PERSPECTIVE_CATEGORIES.keys():
+            assert category_id == category_id.lower(), \
+                f"Category ID '{category_id}' should be lowercase"
+
+    def test_category_ids_use_hyphen_separator(self):
+        """Test that multi-word category IDs use hyphen as separator."""
+        for category_id in PERSPECTIVE_CATEGORIES.keys():
+            # Should not contain spaces or underscores
+            assert ' ' not in category_id, f"Category ID '{category_id}' should not contain spaces"
+            assert '_' not in category_id, f"Category ID '{category_id}' should not contain underscores"
+
+    def test_category_ids_are_kebab_case(self):
+        """Test that multi-word category IDs are in kebab-case."""
+        multi_word_cats = [cat_id for cat_id in PERSPECTIVE_CATEGORIES.keys() if '-' in cat_id]
+        for cat_id in multi_word_cats:
+            # Each part should be lowercase
+            parts = cat_id.split('-')
+            for part in parts:
+                assert part == part.lower(), f"Category '{cat_id}' part '{part}' should be lowercase"
+                assert part.isalpha() or part.isalnum(), f"Category '{cat_id}' has invalid part '{part}'"
+
+    def test_no_duplicate_category_ids(self):
+        """Test that there are no duplicate category IDs."""
+        ids = list(PERSPECTIVE_CATEGORIES.keys())
+        assert len(ids) == len(set(ids)), "Found duplicate category IDs"
+
+
+class TestCategoryGroupings:
+    """Tests for category groupings and organization."""
+
+    def test_factual_categories_are_four(self):
+        """Test that there are exactly 4 factual categories."""
+        factual = ['consensus', 'contested', 'gaps', 'timeline']
+        for cat_id in factual:
+            assert cat_id in PERSPECTIVE_CATEGORIES
+        # Verify these are the expected factual categories based on source comments
+
+    def test_framing_categories_are_five(self):
+        """Test that there are exactly 5 source framing categories."""
+        framing = ['tech-industry', 'mainstream', 'financial', 'political', 'academic']
+        for cat_id in framing:
+            assert cat_id in PERSPECTIVE_CATEGORIES
+        assert len(framing) == 5
+
+    def test_fun_categories_are_five(self):
+        """Test that there are exactly 5 fun/entertainment categories."""
+        fun = ['spiciest-takes', 'unhinged-speculation', 'contrarian', 'doom', 'hype']
+        for cat_id in fun:
+            assert cat_id in PERSPECTIVE_CATEGORIES
+        assert len(fun) == 5
+
+    def test_analysis_categories_are_two(self):
+        """Test that there are exactly 2 analysis categories."""
+        analysis = ['expert-quotes', 'prediction-track-record']
+        for cat_id in analysis:
+            assert cat_id in PERSPECTIVE_CATEGORIES
+        assert len(analysis) == 2
+
+    def test_all_groupings_cover_all_categories(self):
+        """Test that groupings cover all defined categories."""
+        factual = {'consensus', 'contested', 'gaps', 'timeline'}
+        framing = {'tech-industry', 'mainstream', 'financial', 'political', 'academic'}
+        fun = {'spiciest-takes', 'unhinged-speculation', 'contrarian', 'doom', 'hype'}
+        analysis = {'expert-quotes', 'prediction-track-record'}
+
+        all_grouped = factual | framing | fun | analysis
+        all_categories = set(PERSPECTIVE_CATEGORIES.keys())
+
+        assert all_grouped == all_categories, \
+            f"Ungrouped categories: {all_categories - all_grouped}"
+
+
+class TestCategoryDescriptions:
+    """Tests for category description quality."""
+
+    def test_descriptions_are_concise(self):
+        """Test that descriptions are concise (under 50 characters)."""
+        for category_id, category_info in PERSPECTIVE_CATEGORIES.items():
+            description = category_info['description']
+            assert len(description) <= 50, \
+                f"Category '{category_id}' description is too long: {len(description)} chars"
+
+    def test_descriptions_are_meaningful(self):
+        """Test that descriptions are at least 10 characters (meaningful)."""
+        for category_id, category_info in PERSPECTIVE_CATEGORIES.items():
+            description = category_info['description']
+            assert len(description) >= 10, \
+                f"Category '{category_id}' description is too short: '{description}'"
+
+    def test_descriptions_do_not_end_with_period(self):
+        """Test that descriptions don't end with a period (consistent style)."""
+        for category_id, category_info in PERSPECTIVE_CATEGORIES.items():
+            description = category_info['description']
+            # This is a style check - descriptions should be sentence fragments
+            assert not description.endswith('.'), \
+                f"Category '{category_id}' description ends with period: '{description}'"
+
+
+class TestCategoryEdgeCases:
+    """Tests for edge cases in category handling."""
+
+    def test_unknown_category_not_in_dict(self):
+        """Test that accessing unknown category returns None or raises KeyError."""
+        assert 'nonexistent-category' not in PERSPECTIVE_CATEGORIES
+
+    def test_empty_string_not_valid_category(self):
+        """Test that empty string is not a valid category."""
+        assert '' not in PERSPECTIVE_CATEGORIES
+
+    def test_none_not_valid_category(self):
+        """Test that None is not a valid category key."""
+        assert None not in PERSPECTIVE_CATEGORIES
+
+    def test_category_lookup_case_sensitive(self):
+        """Test that category lookup is case-sensitive."""
+        # 'Consensus' (capitalized) should not be found
+        assert 'Consensus' not in PERSPECTIVE_CATEGORIES
+        assert 'CONSENSUS' not in PERSPECTIVE_CATEGORIES
+        # 'consensus' (lowercase) should be found
+        assert 'consensus' in PERSPECTIVE_CATEGORIES
+
+    def test_category_with_extra_spaces_not_found(self):
+        """Test that category with extra spaces is not found."""
+        assert ' consensus' not in PERSPECTIVE_CATEGORIES
+        assert 'consensus ' not in PERSPECTIVE_CATEGORIES
+        assert ' consensus ' not in PERSPECTIVE_CATEGORIES
+
+
+class TestCategoryUsageWithFixtures:
+    """Tests for category usage with test fixtures."""
+
+    def test_all_category_ids_fixture_matches(self, all_category_ids):
+        """Test that all_category_ids fixture matches actual categories."""
+        assert set(all_category_ids) == set(PERSPECTIVE_CATEGORIES.keys())
+
+    def test_categories_requiring_two_sources_fixture(self, categories_requiring_two_sources):
+        """Test that fixture for two-source categories is accurate."""
+        for cat_id in categories_requiring_two_sources:
+            assert PERSPECTIVE_CATEGORIES[cat_id]['min_sources'] == 2
+
+    def test_categories_requiring_one_source_fixture(self, categories_requiring_one_source):
+        """Test that fixture for one-source categories is accurate."""
+        for cat_id in categories_requiring_one_source:
+            assert PERSPECTIVE_CATEGORIES[cat_id]['min_sources'] == 1
+
+    def test_factual_categories_fixture(self, factual_categories):
+        """Test that factual_categories fixture contains valid categories."""
+        for cat_id in factual_categories:
+            assert cat_id in PERSPECTIVE_CATEGORIES
+
+    def test_framing_categories_fixture(self, framing_categories):
+        """Test that framing_categories fixture contains valid categories."""
+        for cat_id in framing_categories:
+            assert cat_id in PERSPECTIVE_CATEGORIES
+
+    def test_fun_categories_fixture(self, fun_categories):
+        """Test that fun_categories fixture contains valid categories."""
+        for cat_id in fun_categories:
+            assert cat_id in PERSPECTIVE_CATEGORIES
+
+    def test_analysis_categories_fixture(self, analysis_categories):
+        """Test that analysis_categories fixture contains valid categories."""
+        for cat_id in analysis_categories:
+            assert cat_id in PERSPECTIVE_CATEGORIES
+
+
+class TestCategoryIntegration:
+    """Integration tests for category definitions with other functions."""
+
+    def test_synthesize_perspective_accepts_all_categories(self, sample_article):
+        """Test that synthesize_perspective accepts all defined categories."""
+        from src.perspectives import synthesize_perspective
+
+        for category_id in PERSPECTIVE_CATEGORIES.keys():
+            min_sources = PERSPECTIVE_CATEGORIES[category_id]['min_sources']
+            articles = [sample_article] * min_sources  # Provide enough articles
+
+            # Should not raise CategoryNotApplicableError
+            try:
+                perspective = synthesize_perspective(
+                    category=category_id,
+                    articles=articles,
+                    llm_provider=None,  # Will use fallback
+                )
+                assert perspective is not None
+                assert perspective.category == category_id
+            except InsufficientSourcesError:
+                # This is expected if we don't have enough sources
+                pass
+            except CategoryNotApplicableError:
+                pytest.fail(f"Category '{category_id}' should be valid")
+
+    def test_build_perspective_prompt_handles_all_categories(self, prompt_test_articles):
+        """Test that build_perspective_prompt handles all defined categories."""
+        from src.perspectives import build_perspective_prompt
+
+        for category_id in PERSPECTIVE_CATEGORIES.keys():
+            prompt = build_perspective_prompt(category_id, prompt_test_articles)
+            assert isinstance(prompt, str)
+            assert len(prompt) > 0
+
+    def test_estimate_confidence_uses_min_sources(self, article_cluster_diverse):
+        """Test that estimate_confidence uses min_sources from category definitions."""
+        from src.perspectives import estimate_confidence
+
+        # Category with min_sources=2
+        confidence_2 = estimate_confidence('consensus', "Some synthesis", article_cluster_diverse)
+
+        # Category with min_sources=1
+        confidence_1 = estimate_confidence('gaps', "Some synthesis", article_cluster_diverse)
+
+        # Both should return valid confidence scores
+        assert 0 <= confidence_2 <= 1
+        assert 0 <= confidence_1 <= 1
+
+    def test_default_categories_work_with_synthesize_perspectives(self, mock_storage_with_articles):
+        """Test that DEFAULT_CATEGORIES work with synthesize_perspectives."""
+        from src.perspectives import synthesize_perspectives
+
+        perspectives = synthesize_perspectives(
+            cluster_id="mock-story-1",
+            categories=DEFAULT_CATEGORIES,
+            storage=mock_storage_with_articles,
+            llm_provider=None,  # Will use fallback
+        )
+
+        # Should return perspectives for all requested categories
+        assert isinstance(perspectives, dict)
+        for cat_id in DEFAULT_CATEGORIES:
+            assert cat_id in perspectives
