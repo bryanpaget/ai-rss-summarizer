@@ -564,6 +564,89 @@ def process_article_clustering(
     return stats
 
 
+def update_story_clusters(
+    storage: Storage,
+    lookback_hours: int = 72,
+) -> dict:
+    """
+    Update story clusters by processing unclustered articles.
+
+    This is a convenience function that gets an LLM provider and processes
+    unclustered articles in batch.
+
+    Args:
+        storage: Storage instance
+        lookback_hours: How far back to look for articles to cluster
+
+    Returns:
+        Dictionary with stats: {'processed': int, 'new_clusters': int,
+                               'added_to_existing': int, 'skipped': int}
+    """
+    from .llm_providers import get_best_provider
+    from datetime import datetime, timedelta
+
+    # Get LLM provider
+    provider, is_llm = get_best_provider()
+
+    if not is_llm:
+        # No LLM available, can't cluster
+        return {
+            'processed': 0,
+            'new_clusters': 0,
+            'added_to_existing': 0,
+            'skipped': 0,
+        }
+
+    # Get unclustered articles from the lookback window
+    all_articles = storage.get_articles(limit=500)
+    cutoff = datetime.now() - timedelta(hours=lookback_hours)
+
+    unclustered = []
+    for article in all_articles:
+        # Skip if already has a story
+        if article.story_id:
+            continue
+
+        # Check if within lookback window
+        if article.published:
+            try:
+                if isinstance(article.published, str):
+                    pub_str = article.published.replace("Z", "+00:00")
+                    pub_time = datetime.fromisoformat(pub_str).replace(tzinfo=None)
+                else:
+                    pub_time = article.published
+
+                if pub_time < cutoff:
+                    continue
+            except Exception:
+                pass
+
+        unclustered.append(article)
+
+    if not unclustered:
+        return {
+            'processed': 0,
+            'new_clusters': 0,
+            'added_to_existing': 0,
+            'skipped': len(all_articles),
+        }
+
+    # Process with batch function
+    result = batch_process_articles(
+        unclustered,
+        provider,
+        storage,
+        enable_news_extraction=False  # Faster for cluster updates
+    )
+
+    return {
+        'processed': result['processed'],
+        'new_clusters': result['stories_created'],
+        'added_to_existing': result['articles_added_to_existing'],
+        'skipped': len(all_articles) - len(unclustered),
+    }
+
+
 def batch_process_articles(
     articles: list[Article],
     llm_provider: LLMProvider,
