@@ -662,7 +662,7 @@ def relevance_engine_with_engagement(mock_context_store_with_engagement):
 
 @pytest.fixture
 def profile_json_valid():
-    """Create valid profile JSON data."""
+    """Create valid profile JSON data (without _version, as from_dict doesn't handle it)."""
     return {
         "role": "developer",
         "current_projects": ["project1", "project2"],
@@ -674,16 +674,13 @@ def profile_json_valid():
         "personalization_strength": 0.85,
         "created_at": "2024-01-01T12:00:00",
         "last_updated": "2024-01-15T18:30:00",
-        "_version": 1,
     }
 
 
 @pytest.fixture
 def profile_json_minimal():
-    """Create minimal profile JSON data."""
-    return {
-        "_version": 1,
-    }
+    """Create minimal profile JSON data (empty dict for from_dict to use defaults)."""
+    return {}
 
 
 @pytest.fixture
@@ -722,7 +719,9 @@ def profile_json_future_version():
 
 @pytest.fixture
 def export_data_valid():
-    """Create valid export data structure."""
+    """Create valid export data structure with recent timestamps."""
+    from datetime import datetime, timedelta
+    recent_time = datetime.now() - timedelta(days=5)
     return {
         "profile": {
             "role": "developer",
@@ -733,13 +732,13 @@ def export_data_valid():
             "relevance_threshold": 0.3,
             "diversity_factor": 0.15,
             "personalization_strength": 0.8,
-            "created_at": "2024-01-01T12:00:00",
-            "last_updated": "2024-01-15T18:30:00",
+            "created_at": (datetime.now() - timedelta(days=30)).isoformat(),
+            "last_updated": (datetime.now() - timedelta(days=1)).isoformat(),
         },
         "interactions": [
             {
                 "article_id": "article-1",
-                "timestamp": "2024-01-15T10:00:00",
+                "timestamp": recent_time.isoformat(),
                 "expanded": True,
                 "time_spent": 30.5,
                 "saved": False,
@@ -774,11 +773,13 @@ def export_data_empty():
 
 @pytest.fixture
 def export_data_many_interactions():
-    """Create export data with many interactions."""
+    """Create export data with many recent interactions."""
+    from datetime import datetime, timedelta
+    base_time = datetime.now()
     interactions = [
         {
             "article_id": f"article-{i}",
-            "timestamp": f"2024-01-{15 - i % 14:02d}T10:00:00",
+            "timestamp": (base_time - timedelta(hours=i)).isoformat(),
             "expanded": i % 2 == 0,
             "time_spent": float(i * 10) if i % 3 == 0 else None,
             "saved": i % 5 == 0,
@@ -1032,11 +1033,988 @@ def interaction_one_year_ago():
 
 
 # =============================================================================
-# Test Classes (to be implemented in subsequent subtasks)
+# Test Classes for UserContextProfile
 # =============================================================================
 
-# Tests for UserContextProfile will be added in subtask 5.2
-# Tests for UserContextStore will be added in subtask 5.2
+
+class TestUserContextProfileCreation:
+    """Test UserContextProfile initialization and defaults."""
+
+    def test_default_creation(self):
+        """Test creating profile with all defaults."""
+        profile = UserContextProfile()
+        assert profile.role is None
+        assert profile.current_projects == []
+        assert profile.watching == []
+        assert profile.ignore == []
+        assert profile.pinned == []
+        assert profile.relevance_threshold == 0.3
+        assert profile.diversity_factor == 0.15
+        assert profile.personalization_strength == 0.8
+
+    def test_default_timestamps_are_set(self):
+        """Test that timestamps are auto-set when not provided."""
+        profile = UserContextProfile()
+        assert profile.created_at is not None
+        assert profile.last_updated is not None
+        assert isinstance(profile.created_at, datetime)
+        assert isinstance(profile.last_updated, datetime)
+
+    def test_custom_role(self, profile_with_role):
+        """Test profile creation with custom role."""
+        assert profile_with_role.role == "software engineer"
+
+    def test_developer_profile(self, profile_developer):
+        """Test developer profile fixture."""
+        assert profile_developer.role == "software developer"
+        assert "building RSS reader" in profile_developer.current_projects
+        assert "AI" in profile_developer.watching
+        assert "celebrity news" in profile_developer.ignore
+        assert "security vulnerabilities" in profile_developer.pinned
+
+    def test_researcher_profile_custom_thresholds(self, profile_researcher):
+        """Test researcher profile with custom thresholds."""
+        assert profile_researcher.relevance_threshold == 0.4
+        assert profile_researcher.diversity_factor == 0.2
+
+    def test_custom_thresholds(self, profile_custom_thresholds):
+        """Test profile with custom threshold settings."""
+        assert profile_custom_thresholds.relevance_threshold == 0.5
+        assert profile_custom_thresholds.diversity_factor == 0.25
+        assert profile_custom_thresholds.personalization_strength == 0.9
+
+    def test_zero_personalization(self, profile_zero_personalization):
+        """Test profile with zero personalization strength."""
+        assert profile_zero_personalization.personalization_strength == 0.0
+
+    def test_explicit_timestamps(self, profile_with_timestamps):
+        """Test profile with explicit timestamps."""
+        now = datetime.now()
+        # Created 30 days ago
+        assert (now - profile_with_timestamps.created_at).days >= 29
+        # Updated 1 hour ago
+        assert (now - profile_with_timestamps.last_updated).seconds < 7200
+
+    def test_unicode_profile(self, profile_unicode):
+        """Test profile with unicode characters."""
+        assert profile_unicode.role == "desarrollador de software"
+        assert "proyecto AI" in profile_unicode.current_projects
+        assert "inteligencia artificial" in profile_unicode.watching
+
+    def test_special_chars_profile(self, profile_special_chars):
+        """Test profile with special characters."""
+        assert "developer <script>" in profile_special_chars.role
+        assert "project && test" in profile_special_chars.current_projects
+
+
+class TestUserContextProfileToDict:
+    """Test UserContextProfile.to_dict() method."""
+
+    def test_to_dict_basic(self, profile_default):
+        """Test converting default profile to dict."""
+        data = profile_default.to_dict()
+        assert isinstance(data, dict)
+        assert "role" in data
+        assert "current_projects" in data
+        assert "watching" in data
+        assert "ignore" in data
+        assert "pinned" in data
+
+    def test_to_dict_timestamps_are_strings(self, profile_default):
+        """Test that timestamps are converted to ISO strings."""
+        data = profile_default.to_dict()
+        assert isinstance(data["created_at"], str)
+        assert isinstance(data["last_updated"], str)
+        # Should be ISO format
+        datetime.fromisoformat(data["created_at"])
+        datetime.fromisoformat(data["last_updated"])
+
+    def test_to_dict_preserves_lists(self, profile_developer):
+        """Test that lists are preserved in dict conversion."""
+        data = profile_developer.to_dict()
+        assert isinstance(data["current_projects"], list)
+        assert isinstance(data["watching"], list)
+        assert "building RSS reader" in data["current_projects"]
+        assert "AI" in data["watching"]
+
+    def test_to_dict_preserves_floats(self, profile_custom_thresholds):
+        """Test that float settings are preserved."""
+        data = profile_custom_thresholds.to_dict()
+        assert data["relevance_threshold"] == 0.5
+        assert data["diversity_factor"] == 0.25
+        assert data["personalization_strength"] == 0.9
+
+    def test_to_dict_none_last_feedback_prompt(self, profile_default):
+        """Test that None last_feedback_prompt is handled."""
+        data = profile_default.to_dict()
+        # last_feedback_prompt is None by default
+        assert data.get("last_feedback_prompt") is None
+
+    def test_to_dict_with_last_feedback_prompt(self, profile_with_timestamps):
+        """Test that last_feedback_prompt is converted to ISO string."""
+        data = profile_with_timestamps.to_dict()
+        assert isinstance(data["last_feedback_prompt"], str)
+        datetime.fromisoformat(data["last_feedback_prompt"])
+
+    def test_to_dict_unicode(self, profile_unicode):
+        """Test to_dict with unicode content."""
+        data = profile_unicode.to_dict()
+        assert data["role"] == "desarrollador de software"
+        assert "proyecto AI" in data["current_projects"]
+
+
+class TestUserContextProfileFromDict:
+    """Test UserContextProfile.from_dict() method."""
+
+    def test_from_dict_basic(self, profile_json_valid):
+        """Test creating profile from valid dict."""
+        profile = UserContextProfile.from_dict(profile_json_valid)
+        assert profile.role == "developer"
+        assert "project1" in profile.current_projects
+        assert "AI" in profile.watching
+        assert "sports" in profile.ignore
+        assert "security" in profile.pinned
+
+    def test_from_dict_preserves_thresholds(self, profile_json_valid):
+        """Test that thresholds are preserved from dict."""
+        profile = UserContextProfile.from_dict(profile_json_valid)
+        assert profile.relevance_threshold == 0.35
+        assert profile.diversity_factor == 0.2
+        assert profile.personalization_strength == 0.85
+
+    def test_from_dict_parses_timestamps(self, profile_json_valid):
+        """Test that timestamps are parsed from ISO strings."""
+        profile = UserContextProfile.from_dict(profile_json_valid)
+        assert isinstance(profile.created_at, datetime)
+        assert isinstance(profile.last_updated, datetime)
+
+    def test_from_dict_minimal(self, profile_json_minimal):
+        """Test creating profile from minimal dict."""
+        profile = UserContextProfile.from_dict(profile_json_minimal)
+        # Should have defaults for missing fields
+        assert profile.role is None
+        assert profile.current_projects == []
+        assert profile.watching == []
+
+    def test_from_dict_roundtrip(self, profile_developer):
+        """Test to_dict -> from_dict roundtrip."""
+        data = profile_developer.to_dict()
+        restored = UserContextProfile.from_dict(data)
+        assert restored.role == profile_developer.role
+        assert restored.current_projects == profile_developer.current_projects
+        assert restored.watching == profile_developer.watching
+        assert restored.ignore == profile_developer.ignore
+        assert restored.pinned == profile_developer.pinned
+
+    def test_from_dict_with_none_timestamps(self):
+        """Test from_dict with None timestamp values."""
+        data = {
+            "role": "tester",
+            "created_at": None,
+            "last_updated": None,
+            "last_feedback_prompt": None,
+        }
+        profile = UserContextProfile.from_dict(data)
+        # __post_init__ should set timestamps
+        assert profile.created_at is not None
+        assert profile.last_updated is not None
+
+
+class TestUserContextProfileEdgeCases:
+    """Test UserContextProfile edge cases."""
+
+    def test_empty_lists(self, profile_empty_lists):
+        """Test profile with empty lists."""
+        assert profile_empty_lists.current_projects == []
+        assert profile_empty_lists.watching == []
+        assert profile_empty_lists.ignore == []
+        assert profile_empty_lists.pinned == []
+
+    def test_many_interests(self, profile_many_interests):
+        """Test profile with many interests."""
+        assert len(profile_many_interests.current_projects) == 20
+        assert len(profile_many_interests.watching) == 50
+        assert len(profile_many_interests.ignore) == 30
+        assert len(profile_many_interests.pinned) == 10
+
+    def test_empty_strings_in_lists(self, profile_edge_case_empty_strings):
+        """Test profile with empty strings in lists."""
+        data = profile_edge_case_empty_strings.to_dict()
+        # Empty strings should be preserved
+        assert "" in data["current_projects"]
+
+    def test_whitespace_strings(self, profile_edge_case_whitespace):
+        """Test profile with whitespace strings."""
+        assert profile_edge_case_whitespace.role == "   user   "
+        assert "  project  " in profile_edge_case_whitespace.current_projects
+
+    def test_threshold_boundary_zero(self):
+        """Test threshold at 0."""
+        profile = UserContextProfile(
+            relevance_threshold=0.0,
+            diversity_factor=0.0,
+            personalization_strength=0.0,
+        )
+        assert profile.relevance_threshold == 0.0
+        assert profile.diversity_factor == 0.0
+        assert profile.personalization_strength == 0.0
+
+    def test_threshold_boundary_one(self):
+        """Test threshold at 1."""
+        profile = UserContextProfile(
+            relevance_threshold=1.0,
+            diversity_factor=1.0,
+            personalization_strength=1.0,
+        )
+        assert profile.relevance_threshold == 1.0
+        assert profile.diversity_factor == 1.0
+        assert profile.personalization_strength == 1.0
+
+
+# =============================================================================
+# Test Classes for ArticleInteraction
+# =============================================================================
+
+
+class TestArticleInteractionCreation:
+    """Test ArticleInteraction initialization."""
+
+    def test_default_creation(self, interaction_default):
+        """Test creating interaction with defaults."""
+        assert interaction_default.article_id == "article-1"
+        assert interaction_default.expanded is False
+        assert interaction_default.time_spent is None
+        assert interaction_default.saved is False
+        assert interaction_default.shared is False
+        assert interaction_default.skipped is False
+        assert interaction_default.thumbs_up is None
+        assert interaction_default.relevance_score is None
+
+    def test_default_timestamp(self, interaction_default):
+        """Test that timestamp is auto-set."""
+        assert isinstance(interaction_default.timestamp, datetime)
+        # Should be recent
+        assert (datetime.now() - interaction_default.timestamp).seconds < 60
+
+    def test_expanded_interaction(self, interaction_expanded):
+        """Test expanded interaction."""
+        assert interaction_expanded.expanded is True
+        assert interaction_expanded.time_spent == 30.5
+
+    def test_saved_interaction(self, interaction_saved):
+        """Test saved interaction."""
+        assert interaction_saved.saved is True
+
+    def test_shared_interaction(self, interaction_shared):
+        """Test shared interaction."""
+        assert interaction_shared.shared is True
+
+    def test_skipped_interaction(self, interaction_skipped):
+        """Test skipped interaction."""
+        assert interaction_skipped.skipped is True
+
+    def test_thumbs_up_interaction(self, interaction_thumbs_up):
+        """Test thumbs up interaction."""
+        assert interaction_thumbs_up.thumbs_up is True
+        assert interaction_thumbs_up.relevance_score == 0.9
+
+    def test_thumbs_down_interaction(self, interaction_thumbs_down):
+        """Test thumbs down interaction."""
+        assert interaction_thumbs_down.thumbs_up is False
+        assert interaction_thumbs_down.relevance_score == 0.2
+
+    def test_full_interaction(self, interaction_full):
+        """Test interaction with all fields populated."""
+        assert interaction_full.article_id == "article-7"
+        assert interaction_full.expanded is True
+        assert interaction_full.time_spent == 120.5
+        assert interaction_full.saved is True
+        assert interaction_full.shared is True
+        assert interaction_full.skipped is False
+        assert interaction_full.thumbs_up is True
+        assert interaction_full.relevance_score == 0.95
+
+
+class TestArticleInteractionTimestamps:
+    """Test ArticleInteraction timestamp handling."""
+
+    def test_old_interaction(self, interaction_old):
+        """Test old interaction timestamp."""
+        days_ago = (datetime.now() - interaction_old.timestamp).days
+        assert days_ago >= 99
+
+    def test_recent_interaction(self, interaction_recent):
+        """Test recent interaction timestamp."""
+        minutes_ago = (datetime.now() - interaction_recent.timestamp).seconds / 60
+        assert minutes_ago < 60
+
+    def test_explicit_timestamp(self):
+        """Test interaction with explicit timestamp."""
+        specific_time = datetime(2024, 6, 15, 12, 30, 0)
+        interaction = ArticleInteraction(
+            article_id="test-article",
+            timestamp=specific_time,
+        )
+        assert interaction.timestamp == specific_time
+
+
+class TestArticleInteractionBulk:
+    """Test bulk ArticleInteraction fixtures."""
+
+    def test_bulk_interactions_count(self, interactions_bulk):
+        """Test bulk interactions fixture has correct count."""
+        assert len(interactions_bulk) == 20
+
+    def test_bulk_interactions_unique_ids(self, interactions_bulk):
+        """Test bulk interactions have unique article IDs."""
+        ids = [i.article_id for i in interactions_bulk]
+        assert len(ids) == len(set(ids))
+
+    def test_bulk_interactions_varied_properties(self, interactions_bulk):
+        """Test bulk interactions have varied properties."""
+        expanded_count = sum(1 for i in interactions_bulk if i.expanded)
+        saved_count = sum(1 for i in interactions_bulk if i.saved)
+        skipped_count = sum(1 for i in interactions_bulk if i.skipped)
+
+        # Should have some variety
+        assert expanded_count > 0
+        assert saved_count > 0
+        assert skipped_count > 0
+
+    def test_bulk_interactions_timestamps_ordered(self, interactions_bulk):
+        """Test bulk interactions have decreasing timestamps."""
+        for i in range(len(interactions_bulk) - 1):
+            # Earlier index should have more recent timestamp
+            assert interactions_bulk[i].timestamp >= interactions_bulk[i + 1].timestamp
+
+
+# =============================================================================
+# Test Classes for UserContextStore Initialization
+# =============================================================================
+
+
+class TestUserContextStoreInitialization:
+    """Test UserContextStore initialization."""
+
+    def test_store_creation(self, context_store):
+        """Test creating a UserContextStore."""
+        assert context_store is not None
+        assert context_store.VERSION == 1
+
+    def test_store_paths(self, context_store, temp_profile_path, temp_db):
+        """Test store has correct paths."""
+        assert str(context_store.profile_path) == temp_profile_path
+        assert str(context_store.db_path) == temp_db
+
+    def test_db_initialization(self, context_store):
+        """Test database is initialized with tables."""
+        # Check that user_interactions table exists
+        with context_store._connect() as conn:
+            cursor = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='user_interactions'"
+            )
+            result = cursor.fetchone()
+            assert result is not None
+
+    def test_db_indices_created(self, context_store):
+        """Test database indices are created."""
+        with context_store._connect() as conn:
+            cursor = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'idx_interactions%'"
+            )
+            indices = cursor.fetchall()
+            assert len(indices) >= 2
+
+
+class TestUserContextStoreLoadProfile:
+    """Test UserContextStore.load_profile() method."""
+
+    def test_load_profile_no_file(self, context_store):
+        """Test loading profile when file doesn't exist."""
+        profile = context_store.load_profile()
+        # Should return default profile
+        assert isinstance(profile, UserContextProfile)
+        assert profile.role is None
+
+    def test_load_profile_after_save(self, context_store_with_profile):
+        """Test loading profile after saving."""
+        profile = context_store_with_profile.load_profile()
+        assert profile.role == "software developer"
+        assert "building RSS reader" in profile.current_projects
+
+    def test_load_profile_invalid_json(self, temp_profile_path_existing, temp_db):
+        """Test loading profile with invalid JSON."""
+        # Write invalid JSON to profile path
+        with open(temp_profile_path_existing, "w") as f:
+            f.write("not valid json {{{")
+
+        store = UserContextStore(profile_path=temp_profile_path_existing, db_path=temp_db)
+        profile = store.load_profile()
+        # Should return default profile
+        assert isinstance(profile, UserContextProfile)
+        assert profile.role is None
+
+    def test_load_profile_version_migration(self, temp_profile_path_existing, temp_db, profile_json_old_version):
+        """Test loading profile with old version triggers migration."""
+        import json
+        with open(temp_profile_path_existing, "w") as f:
+            json.dump(profile_json_old_version, f)
+
+        store = UserContextStore(profile_path=temp_profile_path_existing, db_path=temp_db)
+        profile = store.load_profile()
+        # Should still load successfully
+        assert profile.role == "user"
+
+
+class TestUserContextStoreSaveProfile:
+    """Test UserContextStore.save_profile() method."""
+
+    def test_save_profile_creates_file(self, context_store, profile_developer):
+        """Test saving profile creates the file."""
+        context_store.save_profile(profile_developer)
+        assert context_store.profile_path.exists()
+
+    def test_save_profile_creates_directory(self, temp_dir, temp_db, profile_developer):
+        """Test saving profile creates parent directory."""
+        profile_path = os.path.join(temp_dir, "nested", "dir", "user_context.json")
+        store = UserContextStore(profile_path=profile_path, db_path=temp_db)
+        store.save_profile(profile_developer)
+        assert os.path.exists(profile_path)
+
+    def test_save_profile_updates_last_updated(self, context_store, profile_developer):
+        """Test saving profile updates last_updated timestamp."""
+        old_timestamp = profile_developer.last_updated
+        import time
+        time.sleep(0.01)  # Small delay
+        context_store.save_profile(profile_developer)
+        # Profile's last_updated should be newer
+        assert profile_developer.last_updated >= old_timestamp
+
+    def test_save_profile_includes_version(self, context_store, profile_developer):
+        """Test saved profile includes version number."""
+        context_store.save_profile(profile_developer)
+        import json
+        with open(context_store.profile_path) as f:
+            data = json.load(f)
+        assert "_version" in data
+        assert data["_version"] == 1
+
+    def test_save_profile_roundtrip(self, context_store, profile_developer):
+        """Test save -> load roundtrip preserves data."""
+        context_store.save_profile(profile_developer)
+        loaded = context_store.load_profile()
+        assert loaded.role == profile_developer.role
+        assert loaded.current_projects == profile_developer.current_projects
+        assert loaded.watching == profile_developer.watching
+        assert loaded.ignore == profile_developer.ignore
+        assert loaded.pinned == profile_developer.pinned
+
+    def test_save_profile_unicode(self, context_store, profile_unicode):
+        """Test saving profile with unicode content."""
+        context_store.save_profile(profile_unicode)
+        loaded = context_store.load_profile()
+        assert loaded.role == "desarrollador de software"
+        assert "proyecto AI" in loaded.current_projects
+
+
+# =============================================================================
+# Test Classes for UserContextStore Interactions
+# =============================================================================
+
+
+class TestUserContextStoreRecordInteraction:
+    """Test UserContextStore.record_interaction() method."""
+
+    def test_record_interaction_basic(self, context_store, interaction_default):
+        """Test recording a basic interaction."""
+        context_store.record_interaction(interaction_default)
+        interactions = context_store.get_interactions()
+        assert len(interactions) >= 1
+
+    def test_record_interaction_expanded(self, context_store, interaction_expanded):
+        """Test recording an expanded interaction."""
+        context_store.record_interaction(interaction_expanded)
+        interactions = context_store.get_interactions()
+        found = next((i for i in interactions if i.article_id == "article-1"), None)
+        assert found is not None
+        assert found.expanded is True
+        assert found.time_spent == 30.5
+
+    def test_record_interaction_all_fields(self, context_store, interaction_full):
+        """Test recording interaction with all fields."""
+        context_store.record_interaction(interaction_full)
+        interactions = context_store.get_interactions()
+        found = next((i for i in interactions if i.article_id == "article-7"), None)
+        assert found is not None
+        assert found.expanded is True
+        assert found.saved is True
+        assert found.shared is True
+        assert found.thumbs_up is True
+        assert found.relevance_score == 0.95
+
+    def test_record_interaction_thumbs_down(self, context_store, interaction_thumbs_down):
+        """Test recording interaction with thumbs_down (False)."""
+        context_store.record_interaction(interaction_thumbs_down)
+        interactions = context_store.get_interactions()
+        found = next((i for i in interactions if i.article_id == "article-6"), None)
+        assert found is not None
+        assert found.thumbs_up is False
+
+    def test_record_interaction_replaces_on_duplicate(self, context_store):
+        """Test recording replaces interaction with same article_id + timestamp."""
+        timestamp = datetime.now()
+        interaction1 = ArticleInteraction(
+            article_id="article-dup",
+            timestamp=timestamp,
+            expanded=False,
+        )
+        interaction2 = ArticleInteraction(
+            article_id="article-dup",
+            timestamp=timestamp,
+            expanded=True,
+            saved=True,
+        )
+        context_store.record_interaction(interaction1)
+        context_store.record_interaction(interaction2)
+        interactions = context_store.get_interactions()
+        found = [i for i in interactions if i.article_id == "article-dup"]
+        # Should only have one entry (replaced)
+        assert len(found) == 1
+        assert found[0].expanded is True
+        assert found[0].saved is True
+
+    def test_record_multiple_interactions(self, context_store, interactions_bulk):
+        """Test recording multiple interactions."""
+        for interaction in interactions_bulk:
+            context_store.record_interaction(interaction)
+        all_interactions = context_store.get_interactions()
+        assert len(all_interactions) == 20
+
+
+class TestUserContextStoreGetInteractions:
+    """Test UserContextStore.get_interactions() method."""
+
+    def test_get_interactions_empty(self, context_store):
+        """Test getting interactions when none exist."""
+        interactions = context_store.get_interactions()
+        assert interactions == []
+
+    def test_get_interactions_with_data(self, context_store_with_interactions):
+        """Test getting interactions with existing data."""
+        interactions = context_store_with_interactions.get_interactions()
+        assert len(interactions) == 20
+
+    def test_get_interactions_ordered_by_timestamp(self, context_store_with_interactions):
+        """Test interactions are ordered by timestamp descending."""
+        interactions = context_store_with_interactions.get_interactions()
+        for i in range(len(interactions) - 1):
+            # Earlier index should have more recent timestamp
+            assert interactions[i].timestamp >= interactions[i + 1].timestamp
+
+    def test_get_interactions_filter_by_article_id(self, context_store):
+        """Test filtering interactions by article_id."""
+        # Add interactions for different articles
+        context_store.record_interaction(ArticleInteraction(article_id="article-a"))
+        context_store.record_interaction(ArticleInteraction(article_id="article-b"))
+        context_store.record_interaction(ArticleInteraction(article_id="article-a"))
+
+        interactions = context_store.get_interactions(article_id="article-a")
+        assert len(interactions) == 2
+        for i in interactions:
+            assert i.article_id == "article-a"
+
+    def test_get_interactions_filter_by_days(self, context_store):
+        """Test filtering interactions by days."""
+        # Add old and recent interactions
+        old_interaction = ArticleInteraction(
+            article_id="old-article",
+            timestamp=datetime.now() - timedelta(days=100),
+        )
+        recent_interaction = ArticleInteraction(
+            article_id="recent-article",
+            timestamp=datetime.now() - timedelta(days=5),
+        )
+        context_store.record_interaction(old_interaction)
+        context_store.record_interaction(recent_interaction)
+
+        # Default is 90 days
+        interactions = context_store.get_interactions()
+        ids = [i.article_id for i in interactions]
+        assert "recent-article" in ids
+        assert "old-article" not in ids
+
+    def test_get_interactions_custom_days(self, context_store):
+        """Test custom days filter."""
+        # Add interactions of different ages
+        context_store.record_interaction(ArticleInteraction(
+            article_id="5-days-old",
+            timestamp=datetime.now() - timedelta(days=5),
+        ))
+        context_store.record_interaction(ArticleInteraction(
+            article_id="15-days-old",
+            timestamp=datetime.now() - timedelta(days=15),
+        ))
+
+        # 10 day filter
+        interactions = context_store.get_interactions(days=10)
+        ids = [i.article_id for i in interactions]
+        assert "5-days-old" in ids
+        assert "15-days-old" not in ids
+
+    def test_get_interactions_returns_article_interaction_objects(self, context_store_with_interactions):
+        """Test that returned objects are ArticleInteraction instances."""
+        interactions = context_store_with_interactions.get_interactions()
+        for interaction in interactions:
+            assert isinstance(interaction, ArticleInteraction)
+
+
+class TestUserContextStoreClearHistory:
+    """Test UserContextStore.clear_history() method."""
+
+    def test_clear_all_history(self, context_store_with_interactions):
+        """Test clearing all interaction history."""
+        # Verify data exists
+        before = context_store_with_interactions.get_interactions()
+        assert len(before) > 0
+
+        deleted = context_store_with_interactions.clear_history()
+        assert deleted == 20
+
+        after = context_store_with_interactions.get_interactions()
+        assert len(after) == 0
+
+    def test_clear_history_returns_count(self, context_store_with_interactions):
+        """Test clear_history returns correct count."""
+        deleted = context_store_with_interactions.clear_history()
+        assert deleted == 20
+
+    def test_clear_history_by_days(self, context_store):
+        """Test clearing history older than specified days."""
+        # Add interactions of different ages
+        context_store.record_interaction(ArticleInteraction(
+            article_id="recent",
+            timestamp=datetime.now() - timedelta(days=5),
+        ))
+        context_store.record_interaction(ArticleInteraction(
+            article_id="old-1",
+            timestamp=datetime.now() - timedelta(days=20),
+        ))
+        context_store.record_interaction(ArticleInteraction(
+            article_id="old-2",
+            timestamp=datetime.now() - timedelta(days=30),
+        ))
+
+        # Clear older than 15 days
+        deleted = context_store.clear_history(days=15)
+        assert deleted == 2
+
+        # Recent should remain
+        remaining = context_store.get_interactions()
+        ids = [i.article_id for i in remaining]
+        assert "recent" in ids
+        assert "old-1" not in ids
+        assert "old-2" not in ids
+
+    def test_clear_empty_history(self, context_store):
+        """Test clearing when no history exists."""
+        deleted = context_store.clear_history()
+        assert deleted == 0
+
+
+# =============================================================================
+# Test Classes for UserContextStore Export/Import
+# =============================================================================
+
+
+class TestUserContextStoreExportData:
+    """Test UserContextStore.export_data() method."""
+
+    def test_export_data_structure(self, context_store_full):
+        """Test exported data has correct structure."""
+        data = context_store_full.export_data()
+        assert "profile" in data
+        assert "interactions" in data
+        assert "version" in data
+        assert data["version"] == 1
+
+    def test_export_data_profile(self, context_store_full):
+        """Test exported data includes profile."""
+        data = context_store_full.export_data()
+        assert data["profile"]["role"] == "software developer"
+        assert "building RSS reader" in data["profile"]["current_projects"]
+
+    def test_export_data_interactions(self, context_store_full):
+        """Test exported data includes interactions."""
+        data = context_store_full.export_data()
+        assert len(data["interactions"]) > 0
+        # Check interaction structure
+        interaction = data["interactions"][0]
+        assert "article_id" in interaction
+        assert "timestamp" in interaction
+        assert "expanded" in interaction
+
+    def test_export_data_empty_store(self, context_store):
+        """Test exporting from empty store."""
+        data = context_store.export_data()
+        assert "profile" in data
+        assert "interactions" in data
+        assert data["interactions"] == []
+
+    def test_export_data_interaction_timestamps_are_strings(self, context_store_full):
+        """Test exported interaction timestamps are ISO strings."""
+        data = context_store_full.export_data()
+        for interaction in data["interactions"]:
+            assert isinstance(interaction["timestamp"], str)
+            # Should be parseable ISO format
+            datetime.fromisoformat(interaction["timestamp"])
+
+
+class TestUserContextStoreImportData:
+    """Test UserContextStore.import_data() method."""
+
+    def test_import_data_profile(self, context_store, export_data_valid):
+        """Test importing profile data."""
+        context_store.import_data(export_data_valid)
+        profile = context_store.load_profile()
+        assert profile.role == "developer"
+        assert "project1" in profile.current_projects
+
+    def test_import_data_interactions(self, context_store, export_data_valid):
+        """Test importing interaction data."""
+        context_store.import_data(export_data_valid)
+        interactions = context_store.get_interactions(days=365)
+        assert len(interactions) >= 1
+        found = next((i for i in interactions if i.article_id == "article-1"), None)
+        assert found is not None
+        assert found.expanded is True
+        assert found.thumbs_up is True
+
+    def test_import_data_empty(self, context_store, export_data_empty):
+        """Test importing empty data."""
+        context_store.import_data(export_data_empty)
+        profile = context_store.load_profile()
+        assert profile.role is None
+        interactions = context_store.get_interactions()
+        assert len(interactions) == 0
+
+    def test_import_data_many_interactions(self, context_store, export_data_many_interactions):
+        """Test importing many interactions."""
+        context_store.import_data(export_data_many_interactions)
+        interactions = context_store.get_interactions(days=365)
+        assert len(interactions) == 50
+
+    def test_import_export_roundtrip(self, context_store_full, temp_dir):
+        """Test export -> import roundtrip."""
+        # Export from full store
+        exported = context_store_full.export_data()
+
+        # Import into new store
+        new_profile_path = os.path.join(temp_dir, "new_config", "user_context.json")
+        new_db_path = os.path.join(temp_dir, "new_articles.db")
+        new_store = UserContextStore(profile_path=new_profile_path, db_path=new_db_path)
+        new_store.import_data(exported)
+
+        # Verify profile
+        new_profile = new_store.load_profile()
+        assert new_profile.role == "software developer"
+
+        # Verify interactions
+        new_interactions = new_store.get_interactions(days=365)
+        assert len(new_interactions) == 20
+
+
+class TestUserContextStoreGetTopicEngagement:
+    """Test UserContextStore.get_topic_engagement() method."""
+
+    def test_get_topic_engagement_empty_no_articles_table(self, context_store):
+        """Test getting engagement when no articles table exists.
+
+        The get_topic_engagement method joins with the articles table.
+        When using UserContextStore alone (without Storage), the articles
+        table doesn't exist, so the query fails. This tests that behavior.
+        """
+        import sqlite3
+        # The method tries to join with articles table which doesn't exist
+        # in a standalone UserContextStore database
+        try:
+            engagement = context_store.get_topic_engagement()
+            # If it returns without error, should be empty dict
+            assert engagement == {}
+        except sqlite3.OperationalError as e:
+            # Expected: "no such table: articles"
+            assert "no such table" in str(e) or "articles" in str(e)
+
+    def test_get_topic_engagement_with_storage(self, temp_dir):
+        """Test getting engagement when articles table exists via Storage."""
+        from src.storage import Storage, Article
+        import sqlite3
+
+        db_path = os.path.join(temp_dir, "full.db")
+        profile_path = os.path.join(temp_dir, "config", "user_context.json")
+
+        # Create storage first (which creates articles table)
+        storage = Storage(db_path)
+
+        # Add an article
+        article = Article(
+            id="article-engaged",
+            feed_url="https://example.com/feed.xml",
+            title="AI Technology Article",
+            link="https://example.com/article",
+            published=datetime.now(),
+            content="Content about AI.",
+            summary="AI summary.",
+        )
+        storage.save_article(article)
+
+        # Manually set trend_tags since save_article doesn't include it
+        conn = sqlite3.connect(db_path)
+        conn.execute(
+            "UPDATE articles SET trend_tags = ? WHERE id = ?",
+            ("AI,technology", "article-engaged"),
+        )
+        conn.commit()
+        conn.close()
+
+        # Create UserContextStore with same database
+        context_store = UserContextStore(profile_path=profile_path, db_path=db_path)
+
+        # Record interaction with that article
+        context_store.record_interaction(ArticleInteraction(
+            article_id="article-engaged",
+            expanded=True,
+            saved=True,
+        ))
+
+        # Now get topic engagement
+        engagement = context_store.get_topic_engagement(days=30)
+        assert isinstance(engagement, dict)
+        # Should have engagement for AI and technology tags
+        assert "AI" in engagement or "technology" in engagement
+
+    def test_get_topic_engagement_no_matching_interactions(self, temp_dir):
+        """Test engagement when interactions don't match any articles."""
+        from src.storage import Storage, Article
+
+        db_path = os.path.join(temp_dir, "full.db")
+        profile_path = os.path.join(temp_dir, "config", "user_context.json")
+
+        # Create storage first
+        storage = Storage(db_path)
+
+        # Add an article
+        article = Article(
+            id="article-1",
+            feed_url="https://example.com/feed.xml",
+            title="Article",
+            link="https://example.com/article",
+            published=datetime.now(),
+            content="Content.",
+            summary="Summary.",
+            trend_tags="Python",
+        )
+        storage.save_article(article)
+
+        # Create UserContextStore with same database
+        context_store = UserContextStore(profile_path=profile_path, db_path=db_path)
+
+        # Record interaction with a DIFFERENT article (not in articles table)
+        context_store.record_interaction(ArticleInteraction(
+            article_id="article-nonexistent",
+            expanded=True,
+        ))
+
+        # Get engagement - should be empty since interaction doesn't match any article
+        engagement = context_store.get_topic_engagement(days=30)
+        assert engagement == {}
+
+
+# =============================================================================
+# Test Classes for UserContextStore Integration
+# =============================================================================
+
+
+class TestUserContextStoreIntegration:
+    """Integration tests for UserContextStore."""
+
+    def test_full_workflow(self, full_user_context_setup):
+        """Test full workflow with profile and interactions."""
+        store = full_user_context_setup["store"]
+        profile = full_user_context_setup["profile"]
+
+        # Profile should be saved
+        loaded = store.load_profile()
+        assert loaded.role == profile.role
+
+        # Interactions should be recorded
+        interactions = store.get_interactions()
+        assert len(interactions) == 3
+
+    def test_multiple_operations(self, context_store, profile_developer):
+        """Test multiple operations in sequence."""
+        # Save profile
+        context_store.save_profile(profile_developer)
+
+        # Add interactions
+        for i in range(5):
+            context_store.record_interaction(ArticleInteraction(
+                article_id=f"article-{i}",
+                expanded=True,
+            ))
+
+        # Verify profile
+        profile = context_store.load_profile()
+        assert profile.role == "software developer"
+
+        # Verify interactions
+        interactions = context_store.get_interactions()
+        assert len(interactions) == 5
+
+        # Clear and verify
+        context_store.clear_history()
+        interactions = context_store.get_interactions()
+        assert len(interactions) == 0
+
+        # Profile should still exist
+        profile = context_store.load_profile()
+        assert profile.role == "software developer"
+
+    def test_profile_update_preserves_data(self, context_store_with_profile):
+        """Test updating profile preserves existing data."""
+        # Load existing profile
+        profile = context_store_with_profile.load_profile()
+        original_projects = profile.current_projects.copy()
+
+        # Modify and save
+        profile.watching.append("new-topic")
+        context_store_with_profile.save_profile(profile)
+
+        # Reload and verify
+        loaded = context_store_with_profile.load_profile()
+        assert loaded.current_projects == original_projects
+        assert "new-topic" in loaded.watching
+
+    def test_interaction_persistence(self, context_store, temp_db):
+        """Test interactions persist across store instances."""
+        # Record interaction
+        context_store.record_interaction(ArticleInteraction(
+            article_id="persistent-article",
+            expanded=True,
+            saved=True,
+        ))
+
+        # Create new store instance with same db
+        new_store = UserContextStore(
+            profile_path="config/user_context.json",
+            db_path=temp_db,
+        )
+        interactions = new_store.get_interactions()
+        found = next((i for i in interactions if i.article_id == "persistent-article"), None)
+        assert found is not None
+        assert found.expanded is True
+        assert found.saved is True
+
+
 # Tests for RelevanceEngine will be added in subtask 5.3
 # Tests for sort_by_relevance will be added in subtask 5.3
 # Tests for apply_diversity_filter will be added in subtask 5.3
