@@ -1679,3 +1679,677 @@ class TestCategoryIntegration:
         assert isinstance(perspectives, dict)
         for cat_id in DEFAULT_CATEGORIES:
             assert cat_id in perspectives
+
+
+# =============================================================================
+# Tests for build_perspective_prompt Function
+# =============================================================================
+
+
+class TestBuildPerspectivePromptBasic:
+    """Basic tests for build_perspective_prompt function."""
+
+    def test_returns_string(self, sample_article):
+        """Test that build_perspective_prompt returns a string."""
+        prompt = build_perspective_prompt('consensus', [sample_article])
+        assert isinstance(prompt, str)
+
+    def test_returns_non_empty_string(self, sample_article):
+        """Test that build_perspective_prompt returns a non-empty string."""
+        prompt = build_perspective_prompt('consensus', [sample_article])
+        assert len(prompt) > 0
+
+    def test_prompt_contains_article_title(self, sample_article):
+        """Test that the prompt contains the article title."""
+        prompt = build_perspective_prompt('consensus', [sample_article])
+        assert sample_article.title in prompt
+
+    def test_prompt_contains_article_content(self, sample_article):
+        """Test that the prompt contains article content."""
+        prompt = build_perspective_prompt('consensus', [sample_article])
+        # Content is truncated to 500 chars, so check for part of it
+        assert sample_article.content[:100] in prompt
+
+    def test_prompt_contains_article_number(self, sample_article):
+        """Test that the prompt includes article numbering."""
+        prompt = build_perspective_prompt('consensus', [sample_article])
+        assert '[Article 1' in prompt
+
+    def test_prompt_works_with_empty_articles_list(self):
+        """Test that build_perspective_prompt handles empty articles list."""
+        prompt = build_perspective_prompt('consensus', [])
+        assert isinstance(prompt, str)
+        # Should still return a prompt structure
+
+    def test_prompt_handles_multiple_articles(self, article_cluster_tech_news):
+        """Test that prompt handles multiple articles correctly."""
+        prompt = build_perspective_prompt('consensus', article_cluster_tech_news)
+        assert '[Article 1' in prompt
+        assert '[Article 2' in prompt
+        assert '[Article 3' in prompt
+
+    def test_each_category_returns_different_prompt(self, sample_article):
+        """Test that different categories produce different prompts."""
+        prompt_consensus = build_perspective_prompt('consensus', [sample_article])
+        prompt_contested = build_perspective_prompt('contested', [sample_article])
+        prompt_gaps = build_perspective_prompt('gaps', [sample_article])
+
+        # Each should have different instructions
+        assert prompt_consensus != prompt_contested
+        assert prompt_contested != prompt_gaps
+        assert prompt_consensus != prompt_gaps
+
+
+class TestBuildPerspectivePromptArticleExtraction:
+    """Tests for article information extraction in prompts."""
+
+    def test_extracts_source_from_feed_url(self, sample_article):
+        """Test that source is extracted from feed_url."""
+        prompt = build_perspective_prompt('consensus', [sample_article])
+        # feed_url is "https://example.com/feed.xml", source should be "example.com"
+        assert 'example.com' in prompt
+
+    def test_extracts_source_from_complex_url(self):
+        """Test source extraction from complex feed URLs."""
+        article = Article(
+            id="test-1",
+            feed_url="https://subdomain.example.com/path/to/feed.xml",
+            title="Test Article",
+            link="https://example.com/article",
+            published=datetime.now(),
+            content="Test content.",
+            summary="Test summary.",
+        )
+        prompt = build_perspective_prompt('consensus', [article])
+        assert 'subdomain.example.com' in prompt
+
+    def test_handles_feed_url_without_slashes(self, article_with_no_url_parts):
+        """Test handling of feed URL without standard URL structure."""
+        prompt = build_perspective_prompt('consensus', [article_with_no_url_parts])
+        # Should use the feed_url as-is if no slashes
+        assert 'simple-feed' in prompt
+
+    def test_includes_title_label(self, sample_article):
+        """Test that prompt includes 'Title:' label."""
+        prompt = build_perspective_prompt('consensus', [sample_article])
+        assert 'Title:' in prompt
+
+    def test_includes_content_label(self, sample_article):
+        """Test that prompt includes 'Content:' label."""
+        prompt = build_perspective_prompt('consensus', [sample_article])
+        assert 'Content:' in prompt
+
+    def test_separates_articles_with_newlines(self, article_cluster_two_sources):
+        """Test that multiple articles are separated properly."""
+        prompt = build_perspective_prompt('consensus', article_cluster_two_sources)
+        # Articles should be separated by double newlines
+        assert '\n\n' in prompt
+
+
+class TestBuildPerspectivePromptContentTruncation:
+    """Tests for content truncation behavior in prompts."""
+
+    def test_truncates_long_content(self, sample_article_very_long):
+        """Test that very long content is truncated."""
+        prompt = build_perspective_prompt('consensus', [sample_article_very_long])
+        # Content should be truncated to 500 chars + "..."
+        # The full content would make the prompt very long
+
+        # Count how many times the repeated phrase appears
+        repeated_phrase = "This is a very detailed article about AI technology. "
+        original_count = sample_article_very_long.content.count(repeated_phrase)
+        prompt_count = prompt.count(repeated_phrase)
+
+        # Prompt should have fewer occurrences due to truncation
+        assert prompt_count < original_count
+
+    def test_adds_ellipsis_after_truncation(self, sample_article_very_long):
+        """Test that truncated content ends with ellipsis."""
+        prompt = build_perspective_prompt('consensus', [sample_article_very_long])
+        # The content section should include "..."
+        assert '...' in prompt
+
+    def test_short_content_not_truncated(self):
+        """Test that short content is not truncated."""
+        short_article = Article(
+            id="short-1",
+            feed_url="https://example.com/feed.xml",
+            title="Short Article",
+            link="https://example.com/short",
+            published=datetime.now(),
+            content="This is a short article.",  # Less than 500 chars
+            summary="Short summary.",
+        )
+        prompt = build_perspective_prompt('consensus', [short_article])
+        assert "This is a short article." in prompt
+
+    def test_exactly_500_char_content(self):
+        """Test handling of exactly 500 character content."""
+        content_500 = "A" * 500
+        article = Article(
+            id="exact-500",
+            feed_url="https://example.com/feed.xml",
+            title="Exact 500 Content",
+            link="https://example.com/exact",
+            published=datetime.now(),
+            content=content_500,
+            summary="Exactly 500 chars.",
+        )
+        prompt = build_perspective_prompt('consensus', [article])
+        # Should include all 500 chars followed by "..."
+        assert content_500 in prompt
+
+
+class TestBuildPerspectivePromptSourceExtraction:
+    """Tests for source extraction from feed URLs."""
+
+    def test_extracts_domain_from_https_url(self):
+        """Test domain extraction from HTTPS URL."""
+        article = Article(
+            id="https-1",
+            feed_url="https://techcrunch.com/feed.xml",
+            title="Test",
+            link="https://example.com",
+            published=datetime.now(),
+            content="Content",
+            summary=None,
+        )
+        prompt = build_perspective_prompt('consensus', [article])
+        assert 'techcrunch.com' in prompt
+
+    def test_extracts_domain_from_http_url(self):
+        """Test domain extraction from HTTP URL."""
+        article = Article(
+            id="http-1",
+            feed_url="http://legacy.example.com/rss",
+            title="Test",
+            link="https://example.com",
+            published=datetime.now(),
+            content="Content",
+            summary=None,
+        )
+        prompt = build_perspective_prompt('consensus', [article])
+        assert 'legacy.example.com' in prompt
+
+    def test_handles_url_with_port(self):
+        """Test handling of URL with port number."""
+        article = Article(
+            id="port-1",
+            feed_url="https://localhost:8080/feed.xml",
+            title="Test",
+            link="https://example.com",
+            published=datetime.now(),
+            content="Content",
+            summary=None,
+        )
+        prompt = build_perspective_prompt('consensus', [article])
+        # Source extraction uses split('/')[2] which would get "localhost:8080"
+        assert 'localhost' in prompt
+
+    def test_handles_url_with_path(self):
+        """Test handling of URL with deep path."""
+        article = Article(
+            id="path-1",
+            feed_url="https://example.com/blog/rss/feed.xml",
+            title="Test",
+            link="https://example.com",
+            published=datetime.now(),
+            content="Content",
+            summary=None,
+        )
+        prompt = build_perspective_prompt('consensus', [article])
+        # Source should be the domain only
+        assert 'example.com' in prompt
+
+    def test_multiple_sources_labeled_correctly(self, article_cluster_diverse):
+        """Test that multiple sources are labeled with correct numbers."""
+        prompt = build_perspective_prompt('consensus', article_cluster_diverse)
+
+        # Check all 5 articles are numbered
+        for i in range(1, 6):
+            assert f'[Article {i}' in prompt
+
+
+class TestBuildPerspectivePromptFactualCategories:
+    """Tests for factual category prompts (consensus, contested, gaps, timeline)."""
+
+    def test_consensus_prompt_contains_agreement_keywords(self, article_cluster_two_sources):
+        """Test that consensus prompt asks about agreement."""
+        prompt = build_perspective_prompt('consensus', article_cluster_two_sources)
+        prompt_lower = prompt.lower()
+        assert 'agree' in prompt_lower or 'agreement' in prompt_lower or 'consensus' in prompt_lower
+
+    def test_consensus_prompt_mentions_all_sources(self, article_cluster_two_sources):
+        """Test that consensus prompt references all sources."""
+        prompt = build_perspective_prompt('consensus', article_cluster_two_sources)
+        assert 'all sources' in prompt.lower() or 'all articles' in prompt.lower()
+
+    def test_contested_prompt_contains_disagreement_keywords(self, article_cluster_two_sources):
+        """Test that contested prompt asks about disagreement."""
+        prompt = build_perspective_prompt('contested', article_cluster_two_sources)
+        prompt_lower = prompt.lower()
+        assert 'disagree' in prompt_lower or 'contest' in prompt_lower or 'differ' in prompt_lower
+
+    def test_contested_prompt_asks_which_sources(self, article_cluster_two_sources):
+        """Test that contested prompt asks which sources say what."""
+        prompt = build_perspective_prompt('contested', article_cluster_two_sources)
+        assert 'which source' in prompt.lower() or 'sources say' in prompt.lower()
+
+    def test_gaps_prompt_asks_about_missing_coverage(self, sample_article):
+        """Test that gaps prompt asks about missing coverage."""
+        prompt = build_perspective_prompt('gaps', [sample_article])
+        prompt_lower = prompt.lower()
+        assert 'not being covered' in prompt_lower or 'missing' in prompt_lower or 'not covered' in prompt_lower
+
+    def test_gaps_prompt_asks_about_questions(self, sample_article):
+        """Test that gaps prompt asks about unanswered questions."""
+        prompt = build_perspective_prompt('gaps', [sample_article])
+        prompt_lower = prompt.lower()
+        assert 'question' in prompt_lower or 'unanswered' in prompt_lower
+
+    def test_timeline_prompt_asks_for_chronological(self, sample_article):
+        """Test that timeline prompt asks for chronological sequence."""
+        prompt = build_perspective_prompt('timeline', [sample_article])
+        prompt_lower = prompt.lower()
+        assert 'chronological' in prompt_lower or 'timeline' in prompt_lower
+
+    def test_timeline_prompt_mentions_dates(self, sample_article):
+        """Test that timeline prompt mentions dates/times."""
+        prompt = build_perspective_prompt('timeline', [sample_article])
+        prompt_lower = prompt.lower()
+        assert 'date' in prompt_lower or 'time' in prompt_lower or 'timestamp' in prompt_lower
+
+
+class TestBuildPerspectivePromptFramingCategories:
+    """Tests for source framing category prompts."""
+
+    def test_tech_industry_prompt_focuses_on_tech(self, sample_article_tech):
+        """Test that tech-industry prompt focuses on technical perspective."""
+        prompt = build_perspective_prompt('tech-industry', [sample_article_tech])
+        prompt_lower = prompt.lower()
+        assert 'tech' in prompt_lower
+        assert 'technical' in prompt_lower or 'developer' in prompt_lower or 'innovation' in prompt_lower
+
+    def test_mainstream_prompt_focuses_on_general_audience(self, sample_article_mainstream):
+        """Test that mainstream prompt focuses on general audience."""
+        prompt = build_perspective_prompt('mainstream', [sample_article_mainstream])
+        prompt_lower = prompt.lower()
+        assert 'mainstream' in prompt_lower
+        assert 'general' in prompt_lower or 'public' in prompt_lower
+
+    def test_financial_prompt_focuses_on_business(self, sample_article_business):
+        """Test that financial prompt focuses on business/market perspective."""
+        prompt = build_perspective_prompt('financial', [sample_article_business])
+        prompt_lower = prompt.lower()
+        assert 'financial' in prompt_lower or 'business' in prompt_lower
+        assert 'market' in prompt_lower or 'investor' in prompt_lower
+
+    def test_political_prompt_focuses_on_policy(self, sample_article_political):
+        """Test that political prompt focuses on policy perspective."""
+        prompt = build_perspective_prompt('political', [sample_article_political])
+        prompt_lower = prompt.lower()
+        assert 'political' in prompt_lower or 'policy' in prompt_lower
+        assert 'government' in prompt_lower or 'regulatory' in prompt_lower
+
+    def test_academic_prompt_focuses_on_research(self, sample_article_academic):
+        """Test that academic prompt focuses on research perspective."""
+        prompt = build_perspective_prompt('academic', [sample_article_academic])
+        prompt_lower = prompt.lower()
+        assert 'academic' in prompt_lower or 'research' in prompt_lower
+        assert 'scholarly' in prompt_lower or 'evidence' in prompt_lower
+
+
+class TestBuildPerspectivePromptFunCategories:
+    """Tests for fun/entertainment category prompts."""
+
+    def test_spiciest_takes_prompt_asks_for_provocative(self, sample_article_controversial):
+        """Test that spiciest-takes prompt asks for provocative opinions."""
+        prompt = build_perspective_prompt('spiciest-takes', [sample_article_controversial])
+        prompt_lower = prompt.lower()
+        assert 'provocative' in prompt_lower or 'spicy' in prompt_lower or 'spiciest' in prompt_lower
+
+    def test_spiciest_takes_prompt_mentions_controversial(self, sample_article_controversial):
+        """Test that spiciest-takes prompt mentions controversial content."""
+        prompt = build_perspective_prompt('spiciest-takes', [sample_article_controversial])
+        prompt_lower = prompt.lower()
+        assert 'controversial' in prompt_lower or 'bold' in prompt_lower or 'inflammatory' in prompt_lower
+
+    def test_unhinged_speculation_prompt_asks_for_wild(self, sample_article):
+        """Test that unhinged-speculation prompt asks for wild predictions."""
+        prompt = build_perspective_prompt('unhinged-speculation', [sample_article])
+        prompt_lower = prompt.lower()
+        assert 'wild' in prompt_lower or 'unhinged' in prompt_lower
+
+    def test_unhinged_speculation_mentions_entertainment(self, sample_article):
+        """Test that unhinged-speculation prompt mentions entertainment purpose."""
+        prompt = build_perspective_prompt('unhinged-speculation', [sample_article])
+        prompt_lower = prompt.lower()
+        assert 'entertainment' in prompt_lower or 'speculation' in prompt_lower
+
+    def test_contrarian_prompt_asks_for_against_grain(self, sample_article):
+        """Test that contrarian prompt asks for against-the-grain views."""
+        prompt = build_perspective_prompt('contrarian', [sample_article])
+        prompt_lower = prompt.lower()
+        assert 'contrarian' in prompt_lower or 'against' in prompt_lower
+        assert 'skeptical' in prompt_lower or 'alternative' in prompt_lower
+
+    def test_doom_prompt_asks_for_pessimistic(self, sample_article):
+        """Test that doom prompt asks for pessimistic takes."""
+        prompt = build_perspective_prompt('doom', [sample_article])
+        prompt_lower = prompt.lower()
+        assert 'pessimistic' in prompt_lower or 'doom' in prompt_lower
+        assert 'worst' in prompt_lower or 'negative' in prompt_lower or 'worried' in prompt_lower
+
+    def test_hype_prompt_asks_for_optimistic(self, sample_article):
+        """Test that hype prompt asks for optimistic takes."""
+        prompt = build_perspective_prompt('hype', [sample_article])
+        prompt_lower = prompt.lower()
+        assert 'optimistic' in prompt_lower or 'hype' in prompt_lower
+        assert 'best' in prompt_lower or 'enthusiastic' in prompt_lower or 'excited' in prompt_lower
+
+
+class TestBuildPerspectivePromptAnalysisCategories:
+    """Tests for analysis category prompts."""
+
+    def test_expert_quotes_prompt_asks_for_experts(self, sample_article_academic):
+        """Test that expert-quotes prompt asks for expert quotes."""
+        prompt = build_perspective_prompt('expert-quotes', [sample_article_academic])
+        prompt_lower = prompt.lower()
+        assert 'expert' in prompt_lower
+        assert 'quote' in prompt_lower
+
+    def test_expert_quotes_prompt_mentions_credentials(self, sample_article_academic):
+        """Test that expert-quotes prompt asks for credentials."""
+        prompt = build_perspective_prompt('expert-quotes', [sample_article_academic])
+        prompt_lower = prompt.lower()
+        assert 'credential' in prompt_lower or 'authority' in prompt_lower or 'expertise' in prompt_lower
+
+    def test_prediction_track_record_asks_about_past(self, article_cluster_two_sources):
+        """Test that prediction-track-record prompt asks about past predictions."""
+        prompt = build_perspective_prompt('prediction-track-record', article_cluster_two_sources)
+        prompt_lower = prompt.lower()
+        assert 'prediction' in prompt_lower or 'predicted' in prompt_lower
+        assert 'past' in prompt_lower or 'previous' in prompt_lower or 'track record' in prompt_lower
+
+    def test_prediction_track_record_asks_about_accuracy(self, article_cluster_two_sources):
+        """Test that prediction-track-record prompt asks about prediction accuracy."""
+        prompt = build_perspective_prompt('prediction-track-record', article_cluster_two_sources)
+        prompt_lower = prompt.lower()
+        assert 'held up' in prompt_lower or 'happened' in prompt_lower or 'forecast' in prompt_lower
+
+
+class TestBuildPerspectivePromptUnknownCategory:
+    """Tests for unknown category handling."""
+
+    def test_unknown_category_returns_fallback_prompt(self, sample_article):
+        """Test that unknown category returns a fallback prompt."""
+        prompt = build_perspective_prompt('nonexistent-category', [sample_article])
+        assert isinstance(prompt, str)
+        assert len(prompt) > 0
+
+    def test_unknown_category_mentions_category_name(self, sample_article):
+        """Test that fallback prompt includes the category name."""
+        unknown_cat = 'my-custom-category'
+        prompt = build_perspective_prompt(unknown_cat, [sample_article])
+        assert unknown_cat in prompt
+
+    def test_unknown_category_includes_articles(self, sample_article):
+        """Test that fallback prompt includes article content."""
+        prompt = build_perspective_prompt('unknown-category', [sample_article])
+        assert sample_article.title in prompt
+
+    def test_fallback_prompt_has_analyze_instruction(self, sample_article):
+        """Test that fallback prompt has generic analyze instruction."""
+        prompt = build_perspective_prompt('random-category', [sample_article])
+        assert 'analyze' in prompt.lower() or 'perspective' in prompt.lower()
+
+    def test_empty_string_category_uses_fallback(self, sample_article):
+        """Test that empty string category uses fallback prompt."""
+        prompt = build_perspective_prompt('', [sample_article])
+        assert isinstance(prompt, str)
+        assert len(prompt) > 0
+
+
+class TestBuildPerspectivePromptEdgeCases:
+    """Tests for edge cases in prompt building."""
+
+    def test_handles_none_content(self, article_with_none_content):
+        """Test handling of article with None content."""
+        prompt = build_perspective_prompt('consensus', [article_with_none_content])
+        assert isinstance(prompt, str)
+        # Should not raise an error
+
+    def test_handles_empty_content(self, sample_article_empty_content):
+        """Test handling of article with empty content."""
+        prompt = build_perspective_prompt('consensus', [sample_article_empty_content])
+        assert isinstance(prompt, str)
+        assert sample_article_empty_content.title in prompt
+
+    def test_handles_unicode_content(self, sample_article_unicode):
+        """Test handling of article with unicode content."""
+        prompt = build_perspective_prompt('consensus', [sample_article_unicode])
+        assert isinstance(prompt, str)
+        # Should include unicode title
+        assert '人工智能' in prompt or 'AI研究' in prompt
+
+    def test_handles_special_characters_in_title(self):
+        """Test handling of special characters in article title."""
+        article = Article(
+            id="special-1",
+            feed_url="https://example.com/feed.xml",
+            title="Breaking: $$$MAJOR$$$ NEWS!!! <script>alert('test')</script>",
+            link="https://example.com/special",
+            published=datetime.now(),
+            content="Special content.",
+            summary=None,
+        )
+        prompt = build_perspective_prompt('consensus', [article])
+        assert '$$$MAJOR$$$' in prompt
+        assert '<script>' in prompt  # Raw content, not sanitized
+
+    def test_handles_newlines_in_content(self):
+        """Test handling of newlines in article content."""
+        article = Article(
+            id="newline-1",
+            feed_url="https://example.com/feed.xml",
+            title="Article With Newlines",
+            link="https://example.com/newlines",
+            published=datetime.now(),
+            content="Line 1.\n\nLine 2.\n\nLine 3.",
+            summary=None,
+        )
+        prompt = build_perspective_prompt('consensus', [article])
+        assert isinstance(prompt, str)
+        # Content should be preserved
+        assert 'Line 1' in prompt
+
+    def test_handles_tabs_in_content(self):
+        """Test handling of tabs in article content."""
+        article = Article(
+            id="tab-1",
+            feed_url="https://example.com/feed.xml",
+            title="Article With Tabs",
+            link="https://example.com/tabs",
+            published=datetime.now(),
+            content="Column1\tColumn2\tColumn3",
+            summary=None,
+        )
+        prompt = build_perspective_prompt('consensus', [article])
+        assert isinstance(prompt, str)
+
+    def test_handles_very_long_title(self):
+        """Test handling of very long article title."""
+        long_title = "This is a very long title " * 50
+        article = Article(
+            id="long-title-1",
+            feed_url="https://example.com/feed.xml",
+            title=long_title,
+            link="https://example.com/long-title",
+            published=datetime.now(),
+            content="Short content.",
+            summary=None,
+        )
+        prompt = build_perspective_prompt('consensus', [article])
+        # Title should be included (not truncated)
+        assert long_title in prompt
+
+    def test_handles_article_with_only_title(self):
+        """Test handling of article with only title (no content, no summary)."""
+        article = Article(
+            id="title-only-1",
+            feed_url="https://example.com/feed.xml",
+            title="Title Only Article",
+            link="https://example.com/title-only",
+            published=datetime.now(),
+            content=None,
+            summary=None,
+        )
+        prompt = build_perspective_prompt('consensus', [article])
+        assert 'Title Only Article' in prompt
+
+
+class TestBuildPerspectivePromptAllCategoriesComprehensive:
+    """Comprehensive tests ensuring all 16 categories have proper prompts."""
+
+    def test_all_categories_produce_unique_prompts(self, article_cluster_two_sources):
+        """Test that all 16 categories produce unique prompts."""
+        prompts = {}
+        for category_id in PERSPECTIVE_CATEGORIES.keys():
+            prompts[category_id] = build_perspective_prompt(category_id, article_cluster_two_sources)
+
+        # All prompts should be different from each other
+        prompt_values = list(prompts.values())
+        unique_prompts = set(prompt_values)
+        assert len(unique_prompts) == 16, "All category prompts should be unique"
+
+    def test_all_categories_include_articles_section(self, article_cluster_two_sources):
+        """Test that all category prompts include the articles section."""
+        for category_id in PERSPECTIVE_CATEGORIES.keys():
+            prompt = build_perspective_prompt(category_id, article_cluster_two_sources)
+            assert '[Article 1' in prompt, f"Category '{category_id}' missing article section"
+
+    def test_all_categories_have_instructions(self, article_cluster_two_sources):
+        """Test that all category prompts have meaningful instructions (not just articles)."""
+        for category_id in PERSPECTIVE_CATEGORIES.keys():
+            prompt = build_perspective_prompt(category_id, article_cluster_two_sources)
+            # Prompt should be longer than just the article content
+            assert len(prompt) > 200, f"Category '{category_id}' prompt too short"
+            # Should contain some instructional words
+            instruction_words = ['analyze', 'identify', 'find', 'extract', 'look', 'focus', 'list', 'given']
+            has_instruction = any(word in prompt.lower() for word in instruction_words)
+            assert has_instruction, f"Category '{category_id}' missing instructions"
+
+    def test_factual_categories_have_bullet_point_format(self, article_cluster_two_sources):
+        """Test that factual categories request bullet point format."""
+        factual_cats = ['consensus', 'contested', 'gaps']
+        for cat_id in factual_cats:
+            prompt = build_perspective_prompt(cat_id, article_cluster_two_sources)
+            assert 'bullet' in prompt.lower() or 'list' in prompt.lower(), \
+                f"Factual category '{cat_id}' should request bullet/list format"
+
+    def test_framing_categories_ask_what_emphasized(self, article_cluster_two_sources):
+        """Test that framing categories ask what's emphasized."""
+        framing_cats = ['tech-industry', 'mainstream', 'financial', 'political', 'academic']
+        for cat_id in framing_cats:
+            prompt = build_perspective_prompt(cat_id, article_cluster_two_sources)
+            prompt_lower = prompt.lower()
+            has_emphasis = 'emphasis' in prompt_lower or 'focus' in prompt_lower or 'angle' in prompt_lower
+            assert has_emphasis, f"Framing category '{cat_id}' should ask about emphasis/focus"
+
+
+class TestBuildPerspectivePromptMultipleArticles:
+    """Tests for prompt building with multiple articles."""
+
+    def test_handles_two_articles(self, article_cluster_two_sources):
+        """Test handling of exactly two articles."""
+        prompt = build_perspective_prompt('consensus', article_cluster_two_sources)
+        assert '[Article 1' in prompt
+        assert '[Article 2' in prompt
+        assert '[Article 3' not in prompt
+
+    def test_handles_five_articles(self, article_cluster_diverse):
+        """Test handling of five articles."""
+        prompt = build_perspective_prompt('contested', article_cluster_diverse)
+        for i in range(1, 6):
+            assert f'[Article {i}' in prompt
+
+    def test_handles_twenty_articles(self, sample_articles_bulk):
+        """Test handling of many articles."""
+        prompt = build_perspective_prompt('consensus', sample_articles_bulk)
+        # Check first few are present
+        assert '[Article 1' in prompt
+        assert '[Article 5' in prompt
+        assert '[Article 10' in prompt
+
+    def test_articles_separated_properly(self, article_cluster_diverse):
+        """Test that articles are properly separated in the prompt."""
+        prompt = build_perspective_prompt('consensus', article_cluster_diverse)
+        # Count article headers
+        article_count = prompt.count('[Article')
+        assert article_count == 5
+
+    def test_each_article_has_title_and_content(self, article_cluster_tech_news):
+        """Test that each article includes both title and content."""
+        prompt = build_perspective_prompt('consensus', article_cluster_tech_news)
+
+        for article in article_cluster_tech_news:
+            assert article.title in prompt
+
+
+class TestBuildPerspectivePromptIntegration:
+    """Integration tests for build_perspective_prompt with other functions."""
+
+    def test_prompt_can_be_passed_to_llm_summarize(self, article_cluster_two_sources, mock_llm_provider):
+        """Test that generated prompt can be passed to LLM summarize method."""
+        prompt = build_perspective_prompt('consensus', article_cluster_two_sources)
+
+        # Should be able to call summarize with the prompt
+        result = mock_llm_provider.summarize(prompt)
+        assert result is not None
+
+    def test_prompt_used_in_synthesize_perspective(self, mock_storage_with_articles, mock_llm_provider):
+        """Test that prompt is properly used in synthesize_perspective."""
+        articles = mock_storage_with_articles.get_articles_by_cluster("test")
+
+        # Synthesize should use build_perspective_prompt internally
+        perspective = synthesize_perspective(
+            category='consensus',
+            articles=articles,
+            llm_provider=mock_llm_provider,
+        )
+
+        # Verify LLM was called (which means prompt was built)
+        assert mock_llm_provider.summarize.called
+        call_args = mock_llm_provider.summarize.call_args
+        prompt_used = call_args[0][0]
+        assert 'consensus' in prompt_used.lower() or 'agree' in prompt_used.lower()
+
+    def test_all_categories_work_with_synthesize_perspective(self, sample_article, mock_llm_provider):
+        """Test that all category prompts work with synthesize_perspective."""
+        # Use 2 articles to satisfy min_sources for consensus/contested
+        articles = [sample_article, sample_article]
+
+        for category_id in PERSPECTIVE_CATEGORIES.keys():
+            mock_llm_provider.summarize.reset_mock()
+            mock_llm_provider.summarize.return_value = f"Synthesis for {category_id}"
+
+            perspective = synthesize_perspective(
+                category=category_id,
+                articles=articles,
+                llm_provider=mock_llm_provider,
+            )
+
+            assert perspective.category == category_id
+            assert mock_llm_provider.summarize.called
+
+    def test_prompt_quality_verified_by_confidence(self, article_cluster_diverse, mock_llm_provider_verbose):
+        """Test that prompt quality affects confidence estimation."""
+        # Verbose provider returns structured response
+        perspective = synthesize_perspective(
+            category='consensus',
+            articles=article_cluster_diverse,
+            llm_provider=mock_llm_provider_verbose,
+        )
+
+        # Should have reasonable confidence with good response
+        assert perspective.confidence > 0.3
