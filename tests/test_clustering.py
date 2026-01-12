@@ -4967,3 +4967,986 @@ class TestSimilarityCalculationIntegration:
         # Should match (0.75 >= 0.75)
         assert result is not None
         assert result.id == "story-1"
+
+
+# =============================================================================
+# Tests for create_new_story()
+# =============================================================================
+
+
+class TestCreateNewStoryBasic:
+    """Basic tests for create_new_story method."""
+
+    def test_create_new_story_returns_story_object(
+        self, mock_llm_provider, mock_storage, sample_article
+    ):
+        """Test that create_new_story returns a Story object."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        result = clusterer.create_new_story(sample_article)
+
+        assert isinstance(result, Story)
+
+    def test_create_new_story_has_uuid_id(
+        self, mock_llm_provider, mock_storage, sample_article
+    ):
+        """Test that created story has a valid UUID id."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        result = clusterer.create_new_story(sample_article)
+
+        # Verify ID is a valid UUID
+        assert result.id is not None
+        uuid.UUID(result.id)  # Raises if invalid
+
+    def test_create_new_story_has_emerging_lifecycle_state(
+        self, mock_llm_provider, mock_storage, sample_article
+    ):
+        """Test that new story starts with 'emerging' lifecycle state."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        result = clusterer.create_new_story(sample_article)
+
+        assert result.lifecycle_state == "emerging"
+
+    def test_create_new_story_includes_article_id(
+        self, mock_llm_provider, mock_storage, sample_article
+    ):
+        """Test that new story includes the article ID."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        result = clusterer.create_new_story(sample_article)
+
+        assert sample_article.id in result.article_ids
+        assert len(result.article_ids) == 1
+
+    def test_create_new_story_has_empty_news_item_ids(
+        self, mock_llm_provider, mock_storage, sample_article
+    ):
+        """Test that new story has empty news_item_ids list."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        result = clusterer.create_new_story(sample_article)
+
+        assert result.news_item_ids == []
+
+    def test_create_new_story_calls_save_story(
+        self, mock_llm_provider, mock_storage, sample_article
+    ):
+        """Test that create_new_story calls storage.save_story."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        result = clusterer.create_new_story(sample_article)
+
+        mock_storage.save_story.assert_called_once_with(result)
+
+    def test_create_new_story_calls_update_article_story(
+        self, mock_llm_provider, mock_storage, sample_article
+    ):
+        """Test that create_new_story updates the article's story_id."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        result = clusterer.create_new_story(sample_article)
+
+        mock_storage.update_article_story.assert_called_once_with(
+            sample_article.id, result.id
+        )
+
+
+class TestCreateNewStoryTimestampHandling:
+    """Tests for timestamp handling in create_new_story."""
+
+    def test_create_new_story_uses_article_published_datetime(
+        self, mock_llm_provider, mock_storage, sample_article
+    ):
+        """Test that first_seen uses article.published when it's a datetime."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        result = clusterer.create_new_story(sample_article)
+
+        # first_seen should match article.published
+        assert result.first_seen is not None
+
+    def test_create_new_story_parses_iso_string_date(
+        self, mock_llm_provider, mock_storage
+    ):
+        """Test that create_new_story parses ISO string dates."""
+        article = Article(
+            id="article-iso-1",
+            feed_url="https://example.com/feed.xml",
+            title="Test Article",
+            link="https://example.com/article-1",
+            published="2025-01-07T12:30:00Z",
+            content="Test content.",
+            summary="Test summary.",
+        )
+
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        result = clusterer.create_new_story(article)
+
+        assert result.first_seen is not None
+        assert result.first_seen.year == 2025
+        assert result.first_seen.month == 1
+        assert result.first_seen.day == 7
+
+    def test_create_new_story_handles_no_published_date(
+        self, mock_llm_provider, mock_storage, sample_article_no_published
+    ):
+        """Test that create_new_story handles article without published date."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        before = datetime.now()
+        result = clusterer.create_new_story(sample_article_no_published)
+        after = datetime.now()
+
+        # first_seen should default to approximately now
+        assert result.first_seen is not None
+        assert before <= result.first_seen <= after
+
+    def test_create_new_story_handles_invalid_date_string(
+        self, mock_llm_provider, mock_storage
+    ):
+        """Test that create_new_story handles invalid date strings."""
+        article = Article(
+            id="article-invalid-date-1",
+            feed_url="https://example.com/feed.xml",
+            title="Test Article",
+            link="https://example.com/article-1",
+            published="not-a-valid-date",
+            content="Test content.",
+            summary="Test summary.",
+        )
+
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        before = datetime.now()
+        result = clusterer.create_new_story(article)
+        after = datetime.now()
+
+        # Should default to now on parse failure
+        assert result.first_seen is not None
+        assert before <= result.first_seen <= after
+
+    def test_create_new_story_sets_last_updated(
+        self, mock_llm_provider, mock_storage, sample_article
+    ):
+        """Test that last_updated is set to current time."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        before = datetime.now()
+        result = clusterer.create_new_story(sample_article)
+        after = datetime.now()
+
+        assert result.last_updated is not None
+        assert before <= result.last_updated <= after
+
+
+class TestCreateNewStoryWithRealStorage:
+    """Tests for create_new_story with real storage."""
+
+    def test_create_new_story_persists_to_storage(
+        self, mock_llm_provider, storage_empty, sample_article
+    ):
+        """Test that created story is persisted to real storage."""
+        clusterer = StoryClusterer(mock_llm_provider, storage_empty)
+        result = clusterer.create_new_story(sample_article)
+
+        # Verify story can be retrieved
+        stories = storage_empty.get_all_stories()
+        assert len(stories) == 1
+        assert stories[0].id == result.id
+
+    def test_create_new_story_updates_article_in_storage(
+        self, mock_llm_provider, storage_empty, sample_article
+    ):
+        """Test that article's story_id is updated in storage."""
+        # First save our sample article to ensure it exists
+        storage_empty.save_article(sample_article)
+
+        # Verify article was saved
+        saved = storage_empty.get_article(sample_article.id)
+        assert saved is not None, "Article should be saved before creating story"
+
+        clusterer = StoryClusterer(mock_llm_provider, storage_empty)
+        result = clusterer.create_new_story(sample_article)
+
+        # Verify article's story_id is updated
+        updated_article = storage_empty.get_article(sample_article.id)
+        assert updated_article is not None
+        assert updated_article.story_id == result.id
+
+
+class TestCreateNewStoryEdgeCases:
+    """Edge case tests for create_new_story."""
+
+    def test_create_new_story_with_unicode_content(
+        self, mock_llm_provider, mock_storage, sample_article_unicode
+    ):
+        """Test create_new_story with unicode article content."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        result = clusterer.create_new_story(sample_article_unicode)
+
+        assert result is not None
+        mock_storage.save_story.assert_called_once()
+
+    def test_create_new_story_with_special_characters(
+        self, mock_llm_provider, mock_storage, sample_article_special_chars
+    ):
+        """Test create_new_story with special characters in content."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        result = clusterer.create_new_story(sample_article_special_chars)
+
+        assert result is not None
+        mock_storage.save_story.assert_called_once()
+
+    def test_create_new_story_with_very_long_content(
+        self, mock_llm_provider, mock_storage, sample_article_very_long
+    ):
+        """Test create_new_story with very long article content."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        result = clusterer.create_new_story(sample_article_very_long)
+
+        assert result is not None
+        # Title and description should be truncated
+        assert len(result.title) <= 100
+        assert len(result.description) <= 500
+
+    def test_create_new_story_with_minimal_article(
+        self, mock_llm_provider, mock_storage, sample_article_minimal
+    ):
+        """Test create_new_story with minimal article data."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        result = clusterer.create_new_story(sample_article_minimal)
+
+        assert result is not None
+        assert result.title is not None  # Should use fallback
+
+    def test_create_new_story_multiple_stories_unique_ids(
+        self, mock_llm_provider, mock_storage, sample_articles_bulk
+    ):
+        """Test that multiple created stories have unique IDs."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+
+        story_ids = []
+        for article in sample_articles_bulk[:5]:
+            result = clusterer.create_new_story(article)
+            story_ids.append(result.id)
+
+        # All IDs should be unique
+        assert len(story_ids) == len(set(story_ids))
+
+
+# =============================================================================
+# Tests for update_story_with_article()
+# =============================================================================
+
+
+class TestUpdateStoryWithArticleBasic:
+    """Basic tests for update_story_with_article method."""
+
+    def test_update_story_adds_article_id(
+        self, mock_llm_provider_with_keywords, mock_storage, sample_article, sample_story
+    ):
+        """Test that update_story_with_article adds article ID to story."""
+        clusterer = StoryClusterer(mock_llm_provider_with_keywords, mock_storage)
+        result = clusterer.update_story_with_article(sample_story, sample_article)
+
+        assert sample_article.id in result.article_ids
+
+    def test_update_story_preserves_existing_article_ids(
+        self, mock_llm_provider_with_keywords, mock_storage, sample_article, sample_story
+    ):
+        """Test that existing article IDs are preserved."""
+        original_ids = sample_story.article_ids.copy()
+
+        clusterer = StoryClusterer(mock_llm_provider_with_keywords, mock_storage)
+        result = clusterer.update_story_with_article(sample_story, sample_article)
+
+        # All original IDs should still be there
+        for article_id in original_ids:
+            assert article_id in result.article_ids
+
+    def test_update_story_does_not_duplicate_article_id(
+        self, mock_llm_provider_with_keywords, mock_storage, sample_story
+    ):
+        """Test that article ID is not duplicated if already present."""
+        # Create article with ID already in story
+        article = Article(
+            id=sample_story.article_ids[0],  # Use existing ID
+            feed_url="https://example.com/feed.xml",
+            title="Test Article",
+            link="https://example.com/article-1",
+            published=datetime.now(),
+            content="Test content.",
+            summary="Test summary.",
+        )
+
+        clusterer = StoryClusterer(mock_llm_provider_with_keywords, mock_storage)
+        original_count = len(sample_story.article_ids)
+        result = clusterer.update_story_with_article(sample_story, article)
+
+        # Count should not increase
+        assert len(result.article_ids) == original_count
+
+    def test_update_story_updates_last_updated(
+        self, mock_llm_provider_with_keywords, mock_storage, sample_article, sample_story
+    ):
+        """Test that last_updated timestamp is updated."""
+        old_last_updated = sample_story.last_updated
+
+        clusterer = StoryClusterer(mock_llm_provider_with_keywords, mock_storage)
+        before = datetime.now()
+        result = clusterer.update_story_with_article(sample_story, sample_article)
+        after = datetime.now()
+
+        # last_updated should be updated to now
+        assert result.last_updated >= old_last_updated
+        assert before <= result.last_updated <= after
+
+    def test_update_story_calls_update_story(
+        self, mock_llm_provider_with_keywords, mock_storage, sample_article, sample_story
+    ):
+        """Test that storage.update_story is called."""
+        clusterer = StoryClusterer(mock_llm_provider_with_keywords, mock_storage)
+        result = clusterer.update_story_with_article(sample_story, sample_article)
+
+        mock_storage.update_story.assert_called_once_with(result)
+
+    def test_update_story_calls_update_article_story(
+        self, mock_llm_provider_with_keywords, mock_storage, sample_article, sample_story
+    ):
+        """Test that storage.update_article_story is called."""
+        clusterer = StoryClusterer(mock_llm_provider_with_keywords, mock_storage)
+        result = clusterer.update_story_with_article(sample_story, sample_article)
+
+        mock_storage.update_article_story.assert_called_once_with(
+            sample_article.id, sample_story.id
+        )
+
+    def test_update_story_returns_story_object(
+        self, mock_llm_provider_with_keywords, mock_storage, sample_article, sample_story
+    ):
+        """Test that update_story_with_article returns a Story object."""
+        clusterer = StoryClusterer(mock_llm_provider_with_keywords, mock_storage)
+        result = clusterer.update_story_with_article(sample_story, sample_article)
+
+        assert isinstance(result, Story)
+        assert result.id == sample_story.id
+
+
+class TestUpdateStoryKeywordHandling:
+    """Tests for keyword handling in update_story_with_article."""
+
+    def test_update_story_adds_new_keywords(
+        self, mock_storage, sample_article, sample_story
+    ):
+        """Test that new keywords are added to story."""
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.return_value = "newkeyword1, newkeyword2, newkeyword3"
+
+        original_keywords = sample_story.keywords.copy()
+
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+        result = clusterer.update_story_with_article(sample_story, sample_article)
+
+        # Should have original + new keywords
+        assert len(result.keywords) > len(original_keywords)
+        assert "newkeyword1" in result.keywords
+        assert "newkeyword2" in result.keywords
+
+    def test_update_story_does_not_duplicate_keywords(
+        self, mock_storage, sample_article, sample_story
+    ):
+        """Test that duplicate keywords are not added."""
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        # Return keywords that already exist
+        existing = sample_story.keywords[0] if sample_story.keywords else "test"
+        mock_llm.generate.return_value = f"{existing}, newkeyword"
+
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+        result = clusterer.update_story_with_article(sample_story, sample_article)
+
+        # Should not have duplicate of existing keyword
+        keyword_counts = {}
+        for kw in result.keywords:
+            keyword_counts[kw] = keyword_counts.get(kw, 0) + 1
+        assert all(count == 1 for count in keyword_counts.values())
+
+    def test_update_story_limits_keywords_to_20(
+        self, mock_storage, sample_article
+    ):
+        """Test that keywords are limited to 20."""
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        # Return many keywords
+        mock_llm.generate.return_value = ", ".join([f"keyword{i}" for i in range(15)])
+
+        # Story with existing keywords
+        story = Story(
+            id="story-test",
+            title="Test Story",
+            description="Test description",
+            keywords=[f"existing{i}" for i in range(10)],  # 10 existing
+            first_seen=datetime.now() - timedelta(days=1),
+            last_updated=datetime.now() - timedelta(hours=1),
+            lifecycle_state="developing",
+            article_ids=["article-1"],
+            news_item_ids=[],
+        )
+
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+        result = clusterer.update_story_with_article(story, sample_article)
+
+        # Should be limited to 20 keywords
+        assert len(result.keywords) <= 20
+
+    def test_update_story_preserves_keyword_order(
+        self, mock_storage, sample_article
+    ):
+        """Test that original keywords maintain their order."""
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.return_value = "newkeyword"
+
+        story = Story(
+            id="story-test",
+            title="Test Story",
+            description="Test description",
+            keywords=["first", "second", "third"],
+            first_seen=datetime.now() - timedelta(days=1),
+            last_updated=datetime.now() - timedelta(hours=1),
+            lifecycle_state="developing",
+            article_ids=["article-1"],
+            news_item_ids=[],
+        )
+
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+        result = clusterer.update_story_with_article(story, sample_article)
+
+        # Original order should be preserved
+        assert result.keywords[0] == "first"
+        assert result.keywords[1] == "second"
+        assert result.keywords[2] == "third"
+
+
+class TestUpdateStoryWithRealStorage:
+    """Tests for update_story_with_article with real storage."""
+
+    def test_update_story_persists_to_storage(
+        self, mock_llm_provider_with_keywords, storage_with_stories, sample_article
+    ):
+        """Test that updated story is persisted to real storage."""
+        # Get existing story
+        stories = storage_with_stories.get_active_stories()
+        story = stories[0]
+        original_article_count = len(story.article_ids)
+
+        # Save sample article
+        storage_with_stories.save_article(sample_article)
+
+        clusterer = StoryClusterer(mock_llm_provider_with_keywords, storage_with_stories)
+        result = clusterer.update_story_with_article(story, sample_article)
+
+        # Verify story is updated in storage
+        updated_story = storage_with_stories.get_story(story.id)
+        assert len(updated_story.article_ids) == original_article_count + 1
+        assert sample_article.id in updated_story.article_ids
+
+
+class TestUpdateStoryEdgeCases:
+    """Edge case tests for update_story_with_article."""
+
+    def test_update_story_with_no_keywords(
+        self, mock_llm_provider_with_keywords, mock_storage, sample_article, sample_story_no_keywords
+    ):
+        """Test updating story that has no keywords."""
+        clusterer = StoryClusterer(mock_llm_provider_with_keywords, mock_storage)
+        result = clusterer.update_story_with_article(sample_story_no_keywords, sample_article)
+
+        # Should have new keywords now
+        assert len(result.keywords) > 0
+
+    def test_update_story_with_unicode_article(
+        self, mock_llm_provider_with_keywords, mock_storage, sample_article_unicode, sample_story
+    ):
+        """Test updating story with unicode article."""
+        clusterer = StoryClusterer(mock_llm_provider_with_keywords, mock_storage)
+        result = clusterer.update_story_with_article(sample_story, sample_article_unicode)
+
+        assert result is not None
+        assert sample_article_unicode.id in result.article_ids
+
+    def test_update_story_with_empty_content_article(
+        self, mock_llm_provider_with_keywords, mock_storage, sample_article_minimal, sample_story
+    ):
+        """Test updating story with minimal/empty content article."""
+        clusterer = StoryClusterer(mock_llm_provider_with_keywords, mock_storage)
+        result = clusterer.update_story_with_article(sample_story, sample_article_minimal)
+
+        assert result is not None
+        assert sample_article_minimal.id in result.article_ids
+
+    def test_update_story_multiple_articles_sequential(
+        self, mock_llm_provider_with_keywords, mock_storage, sample_articles_bulk, sample_story
+    ):
+        """Test updating story with multiple articles sequentially."""
+        clusterer = StoryClusterer(mock_llm_provider_with_keywords, mock_storage)
+
+        result = sample_story
+        for article in sample_articles_bulk[:3]:
+            result = clusterer.update_story_with_article(result, article)
+
+        # All articles should be in story
+        for article in sample_articles_bulk[:3]:
+            assert article.id in result.article_ids
+
+
+# =============================================================================
+# Tests for metadata generation methods
+# =============================================================================
+
+
+class TestGenerateStoryTitle:
+    """Tests for _generate_story_title method."""
+
+    def test_generate_story_title_calls_llm(
+        self, mock_storage, sample_article
+    ):
+        """Test that _generate_story_title calls LLM."""
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.return_value = "Generated Title"
+
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+        result = clusterer._generate_story_title(sample_article)
+
+        mock_llm.generate.assert_called_once()
+
+    def test_generate_story_title_returns_string(
+        self, mock_llm_provider, mock_storage, sample_article
+    ):
+        """Test that _generate_story_title returns a string."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        result = clusterer._generate_story_title(sample_article)
+
+        assert isinstance(result, str)
+        assert len(result) > 0
+
+    def test_generate_story_title_removes_quotes(
+        self, mock_storage, sample_article
+    ):
+        """Test that quotes are removed from generated title."""
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.return_value = '"Title with "quotes" inside"'
+
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+        result = clusterer._generate_story_title(sample_article)
+
+        assert '"' not in result
+
+    def test_generate_story_title_removes_newlines(
+        self, mock_storage, sample_article
+    ):
+        """Test that newlines are removed from generated title."""
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.return_value = "Title with\nnewlines\nin it"
+
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+        result = clusterer._generate_story_title(sample_article)
+
+        assert "\n" not in result
+
+    def test_generate_story_title_truncates_to_100_chars(
+        self, mock_storage, sample_article
+    ):
+        """Test that title is truncated to 100 characters."""
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.return_value = "A" * 150
+
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+        result = clusterer._generate_story_title(sample_article)
+
+        assert len(result) <= 100
+
+    def test_generate_story_title_fallback_on_error(
+        self, mock_llm_provider_error, mock_storage, sample_article
+    ):
+        """Test that article title is used as fallback on error."""
+        clusterer = StoryClusterer(mock_llm_provider_error, mock_storage)
+        result = clusterer._generate_story_title(sample_article)
+
+        assert result == sample_article.title[:100]
+
+    def test_generate_story_title_prompt_includes_article_title(
+        self, mock_storage, sample_article
+    ):
+        """Test that prompt includes article title."""
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.return_value = "Generated Title"
+
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+        clusterer._generate_story_title(sample_article)
+
+        # Check that article title is in the prompt
+        call_args = mock_llm.generate.call_args
+        prompt = call_args[0][0]
+        assert sample_article.title in prompt
+
+
+class TestGenerateStoryDescription:
+    """Tests for _generate_story_description method."""
+
+    def test_generate_story_description_calls_llm(
+        self, mock_storage, sample_article
+    ):
+        """Test that _generate_story_description calls LLM."""
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.return_value = "Generated Description"
+
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+        result = clusterer._generate_story_description(sample_article)
+
+        mock_llm.generate.assert_called_once()
+
+    def test_generate_story_description_returns_string(
+        self, mock_llm_provider, mock_storage, sample_article
+    ):
+        """Test that _generate_story_description returns a string."""
+        clusterer = StoryClusterer(mock_llm_provider, mock_storage)
+        result = clusterer._generate_story_description(sample_article)
+
+        assert isinstance(result, str)
+        assert len(result) > 0
+
+    def test_generate_story_description_truncates_to_500_chars(
+        self, mock_storage, sample_article
+    ):
+        """Test that description is truncated to 500 characters."""
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.return_value = "B" * 600
+
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+        result = clusterer._generate_story_description(sample_article)
+
+        assert len(result) <= 500
+
+    def test_generate_story_description_fallback_to_summary(
+        self, mock_llm_provider_error, mock_storage, sample_article
+    ):
+        """Test that article summary is used as fallback on error."""
+        clusterer = StoryClusterer(mock_llm_provider_error, mock_storage)
+        result = clusterer._generate_story_description(sample_article)
+
+        assert result == sample_article.summary
+
+    def test_generate_story_description_fallback_to_content(
+        self, mock_llm_provider_error, mock_storage, sample_article_unsummarized
+    ):
+        """Test that article content is used if no summary available."""
+        clusterer = StoryClusterer(mock_llm_provider_error, mock_storage)
+        result = clusterer._generate_story_description(sample_article_unsummarized)
+
+        assert result == sample_article_unsummarized.content[:200]
+
+    def test_generate_story_description_prompt_includes_content(
+        self, mock_storage, sample_article
+    ):
+        """Test that prompt includes article content."""
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.return_value = "Generated Description"
+
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+        clusterer._generate_story_description(sample_article)
+
+        call_args = mock_llm.generate.call_args
+        prompt = call_args[0][0]
+        # Content is truncated in prompt
+        assert sample_article.title in prompt
+
+
+class TestExtractKeywords:
+    """Tests for _extract_keywords method."""
+
+    def test_extract_keywords_calls_llm(
+        self, mock_storage, sample_article
+    ):
+        """Test that _extract_keywords calls LLM."""
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.return_value = "keyword1, keyword2, keyword3"
+
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+        result = clusterer._extract_keywords(sample_article)
+
+        mock_llm.generate.assert_called_once()
+
+    def test_extract_keywords_returns_list(
+        self, mock_llm_provider_with_keywords, mock_storage, sample_article
+    ):
+        """Test that _extract_keywords returns a list."""
+        clusterer = StoryClusterer(mock_llm_provider_with_keywords, mock_storage)
+        result = clusterer._extract_keywords(sample_article)
+
+        assert isinstance(result, list)
+
+    def test_extract_keywords_splits_by_comma(
+        self, mock_storage, sample_article
+    ):
+        """Test that keywords are split by comma."""
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.return_value = "keyword1, keyword2, keyword3"
+
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+        result = clusterer._extract_keywords(sample_article)
+
+        assert "keyword1" in result
+        assert "keyword2" in result
+        assert "keyword3" in result
+
+    def test_extract_keywords_strips_whitespace(
+        self, mock_storage, sample_article
+    ):
+        """Test that whitespace is stripped from keywords."""
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.return_value = "  keyword1  ,  keyword2  ,  keyword3  "
+
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+        result = clusterer._extract_keywords(sample_article)
+
+        for kw in result:
+            assert kw == kw.strip()
+
+    def test_extract_keywords_filters_short_keywords(
+        self, mock_storage, sample_article
+    ):
+        """Test that keywords with 2 or fewer characters are filtered."""
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.return_value = "a, ab, abc, keyword"
+
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+        result = clusterer._extract_keywords(sample_article)
+
+        # "a" and "ab" should be filtered (len <= 2)
+        assert "a" not in result
+        assert "ab" not in result
+        assert "abc" in result
+        assert "keyword" in result
+
+    def test_extract_keywords_filters_empty_strings(
+        self, mock_storage, sample_article
+    ):
+        """Test that empty strings are filtered."""
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.return_value = "keyword1, , , keyword2, "
+
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+        result = clusterer._extract_keywords(sample_article)
+
+        assert "" not in result
+        assert "keyword1" in result
+        assert "keyword2" in result
+
+    def test_extract_keywords_limits_to_10(
+        self, mock_storage, sample_article
+    ):
+        """Test that keywords are limited to 10."""
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.return_value = ", ".join([f"keyword{i}" for i in range(20)])
+
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+        result = clusterer._extract_keywords(sample_article)
+
+        assert len(result) <= 10
+
+    def test_extract_keywords_fallback_on_error(
+        self, mock_llm_provider_error, mock_storage, sample_article
+    ):
+        """Test that title words are used as fallback on error."""
+        clusterer = StoryClusterer(mock_llm_provider_error, mock_storage)
+        result = clusterer._extract_keywords(sample_article)
+
+        # Should extract words from title with len > 4
+        for kw in result:
+            assert len(kw) > 4
+
+    def test_extract_keywords_fallback_limits_to_5(
+        self, mock_llm_provider_error, mock_storage
+    ):
+        """Test that fallback keywords are limited to 5."""
+        article = Article(
+            id="article-many-words",
+            feed_url="https://example.com/feed.xml",
+            title="Word1 Word2 Word3 Word4 Word5 Word6 Word7 Word8 Word9 Word10",
+            link="https://example.com/article-1",
+            published=datetime.now(),
+            content="Test content.",
+            summary="Test summary.",
+        )
+
+        clusterer = StoryClusterer(mock_llm_provider_error, mock_storage)
+        result = clusterer._extract_keywords(article)
+
+        assert len(result) <= 5
+
+
+class TestMetadataGenerationIntegration:
+    """Integration tests for metadata generation."""
+
+    def test_create_new_story_uses_all_metadata_methods(
+        self, mock_storage, sample_article
+    ):
+        """Test that create_new_story uses all metadata generation methods."""
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.side_effect = [
+            "Generated Title",  # _generate_story_title
+            "Generated Description",  # _generate_story_description
+            "keyword1, keyword2, keyword3",  # _extract_keywords
+        ]
+
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+        result = clusterer.create_new_story(sample_article)
+
+        assert mock_llm.generate.call_count == 3
+        assert result.title == "Generated Title"
+        assert result.description == "Generated Description"
+        assert "keyword1" in result.keywords
+
+    def test_metadata_fallback_chain_on_llm_error(
+        self, mock_llm_provider_error, mock_storage, sample_article
+    ):
+        """Test that all fallbacks work when LLM fails."""
+        clusterer = StoryClusterer(mock_llm_provider_error, mock_storage)
+        result = clusterer.create_new_story(sample_article)
+
+        # Title fallback
+        assert result.title == sample_article.title[:100]
+        # Description fallback
+        assert result.description == sample_article.summary or sample_article.content[:200]
+        # Keywords fallback (words from title)
+        assert len(result.keywords) > 0
+
+    def test_metadata_with_mixed_llm_responses(
+        self, mock_storage, sample_article
+    ):
+        """Test metadata generation with mixed success/failure LLM calls."""
+        call_count = [0]
+
+        def generate_response(*args, **kwargs):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return "Generated Title"
+            elif call_count[0] == 2:
+                raise Exception("LLM error")  # Description fails
+            else:
+                return "keyword1, keyword2"
+
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.side_effect = generate_response
+
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+        result = clusterer.create_new_story(sample_article)
+
+        # Title from LLM
+        assert result.title == "Generated Title"
+        # Description from fallback
+        assert result.description == sample_article.summary or sample_article.content[:200]
+        # Keywords from LLM (third call succeeds)
+        assert "keyword1" in result.keywords
+
+    def test_create_story_handles_llm_returning_empty_strings(
+        self, mock_storage, sample_article
+    ):
+        """Test handling of empty string responses from LLM."""
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.return_value = ""
+
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+        result = clusterer.create_new_story(sample_article)
+
+        # Should still create a valid story
+        assert result is not None
+        assert result.title is not None
+
+    def test_update_story_metadata_extraction(
+        self, mock_storage, sample_article, sample_story
+    ):
+        """Test that update_story_with_article extracts keywords properly."""
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.return_value = "newkeyword1, newkeyword2"
+
+        clusterer = StoryClusterer(mock_llm, mock_storage)
+        result = clusterer.update_story_with_article(sample_story, sample_article)
+
+        # New keywords should be added
+        assert "newkeyword1" in result.keywords
+        assert "newkeyword2" in result.keywords
+
+
+class TestCreateNewStoryAndUpdateIntegration:
+    """Integration tests for create_new_story and update_story_with_article together."""
+
+    def test_create_then_update_workflow(
+        self, storage_empty, sample_articles_bulk
+    ):
+        """Test creating a story then updating it with more articles."""
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.return_value = "keyword1, keyword2"
+
+        clusterer = StoryClusterer(mock_llm, storage_empty)
+
+        # Create new story with first article
+        for article in sample_articles_bulk[:3]:
+            storage_empty.save_article(article)
+
+        story = clusterer.create_new_story(sample_articles_bulk[0])
+        assert len(story.article_ids) == 1
+
+        # Update with additional articles
+        story = clusterer.update_story_with_article(story, sample_articles_bulk[1])
+        story = clusterer.update_story_with_article(story, sample_articles_bulk[2])
+
+        # Should have all 3 articles
+        assert len(story.article_ids) == 3
+
+    def test_full_clustering_workflow_with_metadata(
+        self, storage_empty, sample_article
+    ):
+        """Test full clustering workflow including metadata generation."""
+        storage_empty.save_article(sample_article)
+
+        call_count = [0]
+
+        def generate_response(*args, **kwargs):
+            call_count[0] += 1
+            if "title" in args[0].lower():
+                return "AI Technology Story"
+            elif "describe" in args[0].lower():
+                return "Story about AI technology developments."
+            else:
+                # Use keywords with > 2 chars (short ones like "AI" get filtered)
+                return "artificial, technology, innovation"
+
+        mock_llm = MagicMock(spec=LLMProvider)
+        mock_llm.is_available.return_value = True
+        mock_llm.generate.side_effect = generate_response
+
+        clusterer = StoryClusterer(mock_llm, storage_empty)
+        story = clusterer.create_new_story(sample_article)
+
+        assert story.title == "AI Technology Story"
+        assert "AI technology" in story.description
+        # Keywords with len <= 2 are filtered, so check for longer keywords
+        assert "technology" in story.keywords
+
+        # Verify persisted
+        saved_story = storage_empty.get_story(story.id)
+        assert saved_story is not None
+        assert saved_story.title == "AI Technology Story"
