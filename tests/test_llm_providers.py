@@ -3778,8 +3778,9 @@ class TestClaudeCodeProviderIntegration:
 
     def test_list_providers_includes_claude_code(self):
         """Test list_providers includes Claude Code in the list."""
-        with patch("shutil.which") as mock_which:
+        with patch("shutil.which") as mock_which, patch("httpx.get") as mock_get:
             mock_which.return_value = "/usr/local/bin/claude"
+            mock_get.side_effect = Exception("Connection refused")  # Mock all HTTP calls
 
             providers = list_providers()
 
@@ -3793,8 +3794,9 @@ class TestClaudeCodeProviderIntegration:
 
     def test_list_providers_claude_code_unavailable(self):
         """Test list_providers shows Claude Code as unavailable when CLI not found."""
-        with patch("shutil.which") as mock_which:
+        with patch("shutil.which") as mock_which, patch("httpx.get") as mock_get:
             mock_which.return_value = None
+            mock_get.side_effect = Exception("Connection refused")  # Mock all HTTP calls
 
             providers = list_providers()
 
@@ -3850,7 +3852,8 @@ class TestClaudeProviderIntegration:
         os.environ["ANTHROPIC_API_KEY"] = "test-key"
 
         mock_anthropic = MagicMock()
-        with patch.dict("sys.modules", {"anthropic": mock_anthropic}):
+        with patch.dict("sys.modules", {"anthropic": mock_anthropic}), patch("httpx.get") as mock_get:
+            mock_get.side_effect = Exception("Connection refused")
             providers = list_providers()
 
             claude_provider = next(
@@ -3866,14 +3869,16 @@ class TestClaudeProviderIntegration:
         if "ANTHROPIC_API_KEY" in os.environ:
             del os.environ["ANTHROPIC_API_KEY"]
 
-        providers = list_providers()
+        with patch("httpx.get") as mock_get:
+            mock_get.side_effect = Exception("Connection refused")
+            providers = list_providers()
 
-        claude_provider = next(
-            (p for p in providers if p["type"] == ProviderType.CLAUDE),
-            None
-        )
-        assert claude_provider is not None
-        assert claude_provider["available"] is False
+            claude_provider = next(
+                (p for p in providers if p["type"] == ProviderType.CLAUDE),
+                None
+            )
+            assert claude_provider is not None
+            assert claude_provider["available"] is False
 
 
 # =============================================================================
@@ -4299,7 +4304,8 @@ class TestGeminiProviderIntegration:
         os.environ["GOOGLE_API_KEY"] = "test-key"
 
         mock_genai = MagicMock()
-        with patch.dict("sys.modules", {"google.generativeai": mock_genai}):
+        with patch.dict("sys.modules", {"google.generativeai": mock_genai}), patch("httpx.get") as mock_get:
+            mock_get.side_effect = Exception("Connection refused")
             providers = list_providers()
 
             gemini_provider = next(
@@ -4317,14 +4323,16 @@ class TestGeminiProviderIntegration:
         if "GEMINI_API_KEY" in os.environ:
             del os.environ["GEMINI_API_KEY"]
 
-        providers = list_providers()
+        with patch("httpx.get") as mock_get:
+            mock_get.side_effect = Exception("Connection refused")
+            providers = list_providers()
 
-        gemini_provider = next(
-            (p for p in providers if p["type"] == ProviderType.GEMINI),
-            None
-        )
-        assert gemini_provider is not None
-        assert gemini_provider["available"] is False
+            gemini_provider = next(
+                (p for p in providers if p["type"] == ProviderType.GEMINI),
+                None
+            )
+            assert gemini_provider is not None
+            assert gemini_provider["available"] is False
 
     def test_auto_detect_includes_gemini_in_priority(self, clean_env):
         """Test auto_detect_provider considers Gemini in detection."""
@@ -4701,8 +4709,9 @@ class TestGeminiCLIProviderIntegration:
 
     def test_list_providers_includes_gemini_cli(self):
         """Test list_providers includes Gemini CLI in the list."""
-        with patch("shutil.which") as mock_which:
+        with patch("shutil.which") as mock_which, patch("httpx.get") as mock_get:
             mock_which.return_value = "/usr/local/bin/gemini"
+            mock_get.side_effect = Exception("Connection refused")
 
             providers = list_providers()
 
@@ -4716,8 +4725,9 @@ class TestGeminiCLIProviderIntegration:
 
     def test_list_providers_gemini_cli_unavailable(self):
         """Test list_providers shows Gemini CLI as unavailable when CLI not found."""
-        with patch("shutil.which") as mock_which:
+        with patch("shutil.which") as mock_which, patch("httpx.get") as mock_get:
             mock_which.return_value = None
+            mock_get.side_effect = Exception("Connection refused")
 
             providers = list_providers()
 
@@ -5249,30 +5259,34 @@ class TestGroqProviderIntegration:
         """Test list_providers includes Groq in the list."""
         os.environ["GROQ_API_KEY"] = "test-groq-key"
 
-        providers = list_providers()
+        with patch("httpx.get") as mock_get:
+            mock_get.side_effect = Exception("Connection refused")
+            providers = list_providers()
 
-        groq_provider = next(
-            (p for p in providers if p["type"] == ProviderType.GROQ),
-            None
-        )
-        assert groq_provider is not None
-        assert groq_provider["name"] == "Groq"
-        assert groq_provider["available"] is True
-        assert "FREE" in groq_provider["description"]
+            groq_provider = next(
+                (p for p in providers if p["type"] == ProviderType.GROQ),
+                None
+            )
+            assert groq_provider is not None
+            assert groq_provider["name"] == "Groq"
+            assert groq_provider["available"] is True
+            assert "FREE" in groq_provider["description"]
 
     def test_list_providers_groq_unavailable(self, clean_env):
         """Test list_providers shows Groq as unavailable when API key not set."""
         if "GROQ_API_KEY" in os.environ:
             del os.environ["GROQ_API_KEY"]
 
-        providers = list_providers()
+        with patch("httpx.get") as mock_get:
+            mock_get.side_effect = Exception("Connection refused")
+            providers = list_providers()
 
-        groq_provider = next(
-            (p for p in providers if p["type"] == ProviderType.GROQ),
-            None
-        )
-        assert groq_provider is not None
-        assert groq_provider["available"] is False
+            groq_provider = next(
+                (p for p in providers if p["type"] == ProviderType.GROQ),
+                None
+            )
+            assert groq_provider is not None
+            assert groq_provider["available"] is False
 
     def test_config_with_groq_provider_type(self, clean_env):
         """Test LLMConfig can be created with GROQ provider type."""
@@ -5307,6 +5321,13 @@ class TestGroqProviderIntegration:
 
 class TestListProviders:
     """Tests for list_providers() function that lists all available providers."""
+
+    @pytest.fixture(autouse=True)
+    def mock_network(self):
+        """Mock httpx for all tests in this class to prevent real network calls."""
+        with patch("httpx.get") as mock_get:
+            mock_get.side_effect = Exception("Connection refused")
+            yield mock_get
 
     def test_list_providers_returns_list(self, clean_env):
         """Test list_providers returns a list."""
@@ -5406,6 +5427,13 @@ class TestListProviders:
 
 class TestListProvidersWithMultipleAvailable:
     """Tests for list_providers when multiple providers are available."""
+
+    @pytest.fixture(autouse=True)
+    def mock_network(self):
+        """Mock httpx for all tests in this class to prevent real network calls."""
+        with patch("httpx.get") as mock_get:
+            mock_get.side_effect = Exception("Connection refused")
+            yield mock_get
 
     def test_multiple_api_keys_set(self, clean_env):
         """Test list_providers with multiple API keys set."""
@@ -7606,11 +7634,15 @@ class TestLMStudioAutoLoadErrors:
 
     def test_lm_studio_no_models_loaded_error(self):
         """Test LM Studio handles 'No models loaded' error."""
-        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+        with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post, \
+             patch("shutil.which") as mock_which, patch("subprocess.run") as mock_subprocess:
             models_response = MagicMock()
             models_response.status_code = 200
             models_response.json.return_value = {"data": []}
             mock_get.return_value = models_response
+
+            # No lms CLI available (prevents auto-load attempt)
+            mock_which.return_value = None
 
             # First call returns "No models loaded" error
             error_response = MagicMock()
