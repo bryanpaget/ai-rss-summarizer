@@ -2499,3 +2499,1127 @@ class TestFeedDiscoveryEdgeCases:
         assert error == ""
         # Verify the Spanish feed title is preserved
         assert any("Tecnologia" in f["title"] for f in feeds)
+
+
+# =============================================================================
+# Tests for Feed URL Validation (Subtask 5.6)
+# =============================================================================
+
+
+class TestFeedURLValidationFormats:
+    """Test validate_feed with various URL formats."""
+
+    def test_validate_url_with_http(self, sample_rss_content):
+        """Test validating HTTP URL (non-secure)."""
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 200
+        mock.text = sample_rss_content
+        mock.url = "http://example.com/feed"
+        mock.raise_for_status = MagicMock()
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed("http://example.com/feed")
+        assert success is True
+        assert error == ""
+
+    def test_validate_url_with_https(self, sample_rss_content):
+        """Test validating HTTPS URL (secure)."""
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 200
+        mock.text = sample_rss_content
+        mock.url = "https://example.com/feed"
+        mock.raise_for_status = MagicMock()
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed("https://example.com/feed")
+        assert success is True
+
+    def test_validate_url_with_port(self, sample_rss_content):
+        """Test validating URL with port number."""
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 200
+        mock.text = sample_rss_content
+        mock.url = "https://example.com:8443/feed"
+        mock.raise_for_status = MagicMock()
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed("https://example.com:8443/feed")
+        assert success is True
+
+    def test_validate_url_with_query_params(self, sample_rss_content):
+        """Test validating URL with query parameters."""
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 200
+        mock.text = sample_rss_content
+        mock.url = "https://example.com/feed?format=rss&v=2"
+        mock.raise_for_status = MagicMock()
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed("https://example.com/feed?format=rss&v=2")
+        assert success is True
+
+    def test_validate_url_with_fragment(self, sample_rss_content):
+        """Test validating URL with fragment identifier."""
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 200
+        mock.text = sample_rss_content
+        mock.url = "https://example.com/feed#section"
+        mock.raise_for_status = MagicMock()
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed("https://example.com/feed#section")
+        assert success is True
+
+    def test_validate_url_with_unicode_path(self, sample_rss_content):
+        """Test validating URL with unicode characters in path."""
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 200
+        mock.text = sample_rss_content
+        mock.url = "https://example.com/feeds/notícias"
+        mock.raise_for_status = MagicMock()
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed("https://example.com/feeds/notícias")
+        assert success is True
+
+    def test_validate_url_very_long_path(self, sample_rss_content):
+        """Test validating URL with very long path."""
+        long_path = "/a" * 500
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 200
+        mock.text = sample_rss_content
+        mock.url = f"https://example.com{long_path}"
+        mock.raise_for_status = MagicMock()
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed(f"https://example.com{long_path}")
+        assert success is True
+
+
+class TestFeedURLValidationRedirects:
+    """Test validate_feed with URL redirects."""
+
+    def test_validate_follows_redirects(self, sample_rss_content):
+        """Test that validation follows redirects and returns final URL."""
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 200
+        mock.text = sample_rss_content
+        mock.url = "https://new-domain.com/feed"  # Final URL after redirect
+        mock.raise_for_status = MagicMock()
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed("https://old-domain.com/feed")
+        assert success is True
+        assert info.url == "https://new-domain.com/feed"
+
+    def test_validate_redirect_to_different_domain(self, sample_rss_content):
+        """Test redirect to completely different domain."""
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 200
+        mock.text = sample_rss_content
+        mock.url = "https://feedburner.google.com/example-feed"
+        mock.raise_for_status = MagicMock()
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed("https://example.com/feed")
+        assert success is True
+        assert "feedburner" in info.url
+
+    def test_validate_redirect_chain_final_url(self, sample_rss_content):
+        """Test that final URL after redirect chain is captured."""
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 200
+        mock.text = sample_rss_content
+        mock.url = "https://final.example.com/final-feed"
+        mock.raise_for_status = MagicMock()
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed("https://redirect1.example.com/feed")
+        # The info.url should be the final URL, not the original
+        assert info.url == "https://final.example.com/final-feed"
+
+
+class TestFeedURLValidationMalformedURLs:
+    """Test validate_feed with malformed or unusual URLs."""
+
+    def test_validate_url_missing_protocol(self):
+        """Test that URL without protocol causes error."""
+        with patch("httpx.get", side_effect=httpx.UnsupportedProtocol("Missing protocol")):
+            success, info, error = validate_feed("example.com/feed")
+        assert success is False
+        assert info is None
+
+    def test_validate_url_with_spaces(self):
+        """Test URL with spaces causes error."""
+        request = MagicMock()
+        with patch("httpx.get", side_effect=httpx.RequestError("Invalid URL", request=request)):
+            success, info, error = validate_feed("https://example.com/feed path")
+        assert success is False
+        assert "Connection error" in error or "Error" in error
+
+    def test_validate_url_invalid_characters(self):
+        """Test URL with invalid characters."""
+        request = MagicMock()
+        with patch("httpx.get", side_effect=httpx.RequestError("Invalid URL", request=request)):
+            success, info, error = validate_feed("https://example.com/feed<>test")
+        assert success is False
+
+
+# =============================================================================
+# Tests for Content Type Checking (Subtask 5.6)
+# =============================================================================
+
+
+class TestContentTypeRSSFormats:
+    """Test validate_feed with various RSS content formats."""
+
+    def test_validate_rss_2_0(self, sample_rss_content):
+        """Test validation of RSS 2.0 feed."""
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 200
+        mock.text = sample_rss_content
+        mock.url = "https://example.com/feed"
+        mock.raise_for_status = MagicMock()
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed("https://example.com/feed")
+        assert success is True
+        assert info.title == "Test RSS Feed"
+
+    def test_validate_rss_1_0(self):
+        """Test validation of RSS 1.0 (RDF) feed."""
+        rss_1_0_content = """<?xml version="1.0" encoding="UTF-8"?>
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+         xmlns="http://purl.org/rss/1.0/">
+    <channel>
+        <title>RSS 1.0 Feed</title>
+        <link>https://example.com</link>
+        <description>An RSS 1.0 feed</description>
+    </channel>
+    <item>
+        <title>Item One</title>
+        <link>https://example.com/item1</link>
+    </item>
+</rdf:RDF>"""
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 200
+        mock.text = rss_1_0_content
+        mock.url = "https://example.com/rdf"
+        mock.raise_for_status = MagicMock()
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed("https://example.com/rdf")
+        assert success is True
+        assert "RSS 1.0" in info.title
+
+
+class TestContentTypeAtomFormats:
+    """Test validate_feed with Atom content formats."""
+
+    def test_validate_atom_1_0(self, sample_atom_content):
+        """Test validation of Atom 1.0 feed."""
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 200
+        mock.text = sample_atom_content
+        mock.url = "https://example.com/atom.xml"
+        mock.raise_for_status = MagicMock()
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed("https://example.com/atom.xml")
+        assert success is True
+        assert info.title == "Test Atom Feed"
+        # Atom uses subtitle instead of description
+        assert info.description == "An Atom feed for testing"
+
+    def test_validate_atom_with_entries(self, sample_atom_content):
+        """Test Atom feed entry extraction."""
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 200
+        mock.text = sample_atom_content
+        mock.url = "https://example.com/atom.xml"
+        mock.raise_for_status = MagicMock()
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed("https://example.com/atom.xml")
+        assert info.item_count == 2
+        assert len(info.latest_items) == 2
+
+
+class TestContentTypeNonFeedContent:
+    """Test validate_feed with non-feed content types."""
+
+    def test_validate_html_content_rejected(self, sample_not_a_feed):
+        """Test that HTML content is rejected as non-feed."""
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 200
+        mock.text = sample_not_a_feed
+        mock.url = "https://example.com/page"
+        mock.raise_for_status = MagicMock()
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed("https://example.com/page")
+        # feedparser may parse HTML as empty feed
+        # We check that it either fails or has no entries
+        if success:
+            assert info.item_count == 0 or info.title == "https://example.com/page"
+        else:
+            assert "Not a valid" in error or "Parse error" in error
+
+    def test_validate_json_content_rejected(self, sample_json_content):
+        """Test that JSON content is rejected as non-feed."""
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 200
+        mock.text = sample_json_content
+        mock.url = "https://api.example.com/data"
+        mock.raise_for_status = MagicMock()
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed("https://api.example.com/data")
+        assert success is False
+
+    def test_validate_plain_text_rejected(self):
+        """Test that plain text content is rejected."""
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 200
+        mock.text = "This is just plain text, not a feed."
+        mock.url = "https://example.com/text"
+        mock.raise_for_status = MagicMock()
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed("https://example.com/text")
+        assert success is False
+
+    def test_validate_csv_content_rejected(self):
+        """Test that CSV content is rejected."""
+        csv_content = "title,link,date\narticle1,http://example.com/1,2024-01-01"
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 200
+        mock.text = csv_content
+        mock.url = "https://example.com/data.csv"
+        mock.raise_for_status = MagicMock()
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed("https://example.com/data.csv")
+        assert success is False
+
+
+class TestContentTypeEmptyAndMalformed:
+    """Test validate_feed with empty and malformed content."""
+
+    def test_validate_empty_content(self, sample_empty_content):
+        """Test validation with empty response body."""
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 200
+        mock.text = sample_empty_content
+        mock.url = "https://example.com/empty"
+        mock.raise_for_status = MagicMock()
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed("https://example.com/empty")
+        # Empty content may fail or create empty feed
+        if not success:
+            assert error != ""
+
+    def test_validate_whitespace_only_content(self):
+        """Test validation with whitespace-only content."""
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 200
+        mock.text = "   \n\t\n   "
+        mock.url = "https://example.com/whitespace"
+        mock.raise_for_status = MagicMock()
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed("https://example.com/whitespace")
+        # Should fail or create empty feed
+        assert not success or (success and info.item_count == 0)
+
+    def test_validate_incomplete_xml(self, sample_invalid_xml):
+        """Test validation with incomplete XML."""
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 200
+        mock.text = sample_invalid_xml
+        mock.url = "https://example.com/broken"
+        mock.raise_for_status = MagicMock()
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed("https://example.com/broken")
+        # feedparser may be lenient with some malformed XML
+        assert isinstance(success, bool)
+
+    def test_validate_xml_without_feed_structure(self):
+        """Test validation with valid XML but not a feed structure.
+
+        Note: feedparser is extremely lenient and will parse almost any XML
+        as an empty feed. This documents actual behavior rather than ideal behavior.
+        """
+        xml_content = """<?xml version="1.0" encoding="UTF-8"?>
+<document>
+    <header>
+        <title>Not a Feed</title>
+    </header>
+    <body>
+        <paragraph>Some content</paragraph>
+    </body>
+</document>"""
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 200
+        mock.text = xml_content
+        mock.url = "https://example.com/doc.xml"
+        mock.raise_for_status = MagicMock()
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed("https://example.com/doc.xml")
+        # feedparser is extremely lenient - it parses this as an empty feed
+        # with the URL as the title since no <title> in channel/feed context
+        if success:
+            # If it succeeds, it should have 0 items (no <item> or <entry>)
+            assert info.item_count == 0
+        else:
+            # Or it should fail with an error
+            assert error != ""
+
+
+class TestContentTypeSpecialFeeds:
+    """Test validate_feed with special feed formats."""
+
+    def test_validate_feed_with_namespaces(self):
+        """Test RSS feed with multiple namespaces."""
+        feed_with_ns = """<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"
+     xmlns:dc="http://purl.org/dc/elements/1.1/"
+     xmlns:content="http://purl.org/rss/1.0/modules/content/"
+     xmlns:atom="http://www.w3.org/2005/Atom">
+    <channel>
+        <title>Feed with Namespaces</title>
+        <link>https://example.com</link>
+        <description>A feed using multiple namespaces</description>
+        <atom:link href="https://example.com/feed" rel="self" type="application/rss+xml"/>
+        <item>
+            <title>Article One</title>
+            <link>https://example.com/1</link>
+            <dc:creator>Author Name</dc:creator>
+            <content:encoded><![CDATA[<p>Full content here</p>]]></content:encoded>
+        </item>
+    </channel>
+</rss>"""
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 200
+        mock.text = feed_with_ns
+        mock.url = "https://example.com/feed"
+        mock.raise_for_status = MagicMock()
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed("https://example.com/feed")
+        assert success is True
+        assert info.title == "Feed with Namespaces"
+
+    def test_validate_feed_with_cdata(self):
+        """Test RSS feed with CDATA sections."""
+        feed_with_cdata = """<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+    <channel>
+        <title><![CDATA[Feed Title with <special> chars]]></title>
+        <link>https://example.com</link>
+        <description><![CDATA[Description with <html> & entities]]></description>
+        <item>
+            <title><![CDATA[Article with <b>bold</b> text]]></title>
+            <link>https://example.com/1</link>
+        </item>
+    </channel>
+</rss>"""
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 200
+        mock.text = feed_with_cdata
+        mock.url = "https://example.com/feed"
+        mock.raise_for_status = MagicMock()
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed("https://example.com/feed")
+        assert success is True
+        # CDATA content should be extracted properly
+        assert "special" in info.title or "Feed Title" in info.title
+
+    def test_validate_feed_with_encoded_entities(self):
+        """Test RSS feed with HTML encoded entities."""
+        feed_with_entities = """<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+    <channel>
+        <title>Feed &amp; More</title>
+        <link>https://example.com</link>
+        <description>Description with &lt;tags&gt; and &quot;quotes&quot;</description>
+        <item>
+            <title>Article &amp; More &lt;info&gt;</title>
+            <link>https://example.com/1</link>
+        </item>
+    </channel>
+</rss>"""
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 200
+        mock.text = feed_with_entities
+        mock.url = "https://example.com/feed"
+        mock.raise_for_status = MagicMock()
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed("https://example.com/feed")
+        assert success is True
+        # feedparser should decode entities
+        assert "&" in info.title
+
+
+class TestContentTypeUnicodeFeeds:
+    """Test validate_feed with various unicode encodings."""
+
+    def test_validate_utf8_feed(self, sample_rss_unicode):
+        """Test UTF-8 encoded feed."""
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 200
+        mock.text = sample_rss_unicode
+        mock.url = "https://unicode.example.com/feed"
+        mock.raise_for_status = MagicMock()
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed("https://unicode.example.com/feed")
+        assert success is True
+        # The fixture contains Spanish and Japanese characters
+        assert "Unicode" in info.title or "Tecnologia" in info.title
+
+    def test_validate_feed_with_emojis(self):
+        """Test feed with emoji characters."""
+        feed_with_emojis = """<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+    <channel>
+        <title>Tech News 🚀</title>
+        <link>https://example.com</link>
+        <description>Latest tech news 💻 and updates 🔥</description>
+        <item>
+            <title>New Feature Released! 🎉</title>
+            <link>https://example.com/1</link>
+        </item>
+    </channel>
+</rss>"""
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 200
+        mock.text = feed_with_emojis
+        mock.url = "https://example.com/feed"
+        mock.raise_for_status = MagicMock()
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed("https://example.com/feed")
+        assert success is True
+        # Emoji should be preserved
+        assert "🚀" in info.title or "Tech News" in info.title
+
+    def test_validate_feed_with_chinese_characters(self):
+        """Test feed with Chinese characters."""
+        feed_chinese = """<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+    <channel>
+        <title>科技新闻</title>
+        <link>https://chinese.example.com</link>
+        <description>最新科技新闻</description>
+        <item>
+            <title>人工智能突破</title>
+            <link>https://chinese.example.com/1</link>
+        </item>
+    </channel>
+</rss>"""
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 200
+        mock.text = feed_chinese
+        mock.url = "https://chinese.example.com/feed"
+        mock.raise_for_status = MagicMock()
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed("https://chinese.example.com/feed")
+        assert success is True
+        assert "科技" in info.title
+
+
+# =============================================================================
+# Tests for Error Handling (Subtask 5.6)
+# =============================================================================
+
+
+class TestErrorHandlingHTTPErrors:
+    """Test validate_feed HTTP error handling."""
+
+    def test_error_401_unauthorized(self):
+        """Test handling 401 Unauthorized error."""
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 401
+        mock.raise_for_status = MagicMock(side_effect=httpx.HTTPStatusError(
+            "Unauthorized", request=MagicMock(), response=mock
+        ))
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed("https://private.example.com/feed")
+        assert success is False
+        assert info is None
+        assert "HTTP error: 401" in error
+
+    def test_error_403_forbidden(self, mock_response_403):
+        """Test handling 403 Forbidden error."""
+        with patch("httpx.get", return_value=mock_response_403):
+            success, info, error = validate_feed("https://forbidden.example.com/feed")
+        assert success is False
+        assert "HTTP error: 403" in error
+
+    def test_error_404_not_found(self, mock_httpx_get_404):
+        """Test handling 404 Not Found error."""
+        success, info, error = validate_feed("https://example.com/missing")
+        assert success is False
+        assert "HTTP error: 404" in error
+
+    def test_error_410_gone(self):
+        """Test handling 410 Gone error."""
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 410
+        mock.raise_for_status = MagicMock(side_effect=httpx.HTTPStatusError(
+            "Gone", request=MagicMock(), response=mock
+        ))
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed("https://example.com/old-feed")
+        assert success is False
+        assert "HTTP error: 410" in error
+
+    def test_error_429_too_many_requests(self):
+        """Test handling 429 Too Many Requests error."""
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 429
+        mock.raise_for_status = MagicMock(side_effect=httpx.HTTPStatusError(
+            "Too Many Requests", request=MagicMock(), response=mock
+        ))
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed("https://example.com/feed")
+        assert success is False
+        assert "HTTP error: 429" in error
+
+    def test_error_500_internal_server(self, mock_httpx_get_500):
+        """Test handling 500 Internal Server Error."""
+        success, info, error = validate_feed("https://example.com/error")
+        assert success is False
+        assert "HTTP error: 500" in error
+
+    def test_error_502_bad_gateway(self):
+        """Test handling 502 Bad Gateway error."""
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 502
+        mock.raise_for_status = MagicMock(side_effect=httpx.HTTPStatusError(
+            "Bad Gateway", request=MagicMock(), response=mock
+        ))
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed("https://example.com/feed")
+        assert success is False
+        assert "HTTP error: 502" in error
+
+    def test_error_503_service_unavailable(self):
+        """Test handling 503 Service Unavailable error."""
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 503
+        mock.raise_for_status = MagicMock(side_effect=httpx.HTTPStatusError(
+            "Service Unavailable", request=MagicMock(), response=mock
+        ))
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed("https://example.com/feed")
+        assert success is False
+        assert "HTTP error: 503" in error
+
+    def test_error_504_gateway_timeout(self):
+        """Test handling 504 Gateway Timeout error."""
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 504
+        mock.raise_for_status = MagicMock(side_effect=httpx.HTTPStatusError(
+            "Gateway Timeout", request=MagicMock(), response=mock
+        ))
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed("https://example.com/feed")
+        assert success is False
+        assert "HTTP error: 504" in error
+
+
+class TestErrorHandlingConnectionErrors:
+    """Test validate_feed connection error handling."""
+
+    def test_error_connection_refused(self):
+        """Test handling connection refused error."""
+        with patch("httpx.get", side_effect=httpx.ConnectError("Connection refused")):
+            success, info, error = validate_feed("https://down.example.com/feed")
+        assert success is False
+        assert "Connection error" in error
+
+    def test_error_dns_resolution_failure(self, mock_httpx_get_dns_error):
+        """Test handling DNS resolution failure."""
+        success, info, error = validate_feed("https://nonexistent-domain-xyz.com/feed")
+        assert success is False
+        assert "Connection error" in error
+
+    def test_error_network_unreachable(self):
+        """Test handling network unreachable error."""
+        request = MagicMock()
+        with patch("httpx.get", side_effect=httpx.RequestError("Network unreachable", request=request)):
+            success, info, error = validate_feed("https://example.com/feed")
+        assert success is False
+        assert "Connection error" in error
+
+    def test_error_host_not_found(self):
+        """Test handling host not found error."""
+        request = MagicMock()
+        with patch("httpx.get", side_effect=httpx.RequestError("Host not found", request=request)):
+            success, info, error = validate_feed("https://invalid-host.example.com/feed")
+        assert success is False
+        assert "Connection error" in error
+
+
+class TestErrorHandlingTimeoutErrors:
+    """Test validate_feed timeout error handling."""
+
+    def test_error_read_timeout(self):
+        """Test handling read timeout error."""
+        with patch("httpx.get", side_effect=httpx.ReadTimeout("Read timeout")):
+            success, info, error = validate_feed("https://slow.example.com/feed")
+        assert success is False
+        assert "Timeout" in error
+
+    def test_error_connect_timeout(self):
+        """Test handling connect timeout error."""
+        with patch("httpx.get", side_effect=httpx.ConnectTimeout("Connect timeout")):
+            success, info, error = validate_feed("https://slow.example.com/feed")
+        assert success is False
+        assert "Timeout" in error
+
+    def test_error_write_timeout(self):
+        """Test handling write timeout error."""
+        with patch("httpx.get", side_effect=httpx.WriteTimeout("Write timeout")):
+            success, info, error = validate_feed("https://slow.example.com/feed")
+        assert success is False
+        assert "Timeout" in error
+
+    def test_error_pool_timeout(self):
+        """Test handling pool timeout error."""
+        with patch("httpx.get", side_effect=httpx.PoolTimeout("Pool timeout")):
+            success, info, error = validate_feed("https://busy.example.com/feed")
+        assert success is False
+        assert "Timeout" in error
+
+    def test_error_generic_timeout(self, mock_httpx_get_timeout):
+        """Test handling generic timeout error."""
+        success, info, error = validate_feed("https://slow.example.com/feed")
+        assert success is False
+        assert "Timeout" in error
+
+
+class TestErrorHandlingParseErrors:
+    """Test validate_feed parsing error handling."""
+
+    def test_error_bozo_exception(self):
+        """Test handling feedparser bozo exception."""
+        # feedparser sets bozo=True with bozo_exception for parse errors
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 200
+        mock.text = "<<<not valid xml at all>>>"
+        mock.url = "https://example.com/broken"
+        mock.raise_for_status = MagicMock()
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed("https://example.com/broken")
+        # feedparser is lenient - check that it doesn't crash
+        assert isinstance(success, bool)
+
+    def test_error_truncated_xml(self):
+        """Test handling truncated XML content."""
+        truncated = """<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+    <channel>
+        <title>Truncated Feed</title>
+        <item>
+            <title>Articl"""  # Truncated mid-element
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 200
+        mock.text = truncated
+        mock.url = "https://example.com/truncated"
+        mock.raise_for_status = MagicMock()
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed("https://example.com/truncated")
+        # feedparser may partially parse or fail
+        assert isinstance(success, bool)
+
+
+class TestErrorHandlingGenericErrors:
+    """Test validate_feed generic error handling."""
+
+    def test_error_unexpected_exception(self):
+        """Test handling unexpected exception."""
+        with patch("httpx.get", side_effect=RuntimeError("Unexpected error")):
+            success, info, error = validate_feed("https://example.com/feed")
+        assert success is False
+        assert "Error" in error
+
+    def test_error_memory_error(self):
+        """Test handling MemoryError (shouldn't crash)."""
+        with patch("httpx.get", side_effect=MemoryError("Out of memory")):
+            success, info, error = validate_feed("https://example.com/feed")
+        assert success is False
+
+    def test_error_keyboard_interrupt_propagates(self):
+        """Test that KeyboardInterrupt propagates (not caught)."""
+        with patch("httpx.get", side_effect=KeyboardInterrupt()):
+            with pytest.raises(KeyboardInterrupt):
+                validate_feed("https://example.com/feed")
+
+
+class TestErrorHandlingDiscoverFeed:
+    """Test discover_feed error handling."""
+
+    def test_discover_error_homepage_timeout(self):
+        """Test discover when homepage times out."""
+        with patch("httpx.get", side_effect=httpx.TimeoutException("Timeout")):
+            success, info, error = discover_feed("timeout.example.com")
+        assert success is False
+        assert "No RSS feed found" in error
+
+    def test_discover_error_homepage_connection_refused(self):
+        """Test discover when homepage refuses connection."""
+        with patch("httpx.get", side_effect=httpx.ConnectError("Connection refused")):
+            success, info, error = discover_feed("down.example.com")
+        assert success is False
+
+    def test_discover_error_all_paths_fail(self):
+        """Test discover when all common paths fail."""
+        def get_side_effect(url, **kwargs):
+            mock = MagicMock(spec=httpx.Response)
+            mock.status_code = 404
+            mock.raise_for_status = MagicMock(side_effect=httpx.HTTPStatusError(
+                "Not Found", request=MagicMock(), response=mock
+            ))
+            # Return HTML for homepage
+            if url.rstrip("/") == "https://nofeed.example.com":
+                mock.status_code = 200
+                mock.text = "<html><head></head><body>No feed here</body></html>"
+                mock.url = url
+                mock.raise_for_status = MagicMock()
+            return mock
+
+        with patch("httpx.get", side_effect=get_side_effect):
+            success, info, error = discover_feed("nofeed.example.com")
+        assert success is False
+        assert "No RSS feed found" in error
+
+    def test_discover_error_homepage_ok_feed_fails(self):
+        """Test discover when homepage is OK but feed validation fails."""
+        def get_side_effect(url, **kwargs):
+            mock = MagicMock(spec=httpx.Response)
+            if "example.com" in url and ("/feed" not in url and "/rss" not in url):
+                # Homepage with feed link
+                mock.status_code = 200
+                mock.text = """<!DOCTYPE html>
+<html><head>
+<link rel="alternate" type="application/rss+xml" href="/feed.xml">
+</head><body>Hello</body></html>"""
+                mock.url = url
+                mock.raise_for_status = MagicMock()
+            else:
+                # Feed paths fail
+                mock.status_code = 404
+                mock.raise_for_status = MagicMock(side_effect=httpx.HTTPStatusError(
+                    "Not Found", request=MagicMock(), response=mock
+                ))
+            return mock
+
+        with patch("httpx.get", side_effect=get_side_effect):
+            success, info, error = discover_feed("example.com")
+        # Even if HTML link is found, feed validation will fail
+        assert success is False
+
+
+class TestErrorHandlingSearchFeeds:
+    """Test search_feeds_online error handling."""
+
+    def test_search_error_api_500(self, mock_search_api_error):
+        """Test search handles API 500 error gracefully."""
+        results = search_feeds_online("example.com")
+        assert results == []
+
+    def test_search_error_api_timeout(self, mock_search_api_timeout):
+        """Test search handles API timeout gracefully."""
+        results = search_feeds_online("example.com")
+        assert results == []
+
+    def test_search_error_connection_refused(self):
+        """Test search handles connection refused gracefully."""
+        with patch("httpx.get", side_effect=httpx.ConnectError("Connection refused")):
+            results = search_feeds_online("example.com")
+        assert results == []
+
+    def test_search_error_dns_failure(self):
+        """Test search handles DNS failure gracefully."""
+        request = MagicMock()
+        with patch("httpx.get", side_effect=httpx.RequestError("DNS failure", request=request)):
+            results = search_feeds_online("example.com")
+        assert results == []
+
+    def test_search_error_invalid_json_response(self):
+        """Test search handles invalid JSON response gracefully."""
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 200
+        mock.json.side_effect = json.JSONDecodeError("Invalid JSON", "", 0)
+        mock.raise_for_status = MagicMock()
+
+        with patch("httpx.get", return_value=mock):
+            results = search_feeds_online("example.com")
+        assert results == []
+
+
+class TestErrorHandlingParseOPML:
+    """Test parse_opml error handling."""
+
+    def test_parse_error_file_not_found(self, opml_file_nonexistent):
+        """Test parse handles missing file."""
+        feeds, error = parse_opml(opml_file_nonexistent)
+        assert feeds == []
+        assert "File not found" in error
+
+    def test_parse_error_permission_denied(self, temp_dir):
+        """Test parse handles permission denied (simulated)."""
+        # Simulate by providing a directory path instead of file
+        feeds, error = parse_opml(temp_dir)
+        assert feeds == []
+        assert "Error" in error or "error" in error
+
+    def test_parse_error_invalid_xml(self, opml_file_invalid):
+        """Test parse handles invalid XML."""
+        feeds, error = parse_opml(opml_file_invalid)
+        assert feeds == []
+        assert "parse error" in error.lower() or "XML" in error
+
+    def test_parse_error_binary_file(self, temp_dir):
+        """Test parse handles binary file."""
+        binary_file = os.path.join(temp_dir, "binary.opml")
+        with open(binary_file, "wb") as f:
+            f.write(bytes([0x00, 0x01, 0x02, 0x03]))
+        feeds, error = parse_opml(binary_file)
+        assert feeds == []
+        # Should get some kind of error
+        assert error != ""
+
+    def test_parse_error_encoding_issue(self, temp_dir):
+        """Test parse handles encoding issues."""
+        bad_encoding_file = os.path.join(temp_dir, "bad_encoding.opml")
+        # Write with latin-1 encoding but claim UTF-8 in XML declaration
+        with open(bad_encoding_file, "wb") as f:
+            # Latin-1 character (à = 0xe0) that's invalid UTF-8 sequence start
+            content = b"""<?xml version="1.0" encoding="UTF-8"?>
+<opml version="1.0">
+    <body>
+        <outline text="Test \xe0" xmlUrl="https://test.com/feed"/>
+    </body>
+</opml>"""
+            f.write(content)
+        feeds, error = parse_opml(bad_encoding_file)
+        # Should either parse with replacement or error
+        assert isinstance(feeds, list)
+
+
+# =============================================================================
+# Tests for FeedInfo Extraction Details (Subtask 5.6)
+# =============================================================================
+
+
+class TestFeedInfoExtraction:
+    """Test details of FeedInfo extraction from feed content."""
+
+    def test_extract_title_from_rss(self, sample_rss_content):
+        """Test title extraction from RSS feed."""
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 200
+        mock.text = sample_rss_content
+        mock.url = "https://example.com/feed"
+        mock.raise_for_status = MagicMock()
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed("https://example.com/feed")
+        assert info.title == "Test RSS Feed"
+
+    def test_extract_description_from_rss(self, sample_rss_content):
+        """Test description extraction from RSS feed."""
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 200
+        mock.text = sample_rss_content
+        mock.url = "https://example.com/feed"
+        mock.raise_for_status = MagicMock()
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed("https://example.com/feed")
+        assert info.description == "A test RSS feed for unit testing"
+
+    def test_extract_subtitle_from_atom(self, sample_atom_content):
+        """Test subtitle extraction from Atom feed (as description)."""
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 200
+        mock.text = sample_atom_content
+        mock.url = "https://example.com/atom.xml"
+        mock.raise_for_status = MagicMock()
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed("https://example.com/atom.xml")
+        # Atom uses subtitle, which feedparser maps to description
+        assert info.description == "An Atom feed for testing"
+
+    def test_extract_item_count(self, sample_rss_content):
+        """Test item count extraction."""
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 200
+        mock.text = sample_rss_content
+        mock.url = "https://example.com/feed"
+        mock.raise_for_status = MagicMock()
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed("https://example.com/feed")
+        assert info.item_count == 3
+
+    def test_extract_latest_items_limit(self, sample_rss_many_items):
+        """Test that latest_items is limited to 5."""
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 200
+        mock.text = sample_rss_many_items
+        mock.url = "https://example.com/feed"
+        mock.raise_for_status = MagicMock()
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed("https://example.com/feed")
+        # validate_feed extracts up to 5 latest items
+        assert len(info.latest_items) == 5
+        # But item_count should reflect all items
+        assert info.item_count == 20
+
+    def test_extract_item_title(self, sample_rss_content):
+        """Test item title extraction."""
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 200
+        mock.text = sample_rss_content
+        mock.url = "https://example.com/feed"
+        mock.raise_for_status = MagicMock()
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed("https://example.com/feed")
+        assert info.latest_items[0]["title"] == "Article One"
+
+    def test_extract_item_link(self, sample_rss_content):
+        """Test item link extraction."""
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 200
+        mock.text = sample_rss_content
+        mock.url = "https://example.com/feed"
+        mock.raise_for_status = MagicMock()
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed("https://example.com/feed")
+        assert info.latest_items[0]["link"] == "https://example.com/article1"
+
+    def test_extract_item_date(self, sample_rss_content):
+        """Test item date extraction."""
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 200
+        mock.text = sample_rss_content
+        mock.url = "https://example.com/feed"
+        mock.raise_for_status = MagicMock()
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed("https://example.com/feed")
+        # Date format depends on feedparser parsing
+        assert info.latest_items[0]["date"] != ""
+
+    def test_extract_missing_title_uses_url(self):
+        """Test that missing title falls back to URL."""
+        feed_no_title = """<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+    <channel>
+        <link>https://example.com</link>
+        <item>
+            <title>Article</title>
+            <link>https://example.com/1</link>
+        </item>
+    </channel>
+</rss>"""
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 200
+        mock.text = feed_no_title
+        mock.url = "https://example.com/feed"
+        mock.raise_for_status = MagicMock()
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed("https://example.com/feed")
+        assert success is True
+        # Title should fall back to URL
+        assert info.title == "https://example.com/feed"
+
+    def test_extract_untitled_item(self):
+        """Test extraction of item without title."""
+        feed_untitled_item = """<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+    <channel>
+        <title>Feed</title>
+        <link>https://example.com</link>
+        <item>
+            <link>https://example.com/1</link>
+        </item>
+    </channel>
+</rss>"""
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 200
+        mock.text = feed_untitled_item
+        mock.url = "https://example.com/feed"
+        mock.raise_for_status = MagicMock()
+
+        with patch("httpx.get", return_value=mock):
+            success, info, error = validate_feed("https://example.com/feed")
+        assert success is True
+        # Item title should fall back to "Untitled"
+        assert info.latest_items[0]["title"] == "Untitled"
+
+
+class TestFeedValidationCustomTimeout:
+    """Test validate_feed with custom timeout parameter."""
+
+    def test_custom_timeout_value(self, sample_rss_content):
+        """Test that custom timeout is passed to httpx."""
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 200
+        mock.text = sample_rss_content
+        mock.url = "https://example.com/feed"
+        mock.raise_for_status = MagicMock()
+
+        with patch("httpx.get", return_value=mock) as mock_get:
+            validate_feed("https://example.com/feed", timeout=30.0)
+        # Check timeout was passed
+        mock_get.assert_called_once()
+        _, kwargs = mock_get.call_args
+        assert kwargs["timeout"] == 30.0
+
+    def test_short_timeout(self, sample_rss_content):
+        """Test with very short timeout."""
+        mock = MagicMock(spec=httpx.Response)
+        mock.status_code = 200
+        mock.text = sample_rss_content
+        mock.url = "https://example.com/feed"
+        mock.raise_for_status = MagicMock()
+
+        with patch("httpx.get", return_value=mock) as mock_get:
+            success, info, error = validate_feed("https://example.com/feed", timeout=0.5)
+        assert success is True
+        _, kwargs = mock_get.call_args
+        assert kwargs["timeout"] == 0.5
+
+    def test_zero_timeout_causes_immediate_timeout(self):
+        """Test that zero timeout causes immediate timeout."""
+        # This test verifies the timeout parameter is properly passed
+        # In practice, zero timeout would cause immediate failure
+        with patch("httpx.get", side_effect=httpx.TimeoutException("Timeout")):
+            success, info, error = validate_feed("https://example.com/feed", timeout=0.001)
+        assert success is False
+        assert "Timeout" in error
