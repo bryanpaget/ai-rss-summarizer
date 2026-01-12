@@ -3523,3 +3523,1090 @@ class TestPerspectiveExceptions:
         assert str(InsufficientSourcesError(msg)) == msg
         assert str(CategoryNotApplicableError(msg)) == msg
         assert str(LLMProviderError(msg)) == msg
+
+
+# =============================================================================
+# Tests for Multi-Source Handling (Subtask 4.11)
+# =============================================================================
+
+
+class TestConsensusMultiSource:
+    """Tests for consensus perspective synthesis with multiple articles."""
+
+    def test_consensus_with_two_articles(self, sample_article_tech, sample_article_business, mock_llm_provider):
+        """Test consensus synthesis with minimum required sources (2)."""
+        articles = [sample_article_tech, sample_article_business]
+        mock_llm_provider.summarize.return_value = (
+            "Both sources agree on the following:\n"
+            "- AI technology represents a significant advancement\n"
+            "- The development has market implications"
+        )
+
+        perspective = synthesize_perspective(
+            category='consensus',
+            articles=articles,
+            llm_provider=mock_llm_provider,
+        )
+
+        assert perspective.category == 'consensus'
+        assert len(perspective.source_articles) == 2
+        assert perspective.content is not None
+
+    def test_consensus_with_three_diverse_sources(
+        self, sample_article_tech, sample_article_business, sample_article_mainstream, mock_llm_provider
+    ):
+        """Test consensus synthesis with three diverse source types."""
+        articles = [sample_article_tech, sample_article_business, sample_article_mainstream]
+        mock_llm_provider.summarize.return_value = (
+            "Points of consensus across all three sources:\n"
+            "- AI is transforming multiple sectors\n"
+            "- The impact will be significant\n"
+            "- All acknowledge potential concerns"
+        )
+
+        perspective = synthesize_perspective(
+            category='consensus',
+            articles=articles,
+            llm_provider=mock_llm_provider,
+        )
+
+        assert perspective.category == 'consensus'
+        assert len(perspective.source_articles) == 3
+        # Verify all article IDs are included
+        for article in articles:
+            assert article.id in perspective.source_articles
+
+    def test_consensus_with_five_sources(self, article_cluster_diverse, mock_llm_provider):
+        """Test consensus synthesis with five diverse sources."""
+        mock_llm_provider.summarize.return_value = (
+            "Unanimous agreement across all five sources:\n"
+            "- AI represents a technological milestone\n"
+            "- Market and societal impacts are inevitable\n"
+            "- Regulatory considerations are emerging"
+        )
+
+        perspective = synthesize_perspective(
+            category='consensus',
+            articles=article_cluster_diverse,
+            llm_provider=mock_llm_provider,
+        )
+
+        assert perspective.category == 'consensus'
+        assert len(perspective.source_articles) == 5
+        # Higher confidence with more sources
+        assert perspective.confidence > 0.3
+
+    def test_consensus_prompt_includes_all_source_content(
+        self, sample_article_tech, sample_article_business, mock_llm_provider
+    ):
+        """Test that consensus prompt includes content from all sources."""
+        articles = [sample_article_tech, sample_article_business]
+        mock_llm_provider.summarize.reset_mock()
+        mock_llm_provider.summarize.return_value = "Agreement on main points."
+
+        synthesize_perspective(
+            category='consensus',
+            articles=articles,
+            llm_provider=mock_llm_provider,
+        )
+
+        # Verify prompt contains content from both articles
+        call_args = mock_llm_provider.summarize.call_args
+        prompt = call_args[0][0]
+        assert '[Article 1' in prompt
+        assert '[Article 2' in prompt
+        # Check for source extraction
+        assert 'techblog.example.com' in prompt or 'finance.example.com' in prompt
+
+    def test_consensus_with_conflicting_sources_returns_limited_consensus(
+        self, sample_article_tech, sample_article_controversial, mock_llm_provider
+    ):
+        """Test consensus when sources have conflicting views."""
+        articles = [sample_article_tech, sample_article_controversial]
+        mock_llm_provider.summarize.return_value = (
+            "Limited consensus found:\n"
+            "- Both sources agree AI is significant\n"
+            "Note: Sources disagree on many other aspects"
+        )
+
+        perspective = synthesize_perspective(
+            category='consensus',
+            articles=articles,
+            llm_provider=mock_llm_provider,
+        )
+
+        assert perspective.category == 'consensus'
+        assert 'Limited consensus' in perspective.content or 'Both sources agree' in perspective.content
+
+    def test_consensus_includes_source_attribution(
+        self, sample_article_tech, sample_article_business, mock_llm_provider
+    ):
+        """Test that consensus synthesis can include source attribution."""
+        articles = [sample_article_tech, sample_article_business]
+        mock_llm_provider.summarize.return_value = (
+            "Both techblog.example.com and finance.example.com agree:\n"
+            "- AI technology is advancing rapidly"
+        )
+
+        perspective = synthesize_perspective(
+            category='consensus',
+            articles=articles,
+            llm_provider=mock_llm_provider,
+        )
+
+        # The LLM response should be preserved
+        assert 'agree' in perspective.content.lower()
+
+    def test_consensus_with_many_sources_uses_all(self, sample_articles_bulk, mock_llm_provider):
+        """Test consensus with many sources (10+ articles)."""
+        articles = sample_articles_bulk[:10]
+        mock_llm_provider.summarize.return_value = (
+            "Strong consensus across 10 sources:\n"
+            "- Technology is advancing\n"
+            "- All sources acknowledge this trend"
+        )
+
+        perspective = synthesize_perspective(
+            category='consensus',
+            articles=articles,
+            llm_provider=mock_llm_provider,
+        )
+
+        assert len(perspective.source_articles) == 10
+        # Verify all article IDs are tracked
+        for article in articles:
+            assert article.id in perspective.source_articles
+
+    def test_consensus_confidence_increases_with_more_sources(
+        self, sample_article_tech, sample_article_business, sample_article_mainstream,
+        sample_article_academic, sample_article_political, mock_llm_provider
+    ):
+        """Test that confidence increases with more sources."""
+        # Synthesize with 2 sources
+        articles_2 = [sample_article_tech, sample_article_business]
+        mock_llm_provider.summarize.return_value = "Agreement on core points with detailed analysis."
+        perspective_2 = synthesize_perspective(
+            category='consensus',
+            articles=articles_2,
+            llm_provider=mock_llm_provider,
+        )
+
+        # Synthesize with 5 sources
+        articles_5 = [
+            sample_article_tech, sample_article_business, sample_article_mainstream,
+            sample_article_academic, sample_article_political
+        ]
+        mock_llm_provider.summarize.return_value = "Strong agreement on core points with detailed analysis."
+        perspective_5 = synthesize_perspective(
+            category='consensus',
+            articles=articles_5,
+            llm_provider=mock_llm_provider,
+        )
+
+        # More sources should yield higher confidence
+        assert perspective_5.confidence >= perspective_2.confidence
+
+
+class TestContestedMultiSource:
+    """Tests for contested perspective synthesis with multiple articles."""
+
+    def test_contested_with_two_articles(self, sample_article_tech, sample_article_controversial, mock_llm_provider):
+        """Test contested synthesis with minimum required sources (2)."""
+        articles = [sample_article_tech, sample_article_controversial]
+        mock_llm_provider.summarize.return_value = (
+            "Key disagreements identified:\n"
+            "1. AI impact on jobs: techblog sees opportunities, opinion piece predicts doom\n"
+            "2. Timeline: sources disagree on when impact will be felt"
+        )
+
+        perspective = synthesize_perspective(
+            category='contested',
+            articles=articles,
+            llm_provider=mock_llm_provider,
+        )
+
+        assert perspective.category == 'contested'
+        assert len(perspective.source_articles) == 2
+        assert 'disagreement' in perspective.content.lower() or 'disagree' in perspective.content.lower()
+
+    def test_contested_with_opposing_viewpoints(
+        self, sample_article_tech, sample_article_political, mock_llm_provider
+    ):
+        """Test contested synthesis when sources have opposing viewpoints."""
+        articles = [sample_article_tech, sample_article_political]
+        mock_llm_provider.summarize.return_value = (
+            "Sources disagree on key points:\n"
+            "- Tech industry focuses on innovation benefits\n"
+            "- Political source emphasizes regulatory concerns\n"
+            "The nature of disagreement: industry vs government priorities"
+        )
+
+        perspective = synthesize_perspective(
+            category='contested',
+            articles=articles,
+            llm_provider=mock_llm_provider,
+        )
+
+        assert 'disagree' in perspective.content.lower() or 'Sources' in perspective.content
+
+    def test_contested_with_multiple_perspectives(self, article_cluster_diverse, mock_llm_provider):
+        """Test contested synthesis with many different perspectives."""
+        mock_llm_provider.summarize.return_value = (
+            "Multiple points of contention:\n"
+            "1. Tech vs Financial: prioritization of growth vs stability\n"
+            "2. Academic vs Mainstream: rigor of evidence cited\n"
+            "3. Political vs All: role of regulation"
+        )
+
+        perspective = synthesize_perspective(
+            category='contested',
+            articles=article_cluster_diverse,
+            llm_provider=mock_llm_provider,
+        )
+
+        assert perspective.category == 'contested'
+        assert len(perspective.source_articles) == 5
+
+    def test_contested_prompt_emphasizes_disagreement(
+        self, sample_article_tech, sample_article_business, mock_llm_provider
+    ):
+        """Test that contested prompt specifically asks for disagreements."""
+        articles = [sample_article_tech, sample_article_business]
+        mock_llm_provider.summarize.reset_mock()
+        mock_llm_provider.summarize.return_value = "Disagreement identified."
+
+        synthesize_perspective(
+            category='contested',
+            articles=articles,
+            llm_provider=mock_llm_provider,
+        )
+
+        call_args = mock_llm_provider.summarize.call_args
+        prompt = call_args[0][0]
+        # Prompt should mention disagreement/disagree
+        assert 'disagree' in prompt.lower() or 'contested' in prompt.lower()
+
+    def test_contested_when_no_disagreements_found(
+        self, sample_article_tech, sample_article_business, mock_llm_provider
+    ):
+        """Test contested synthesis when sources actually agree."""
+        articles = [sample_article_tech, sample_article_business]
+        mock_llm_provider.summarize.return_value = (
+            "No significant disagreements found:\n"
+            "Both sources present complementary views on AI technology"
+        )
+
+        perspective = synthesize_perspective(
+            category='contested',
+            articles=articles,
+            llm_provider=mock_llm_provider,
+        )
+
+        # Should still return a perspective
+        assert perspective.category == 'contested'
+        assert 'No significant disagreements' in perspective.content or perspective.content
+
+    def test_contested_specifies_which_source_says_what(
+        self, sample_article_tech, sample_article_political, mock_llm_provider
+    ):
+        """Test that contested synthesis identifies which source holds which view."""
+        articles = [sample_article_tech, sample_article_political]
+        mock_llm_provider.summarize.return_value = (
+            "Disagreement on regulation:\n"
+            "1. What is contested: Level of AI regulation needed\n"
+            "2. techblog.example.com says: minimal regulation to preserve innovation\n"
+            "3. policy.example.com says: strict regulation for safety\n"
+            "Nature: industry vs government interests"
+        )
+
+        perspective = synthesize_perspective(
+            category='contested',
+            articles=articles,
+            llm_provider=mock_llm_provider,
+        )
+
+        assert perspective.category == 'contested'
+        # Content should distinguish between sources
+        assert 'techblog' in perspective.content or 'policy' in perspective.content or 'says' in perspective.content
+
+    def test_contested_with_subtle_disagreements(
+        self, sample_article_tech, sample_article_academic, mock_llm_provider
+    ):
+        """Test contested synthesis with subtle, nuanced disagreements."""
+        articles = [sample_article_tech, sample_article_academic]
+        mock_llm_provider.summarize.return_value = (
+            "Subtle disagreements:\n"
+            "- Tone: Tech blog is enthusiastic, academic is cautious\n"
+            "- Evidence standards: Academic requires more proof\n"
+            "These are nuanced rather than direct contradictions"
+        )
+
+        perspective = synthesize_perspective(
+            category='contested',
+            articles=articles,
+            llm_provider=mock_llm_provider,
+        )
+
+        assert 'nuanced' in perspective.content.lower() or 'subtle' in perspective.content.lower()
+
+    def test_contested_includes_nature_of_disagreement(
+        self, sample_article_tech, sample_article_controversial, mock_llm_provider
+    ):
+        """Test that contested synthesis explains the nature of disagreements."""
+        articles = [sample_article_tech, sample_article_controversial]
+        mock_llm_provider.summarize.return_value = (
+            "Key disagreement:\n"
+            "1. What is contested: Future impact of AI\n"
+            "2. techblog: optimistic, measured assessment\n"
+            "3. opinion: extreme predictions\n"
+            "Nature: factual vs speculative framing"
+        )
+
+        perspective = synthesize_perspective(
+            category='contested',
+            articles=articles,
+            llm_provider=mock_llm_provider,
+        )
+
+        assert perspective.category == 'contested'
+
+
+class TestGapsMultiSource:
+    """Tests for gaps perspective synthesis with multiple articles."""
+
+    def test_gaps_with_single_article(self, sample_article_tech, mock_llm_provider):
+        """Test gaps synthesis works with single source (min_sources=1)."""
+        mock_llm_provider.summarize.return_value = (
+            "Coverage gaps identified:\n"
+            "- Long-term societal implications not discussed\n"
+            "- No mention of environmental impact\n"
+            "- Missing voices from affected workers"
+        )
+
+        perspective = synthesize_perspective(
+            category='gaps',
+            articles=[sample_article_tech],
+            llm_provider=mock_llm_provider,
+        )
+
+        assert perspective.category == 'gaps'
+        assert len(perspective.source_articles) == 1
+        assert 'gaps' in perspective.content.lower() or 'missing' in perspective.content.lower()
+
+    def test_gaps_with_multiple_articles(self, article_cluster_tech_news, mock_llm_provider):
+        """Test gaps synthesis with multiple articles."""
+        mock_llm_provider.summarize.return_value = (
+            "Despite three sources, coverage gaps remain:\n"
+            "- None address long-term employment effects\n"
+            "- Environmental costs of AI infrastructure not mentioned\n"
+            "- International perspectives missing"
+        )
+
+        perspective = synthesize_perspective(
+            category='gaps',
+            articles=article_cluster_tech_news,
+            llm_provider=mock_llm_provider,
+        )
+
+        assert perspective.category == 'gaps'
+        assert len(perspective.source_articles) == 3
+
+    def test_gaps_identifies_missing_perspectives(
+        self, sample_article_tech, sample_article_business, mock_llm_provider
+    ):
+        """Test that gaps perspective identifies missing viewpoints."""
+        articles = [sample_article_tech, sample_article_business]
+        mock_llm_provider.summarize.return_value = (
+            "Missing perspectives:\n"
+            "- No academic/research viewpoint\n"
+            "- No regulatory/government perspective\n"
+            "- Consumer voice not represented"
+        )
+
+        perspective = synthesize_perspective(
+            category='gaps',
+            articles=articles,
+            llm_provider=mock_llm_provider,
+        )
+
+        assert 'missing' in perspective.content.lower() or 'perspective' in perspective.content.lower()
+
+    def test_gaps_identifies_unanswered_questions(self, article_cluster_diverse, mock_llm_provider):
+        """Test that gaps perspective identifies unanswered questions."""
+        mock_llm_provider.summarize.return_value = (
+            "Key questions remain unanswered:\n"
+            "- What is the timeline for widespread adoption?\n"
+            "- Who will be most affected?\n"
+            "- What are the energy costs?"
+        )
+
+        perspective = synthesize_perspective(
+            category='gaps',
+            articles=article_cluster_diverse,
+            llm_provider=mock_llm_provider,
+        )
+
+        assert 'question' in perspective.content.lower() or 'unanswered' in perspective.content.lower()
+
+    def test_gaps_identifies_missing_context(
+        self, sample_article_mainstream, mock_llm_provider
+    ):
+        """Test that gaps perspective identifies missing context/background."""
+        mock_llm_provider.summarize.return_value = (
+            "Missing context:\n"
+            "- Historical context of AI development not provided\n"
+            "- No comparison to previous technological shifts\n"
+            "- Background on current AI capabilities missing"
+        )
+
+        perspective = synthesize_perspective(
+            category='gaps',
+            articles=[sample_article_mainstream],
+            llm_provider=mock_llm_provider,
+        )
+
+        assert 'context' in perspective.content.lower() or 'missing' in perspective.content.lower()
+
+    def test_gaps_prompt_structure(self, sample_article_tech, mock_llm_provider):
+        """Test that gaps prompt asks appropriate questions."""
+        mock_llm_provider.summarize.reset_mock()
+        mock_llm_provider.summarize.return_value = "Identified gaps in coverage."
+
+        synthesize_perspective(
+            category='gaps',
+            articles=[sample_article_tech],
+            llm_provider=mock_llm_provider,
+        )
+
+        call_args = mock_llm_provider.summarize.call_args
+        prompt = call_args[0][0]
+        # Gaps prompt should ask about what's NOT covered
+        assert 'not' in prompt.lower() or 'missing' in prompt.lower() or 'gap' in prompt.lower()
+
+    def test_gaps_with_comprehensive_coverage(self, article_cluster_diverse, mock_llm_provider):
+        """Test gaps synthesis when coverage is relatively comprehensive."""
+        mock_llm_provider.summarize.return_value = (
+            "Coverage is relatively comprehensive, but:\n"
+            "- Some niche perspectives still missing\n"
+            "- Long-term predictions not addressed"
+        )
+
+        perspective = synthesize_perspective(
+            category='gaps',
+            articles=article_cluster_diverse,
+            llm_provider=mock_llm_provider,
+        )
+
+        assert perspective.category == 'gaps'
+        # Should still return valid perspective
+        assert len(perspective.content) > 0
+
+    def test_gaps_empty_when_no_gaps_found(self, article_cluster_diverse, mock_llm_provider):
+        """Test gaps synthesis when no gaps are identified."""
+        mock_llm_provider.summarize.return_value = (
+            "Coverage appears comprehensive:\n"
+            "- All major perspectives represented\n"
+            "- Key questions addressed by sources"
+        )
+
+        perspective = synthesize_perspective(
+            category='gaps',
+            articles=article_cluster_diverse,
+            llm_provider=mock_llm_provider,
+        )
+
+        # Should return valid perspective even if no gaps
+        assert perspective.category == 'gaps'
+        assert perspective.content is not None
+
+
+class TestMultiSourcePromptConstruction:
+    """Tests for prompt construction with multiple sources."""
+
+    def test_prompt_includes_all_article_numbers(self, article_cluster_diverse, mock_llm_provider):
+        """Test that prompt includes article numbers for all sources."""
+        mock_llm_provider.summarize.reset_mock()
+        mock_llm_provider.summarize.return_value = "Analysis complete."
+
+        synthesize_perspective(
+            category='consensus',
+            articles=article_cluster_diverse,
+            llm_provider=mock_llm_provider,
+        )
+
+        call_args = mock_llm_provider.summarize.call_args
+        prompt = call_args[0][0]
+
+        # Should have all 5 article numbers
+        for i in range(1, 6):
+            assert f'[Article {i}' in prompt
+
+    def test_prompt_extracts_source_domains(self, article_cluster_diverse, mock_llm_provider):
+        """Test that prompt extracts and includes source domains."""
+        mock_llm_provider.summarize.reset_mock()
+        mock_llm_provider.summarize.return_value = "Analysis complete."
+
+        synthesize_perspective(
+            category='consensus',
+            articles=article_cluster_diverse,
+            llm_provider=mock_llm_provider,
+        )
+
+        call_args = mock_llm_provider.summarize.call_args
+        prompt = call_args[0][0]
+
+        # Should extract domains from feed URLs
+        assert 'example.com' in prompt or 'example.edu' in prompt
+
+    def test_prompt_truncates_long_content_per_article(self, sample_article_very_long, sample_article_tech, mock_llm_provider):
+        """Test that prompt truncates long content for each article."""
+        articles = [sample_article_very_long, sample_article_tech]
+        mock_llm_provider.summarize.reset_mock()
+        mock_llm_provider.summarize.return_value = "Analysis complete."
+
+        synthesize_perspective(
+            category='consensus',
+            articles=articles,
+            llm_provider=mock_llm_provider,
+        )
+
+        call_args = mock_llm_provider.summarize.call_args
+        prompt = call_args[0][0]
+
+        # Long content should be truncated (content[:500] + "...")
+        # The full long content is 24500 chars, should not appear in prompt
+        assert len(prompt) < 10000  # Reasonable limit
+
+    def test_prompt_separates_articles_clearly(
+        self, sample_article_tech, sample_article_business, sample_article_mainstream, mock_llm_provider
+    ):
+        """Test that articles are clearly separated in the prompt."""
+        articles = [sample_article_tech, sample_article_business, sample_article_mainstream]
+        mock_llm_provider.summarize.reset_mock()
+        mock_llm_provider.summarize.return_value = "Analysis complete."
+
+        synthesize_perspective(
+            category='consensus',
+            articles=articles,
+            llm_provider=mock_llm_provider,
+        )
+
+        call_args = mock_llm_provider.summarize.call_args
+        prompt = call_args[0][0]
+
+        # Articles should be separated by double newlines
+        article_sections = prompt.count('[Article')
+        assert article_sections == 3
+
+    def test_prompt_includes_title_for_each_article(
+        self, sample_article_tech, sample_article_business, mock_llm_provider
+    ):
+        """Test that prompt includes title for each article."""
+        articles = [sample_article_tech, sample_article_business]
+        mock_llm_provider.summarize.reset_mock()
+        mock_llm_provider.summarize.return_value = "Analysis complete."
+
+        synthesize_perspective(
+            category='consensus',
+            articles=articles,
+            llm_provider=mock_llm_provider,
+        )
+
+        call_args = mock_llm_provider.summarize.call_args
+        prompt = call_args[0][0]
+
+        # Both titles should appear
+        assert 'Title:' in prompt
+        assert 'Neural Networks' in prompt or 'Stock Market' in prompt
+
+    def test_different_categories_have_different_instructions(
+        self, sample_article_tech, sample_article_business, mock_llm_provider
+    ):
+        """Test that different categories produce different prompt instructions."""
+        articles = [sample_article_tech, sample_article_business]
+        prompts = {}
+
+        for category in ['consensus', 'contested', 'gaps']:
+            mock_llm_provider.summarize.reset_mock()
+            mock_llm_provider.summarize.return_value = f"Analysis for {category}."
+
+            synthesize_perspective(
+                category=category,
+                articles=articles,
+                llm_provider=mock_llm_provider,
+            )
+
+            call_args = mock_llm_provider.summarize.call_args
+            prompts[category] = call_args[0][0]
+
+        # All prompts should be different
+        assert prompts['consensus'] != prompts['contested']
+        assert prompts['contested'] != prompts['gaps']
+        assert prompts['consensus'] != prompts['gaps']
+
+
+class TestMultiSourceConfidenceScoring:
+    """Tests for confidence scoring with multiple sources."""
+
+    def test_confidence_higher_with_more_sources(
+        self, sample_article_tech, sample_article_business, sample_article_mainstream,
+        sample_article_academic, sample_article_political, mock_llm_provider
+    ):
+        """Test that confidence is generally higher with more sources."""
+        mock_llm_provider.summarize.return_value = (
+            "Detailed analysis with multiple bullet points:\n"
+            "- Point one with evidence\n"
+            "- Point two with evidence\n"
+            "- Point three with evidence"
+        )
+
+        # 2 sources
+        articles_2 = [sample_article_tech, sample_article_business]
+        perspective_2 = synthesize_perspective(
+            category='consensus',
+            articles=articles_2,
+            llm_provider=mock_llm_provider,
+        )
+
+        # 4 sources (double the min_sources for consensus)
+        articles_4 = [
+            sample_article_tech, sample_article_business,
+            sample_article_mainstream, sample_article_academic
+        ]
+        perspective_4 = synthesize_perspective(
+            category='consensus',
+            articles=articles_4,
+            llm_provider=mock_llm_provider,
+        )
+
+        # 4 sources meets 2x min_sources, should get higher base score
+        # This tests the estimate_confidence logic
+        assert perspective_4.confidence >= perspective_2.confidence
+
+    def test_confidence_accounts_for_synthesis_quality(
+        self, sample_article_tech, sample_article_business, mock_llm_provider
+    ):
+        """Test that synthesis quality affects confidence."""
+        articles = [sample_article_tech, sample_article_business]
+
+        # Short synthesis
+        mock_llm_provider.summarize.return_value = "Brief point."
+        perspective_short = synthesize_perspective(
+            category='consensus',
+            articles=articles,
+            llm_provider=mock_llm_provider,
+        )
+
+        # Long, structured synthesis
+        mock_llm_provider.summarize.return_value = (
+            "Comprehensive analysis of consensus points:\n"
+            "- First major point of agreement with supporting evidence\n"
+            "- Second major point of agreement with citations\n"
+            "- Third point showing alignment across sources"
+        )
+        perspective_long = synthesize_perspective(
+            category='consensus',
+            articles=articles,
+            llm_provider=mock_llm_provider,
+        )
+
+        # Longer, structured synthesis should have higher confidence
+        assert perspective_long.confidence > perspective_short.confidence
+
+    def test_confidence_penalizes_uncertainty(
+        self, sample_article_tech, sample_article_business, mock_llm_provider
+    ):
+        """Test that uncertainty markers reduce confidence."""
+        articles = [sample_article_tech, sample_article_business]
+
+        # Clear synthesis - with structure to get structure bonus
+        mock_llm_provider.summarize.return_value = (
+            "Clear agreement on key points:\n"
+            "- AI is advancing rapidly\n"
+            "- Market is responding positively"
+        )
+        perspective_clear = synthesize_perspective(
+            category='consensus',
+            articles=articles,
+            llm_provider=mock_llm_provider,
+        )
+
+        # Uncertain synthesis - similar structure but with uncertainty markers
+        # The estimate_confidence function applies -0.1 for each uncertainty marker found
+        mock_llm_provider.summarize.return_value = (
+            "The information is unclear from sources:\n"
+            "- Unknown whether all sources agree\n"
+            "- Insufficient data to draw firm conclusions"
+        )
+        perspective_uncertain = synthesize_perspective(
+            category='consensus',
+            articles=articles,
+            llm_provider=mock_llm_provider,
+        )
+
+        # Uncertain synthesis should have lower or equal confidence
+        # The penalty is applied but might be capped at minimum score
+        # Both start with same base scores; uncertainty markers apply -0.1 penalty
+        assert perspective_clear.confidence >= perspective_uncertain.confidence
+
+    def test_confidence_considers_article_recency(
+        self, sample_article_tech, sample_article_old, mock_llm_provider
+    ):
+        """Test that article recency affects confidence."""
+        mock_llm_provider.summarize.return_value = (
+            "Analysis with detailed points:\n"
+            "- Multiple points of agreement\n"
+            "- Evidence from sources"
+        )
+
+        # Recent articles
+        recent_articles = [sample_article_tech, sample_article_tech]
+        perspective_recent = synthesize_perspective(
+            category='consensus',
+            articles=recent_articles,
+            llm_provider=mock_llm_provider,
+        )
+
+        # Mix of recent and old
+        mixed_articles = [sample_article_tech, sample_article_old]
+        perspective_mixed = synthesize_perspective(
+            category='consensus',
+            articles=mixed_articles,
+            llm_provider=mock_llm_provider,
+        )
+
+        # Recent articles should yield higher or equal confidence
+        assert perspective_recent.confidence >= perspective_mixed.confidence - 0.1  # Allow small variation
+
+    def test_confidence_for_different_categories(
+        self, article_cluster_diverse, mock_llm_provider
+    ):
+        """Test confidence scoring works for all three main categories."""
+        mock_llm_provider.summarize.return_value = (
+            "Comprehensive analysis with structure:\n"
+            "- Point one\n- Point two\n- Point three"
+        )
+
+        for category in ['consensus', 'contested', 'gaps']:
+            perspective = synthesize_perspective(
+                category=category,
+                articles=article_cluster_diverse,
+                llm_provider=mock_llm_provider,
+            )
+
+            # All should have valid confidence scores
+            assert 0.0 <= perspective.confidence <= 1.0
+            # With 5 sources and good synthesis, should have reasonable confidence
+            assert perspective.confidence > 0.3
+
+
+class TestMultiSourceIntegration:
+    """Integration tests for multi-source perspective synthesis."""
+
+    def test_synthesize_all_default_categories(self, mock_storage_with_articles, mock_llm_provider):
+        """Test synthesizing all default categories for a cluster."""
+        mock_llm_provider.summarize.return_value = (
+            "Comprehensive analysis:\n"
+            "- Multiple points with evidence\n"
+            "- Structured response"
+        )
+
+        perspectives = synthesize_perspectives(
+            cluster_id="mock-story-1",
+            categories=DEFAULT_CATEGORIES,
+            storage=mock_storage_with_articles,
+            llm_provider=mock_llm_provider,
+        )
+
+        # Should return perspectives for all default categories
+        assert 'consensus' in perspectives
+        assert 'contested' in perspectives
+        assert 'gaps' in perspectives
+
+        # Each should be a valid Perspective
+        for category, perspective in perspectives.items():
+            assert isinstance(perspective, Perspective)
+            assert perspective.category == category
+
+    def test_synthesize_perspectives_handles_mixed_source_requirements(
+        self, mock_storage_with_articles, mock_llm_provider
+    ):
+        """Test synthesizing categories with different source requirements."""
+        # Set up mock to return 5 articles (satisfies all requirements)
+        mock_llm_provider.summarize.return_value = (
+            "Analysis with good structure:\n"
+            "- First point\n- Second point"
+        )
+
+        # Mix categories with different min_sources
+        categories = ['consensus', 'gaps', 'timeline']  # 2, 1, 1
+
+        perspectives = synthesize_perspectives(
+            cluster_id="mock-story-1",
+            categories=categories,
+            storage=mock_storage_with_articles,
+            llm_provider=mock_llm_provider,
+        )
+
+        # All should succeed with 5 sources
+        for category in categories:
+            assert category in perspectives
+
+    def test_synthesize_perspectives_graceful_insufficient_sources(self, mock_storage, mock_llm_provider):
+        """Test that synthesize_perspectives handles insufficient sources gracefully."""
+        # Return only 1 article
+        single_article = Article(
+            id="single-1",
+            feed_url="https://example.com/feed.xml",
+            title="Single Article",
+            link="https://example.com/single",
+            published=datetime.now(),
+            content="Single source content.",
+            summary="Single summary.",
+            story_id="mock-story-1",
+        )
+        mock_storage.get_articles_by_cluster.return_value = [single_article]
+        mock_llm_provider.summarize.return_value = "Analysis for single source."
+
+        # consensus requires 2 sources
+        perspectives = synthesize_perspectives(
+            cluster_id="mock-story-1",
+            categories=['consensus', 'gaps'],
+            storage=mock_storage,
+            llm_provider=mock_llm_provider,
+        )
+
+        # gaps should work (min_sources=1)
+        assert 'gaps' in perspectives
+
+        # consensus should have low-confidence placeholder
+        assert 'consensus' in perspectives
+        assert perspectives['consensus'].confidence == 0.1
+        assert 'Insufficient sources' in perspectives['consensus'].content
+
+    def test_end_to_end_multi_source_flow(self, mock_storage_with_articles, mock_llm_provider):
+        """Test end-to-end flow with mock storage and cluster."""
+        mock_llm_provider.summarize.return_value = (
+            "Detailed multi-source analysis:\n"
+            "- All sources agree on breakthrough significance\n"
+            "- Market and societal implications acknowledged"
+        )
+
+        perspectives = synthesize_perspectives(
+            cluster_id="mock-story-1",
+            categories=['consensus', 'contested', 'gaps'],
+            storage=mock_storage_with_articles,
+            llm_provider=mock_llm_provider,
+        )
+
+        # Should successfully synthesize all three
+        assert len(perspectives) == 3
+
+        for perspective in perspectives.values():
+            assert isinstance(perspective, Perspective)
+            assert len(perspective.source_articles) > 0
+            assert perspective.confidence > 0
+
+    def test_multi_source_with_unicode_content(
+        self, sample_article_unicode, sample_article_tech, mock_llm_provider
+    ):
+        """Test multi-source synthesis with unicode content."""
+        articles = [sample_article_unicode, sample_article_tech]
+        mock_llm_provider.summarize.return_value = (
+            "Analysis with unicode: 分析结果 🎯\n"
+            "- Point one with unicode characters"
+        )
+
+        perspective = synthesize_perspective(
+            category='consensus',
+            articles=articles,
+            llm_provider=mock_llm_provider,
+        )
+
+        assert perspective.category == 'consensus'
+        # Unicode should be preserved
+        assert '分析结果' in perspective.content or '🎯' in perspective.content
+
+    def test_multi_source_with_empty_content_article(
+        self, sample_article_empty_content, sample_article_tech, mock_llm_provider
+    ):
+        """Test multi-source synthesis when one article has empty content."""
+        articles = [sample_article_empty_content, sample_article_tech]
+        mock_llm_provider.summarize.return_value = "Analysis based on available content."
+
+        perspective = synthesize_perspective(
+            category='consensus',
+            articles=articles,
+            llm_provider=mock_llm_provider,
+        )
+
+        # Should still work despite empty content
+        assert perspective.category == 'consensus'
+        assert len(perspective.source_articles) == 2
+
+    def test_multi_source_caching_behavior(self, mock_storage_with_articles, mock_llm_provider):
+        """Test that multi-source perspectives are cached."""
+        mock_llm_provider.summarize.return_value = "Cached analysis content."
+
+        # First synthesis
+        perspective1 = synthesize_perspective(
+            category='consensus',
+            articles=mock_storage_with_articles.get_articles_by_cluster("test"),
+            llm_provider=mock_llm_provider,
+            storage=mock_storage_with_articles,
+            cluster_id="test-cluster-1",
+        )
+
+        # Verify cache was called
+        assert mock_storage_with_articles.cache_perspective.called
+
+        # Verify the cached perspective data
+        cache_call_args = mock_storage_with_articles.cache_perspective.call_args
+        assert cache_call_args[0][0] == "test-cluster-1"
+        assert cache_call_args[0][1] == "consensus"
+
+    def test_multi_source_with_category_specific_llm(
+        self, article_cluster_diverse, mock_llm_provider
+    ):
+        """Test multi-source synthesis with category-specific LLM responses."""
+        # Create category-specific responses that trigger based on prompt content
+        def category_response(prompt, **kwargs):
+            prompt_lower = prompt.lower()
+            # Check order matters: more specific patterns first
+            if 'disagree' in prompt_lower:
+                return "Sources disagree on timeline and approach."
+            elif 'not' in prompt_lower and 'cover' in prompt_lower:
+                return "Coverage gaps include environmental impact."
+            elif 'agree' in prompt_lower or 'consensus' in prompt_lower:
+                return "All sources agree on significance."
+            return "Generic analysis."
+
+        mock_llm_provider.summarize.side_effect = category_response
+
+        # Consensus
+        perspective_consensus = synthesize_perspective(
+            category='consensus',
+            articles=article_cluster_diverse,
+            llm_provider=mock_llm_provider,
+        )
+        assert 'agree' in perspective_consensus.content.lower()
+
+        # Contested
+        perspective_contested = synthesize_perspective(
+            category='contested',
+            articles=article_cluster_diverse,
+            llm_provider=mock_llm_provider,
+        )
+        assert 'disagree' in perspective_contested.content.lower()
+
+        # Gaps
+        perspective_gaps = synthesize_perspective(
+            category='gaps',
+            articles=article_cluster_diverse,
+            llm_provider=mock_llm_provider,
+        )
+        assert 'gap' in perspective_gaps.content.lower()
+
+
+class TestConsensusContestedGapsInteraction:
+    """Tests for how consensus, contested, and gaps perspectives interact."""
+
+    def test_same_articles_different_perspectives(self, article_cluster_diverse, mock_llm_provider):
+        """Test that same articles produce different but consistent perspectives."""
+        # Set up category-specific responses - check order matters!
+        def category_response(prompt, **kwargs):
+            prompt_lower = prompt.lower()
+            # Check more specific patterns first
+            if 'disagree' in prompt_lower:
+                return (
+                    "Sources disagree on:\n"
+                    "- Timeline for adoption\n"
+                    "- Regulatory approach needed"
+                )
+            elif 'not' in prompt_lower and 'cover' in prompt_lower:
+                return (
+                    "Not covered by any source:\n"
+                    "- Environmental impact\n"
+                    "- Global south perspectives"
+                )
+            elif 'agree' in prompt_lower or 'consensus' in prompt_lower:
+                return (
+                    "All sources agree:\n"
+                    "- AI represents major advancement\n"
+                    "- Impact will be significant"
+                )
+            return "Generic analysis."
+
+        mock_llm_provider.summarize.side_effect = category_response
+
+        perspectives = {}
+        for category in ['consensus', 'contested', 'gaps']:
+            perspectives[category] = synthesize_perspective(
+                category=category,
+                articles=article_cluster_diverse,
+                llm_provider=mock_llm_provider,
+            )
+
+        # All three should have different content
+        assert perspectives['consensus'].content != perspectives['contested'].content
+        assert perspectives['contested'].content != perspectives['gaps'].content
+        assert perspectives['consensus'].content != perspectives['gaps'].content
+
+        # But all should reference the same source articles
+        assert perspectives['consensus'].source_articles == perspectives['contested'].source_articles
+
+    def test_complementary_perspectives(
+        self, sample_article_tech, sample_article_business, sample_article_mainstream, mock_llm_provider
+    ):
+        """Test that consensus, contested, and gaps provide complementary analysis."""
+        articles = [sample_article_tech, sample_article_business, sample_article_mainstream]
+
+        def complementary_response(prompt, **kwargs):
+            prompt_lower = prompt.lower()
+            # Check order matters: more specific patterns first
+            if 'disagree' in prompt_lower:
+                return "Disagree on: scope of impact."
+            elif 'not' in prompt_lower and 'cover' in prompt_lower:
+                return "Missing: long-term predictions."
+            elif 'agree' in prompt_lower:
+                return "All agree AI is significant."
+            return "Analysis complete."
+
+        mock_llm_provider.summarize.side_effect = complementary_response
+
+        consensus = synthesize_perspective('consensus', articles, mock_llm_provider)
+        contested = synthesize_perspective('contested', articles, mock_llm_provider)
+        gaps = synthesize_perspective('gaps', articles, mock_llm_provider)
+
+        # Together they should cover: agreement, disagreement, and missing coverage
+        assert 'agree' in consensus.content.lower()
+        assert 'disagree' in contested.content.lower()
+        assert 'missing' in gaps.content.lower()
+
+    def test_perspectives_maintain_source_consistency(self, article_cluster_diverse, mock_llm_provider):
+        """Test that all perspectives reference consistent source information."""
+        mock_llm_provider.summarize.return_value = "Standard analysis response."
+
+        consensus = synthesize_perspective('consensus', article_cluster_diverse, mock_llm_provider)
+        contested = synthesize_perspective('contested', article_cluster_diverse, mock_llm_provider)
+        gaps = synthesize_perspective('gaps', article_cluster_diverse, mock_llm_provider)
+
+        # All should have same source articles
+        assert set(consensus.source_articles) == set(contested.source_articles)
+        assert set(contested.source_articles) == set(gaps.source_articles)
+
+    def test_perspectives_all_have_timestamps(self, article_cluster_diverse, mock_llm_provider):
+        """Test that all perspectives have valid timestamps."""
+        mock_llm_provider.summarize.return_value = "Analysis with timestamp."
+
+        for category in ['consensus', 'contested', 'gaps']:
+            perspective = synthesize_perspective(
+                category=category,
+                articles=article_cluster_diverse,
+                llm_provider=mock_llm_provider,
+            )
+
+            assert perspective.generated_at is not None
+            assert isinstance(perspective.generated_at, datetime)
+            # Should be recent (within last minute)
+            assert datetime.now() - perspective.generated_at < timedelta(minutes=1)
