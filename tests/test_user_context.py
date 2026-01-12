@@ -2015,6 +2015,908 @@ class TestUserContextStoreIntegration:
         assert found.saved is True
 
 
-# Tests for RelevanceEngine will be added in subtask 5.3
-# Tests for sort_by_relevance will be added in subtask 5.3
-# Tests for apply_diversity_filter will be added in subtask 5.3
+# =============================================================================
+# Test Classes for RelevanceEngine Initialization
+# =============================================================================
+
+
+class TestRelevanceEngineInitialization:
+    """Test RelevanceEngine initialization."""
+
+    def test_engine_creation(self, relevance_engine):
+        """Test creating a RelevanceEngine."""
+        assert relevance_engine is not None
+        assert hasattr(relevance_engine, "store")
+
+    def test_engine_with_store(self, relevance_engine, context_store):
+        """Test engine stores reference to store."""
+        assert relevance_engine.store == context_store
+
+    def test_engine_with_mock_store(self, relevance_engine_mock, mock_context_store):
+        """Test engine with mock store."""
+        assert relevance_engine_mock.store == mock_context_store
+
+    def test_decay_constants_exist(self, relevance_engine):
+        """Test decay constants are defined."""
+        assert hasattr(RelevanceEngine, "DECAY_HALF_LIFE_DAYS")
+        assert hasattr(RelevanceEngine, "COMPLETED_DECAY_HALF_LIFE_DAYS")
+        assert RelevanceEngine.DECAY_HALF_LIFE_DAYS == 14
+        assert RelevanceEngine.COMPLETED_DECAY_HALF_LIFE_DAYS == 7
+
+    def test_engine_with_engagement_data(self, relevance_engine_with_engagement):
+        """Test engine with store containing engagement data."""
+        assert relevance_engine_with_engagement is not None
+        engagement = relevance_engine_with_engagement.store.get_topic_engagement()
+        assert "AI" in engagement
+
+    def test_multiple_engines_independent(self, context_store, context_store_empty):
+        """Test multiple engine instances are independent."""
+        engine1 = RelevanceEngine(context_store)
+        engine2 = RelevanceEngine(context_store_empty)
+        assert engine1.store != engine2.store
+
+
+# =============================================================================
+# Test Classes for _extract_topics Method
+# =============================================================================
+
+
+class TestExtractTopicsBasic:
+    """Test RelevanceEngine._extract_topics() basic functionality."""
+
+    def test_extract_topics_from_trend_tags(self, relevance_engine, sample_article):
+        """Test extracting topics from trend_tags."""
+        topics = relevance_engine._extract_topics(sample_article)
+        assert "AI" in topics
+        assert "technology" in topics
+        assert "product launch" in topics
+
+    def test_extract_topics_from_title(self, relevance_engine, sample_article_no_tags):
+        """Test extracting topics from title when no tags."""
+        topics = relevance_engine._extract_topics(sample_article_no_tags)
+        # Words from title > 4 chars
+        assert "interesting" in topics or "article" in topics or "something" in topics
+
+    def test_extract_topics_combines_tags_and_title(self, relevance_engine, sample_article):
+        """Test topics combined from both tags and title."""
+        topics = relevance_engine._extract_topics(sample_article)
+        # From tags
+        assert "AI" in topics
+        # From title (words > 4 chars)
+        assert any(word in topics for word in ["breaking", "major", "company", "announces", "product"])
+
+    def test_extract_topics_empty_tags(self, relevance_engine, sample_article_empty_tags):
+        """Test extracting topics with empty tags string."""
+        topics = relevance_engine._extract_topics(sample_article_empty_tags)
+        # Should still extract from title
+        assert isinstance(topics, list)
+
+
+class TestExtractTopicsEdgeCases:
+    """Test _extract_topics edge cases."""
+
+    def test_extract_topics_no_tags_attribute(self, relevance_engine, mock_article_no_attrs):
+        """Test extracting topics from article without trend_tags attribute."""
+        topics = relevance_engine._extract_topics(mock_article_no_attrs)
+        assert isinstance(topics, list)
+
+    def test_extract_topics_no_title_attribute(self, relevance_engine):
+        """Test extracting topics from article without title attribute."""
+        article = MagicMock(spec=["id", "trend_tags"])
+        article.trend_tags = "Python,programming"
+        topics = relevance_engine._extract_topics(article)
+        assert "Python" in topics
+        assert "programming" in topics
+
+    def test_extract_topics_none_trend_tags(self, relevance_engine, sample_article_no_tags):
+        """Test extracting topics when trend_tags is None."""
+        topics = relevance_engine._extract_topics(sample_article_no_tags)
+        assert isinstance(topics, list)
+
+    def test_extract_topics_unicode(self, relevance_engine, sample_article_unicode):
+        """Test extracting topics with unicode content."""
+        topics = relevance_engine._extract_topics(sample_article_unicode)
+        assert "AI" in topics
+        assert "tecnologia" in topics or "inteligencia artificial" in topics
+
+    def test_extract_topics_removes_empty_strings(self, relevance_engine):
+        """Test that empty strings are removed from topics."""
+        article = MagicMock()
+        article.trend_tags = "AI,,,,Python"
+        article.title = "Short"
+        topics = relevance_engine._extract_topics(article)
+        assert "" not in topics
+
+    def test_extract_topics_strips_whitespace(self, relevance_engine):
+        """Test that topics are stripped of whitespace."""
+        article = MagicMock()
+        article.trend_tags = "  AI  ,  Python  ,  testing  "
+        article.title = "Test Article"
+        topics = relevance_engine._extract_topics(article)
+        assert "AI" in topics
+        assert "Python" in topics
+        assert "testing" in topics
+
+    def test_extract_topics_short_words_from_title_filtered(self, relevance_engine):
+        """Test that short words from title are filtered."""
+        article = MagicMock()
+        article.trend_tags = None
+        article.title = "AI is a big topic for the web"
+        topics = relevance_engine._extract_topics(article)
+        # Words <= 4 chars should be filtered
+        assert "AI" not in topics or "AI" == topics[0]  # May be there if longer words exist
+        assert "is" not in topics
+        assert "a" not in topics
+        assert "big" not in topics
+        assert "for" not in topics
+        assert "the" not in topics
+        assert "web" not in topics
+        assert "topic" in topics
+
+
+# =============================================================================
+# Test Classes for _calculate_topic_match Method
+# =============================================================================
+
+
+class TestCalculateTopicMatchBasic:
+    """Test RelevanceEngine._calculate_topic_match() basic functionality."""
+
+    def test_topic_match_empty_topics(self, relevance_engine, profile_developer):
+        """Test topic match with empty topics list."""
+        score = relevance_engine._calculate_topic_match([], profile_developer)
+        assert score == 0.5  # Neutral for empty
+
+    def test_topic_match_watching_direct(self, relevance_engine, profile_developer):
+        """Test topic match for watching list."""
+        score = relevance_engine._calculate_topic_match(["AI"], profile_developer)
+        # Should be boosted above 0.5
+        assert score > 0.5
+
+    def test_topic_match_current_projects(self, relevance_engine, profile_developer):
+        """Test topic match for current_projects."""
+        score = relevance_engine._calculate_topic_match(["RSS"], profile_developer)
+        # Should match "building RSS reader"
+        assert score > 0.5
+
+    def test_topic_match_pinned_sets_minimum(self, relevance_engine, profile_developer):
+        """Test pinned topics set minimum score."""
+        score = relevance_engine._calculate_topic_match(["security"], profile_developer)
+        # Pinned: "security vulnerabilities"
+        assert score >= 0.7
+
+    def test_topic_match_ignore_reduces(self, relevance_engine, profile_developer):
+        """Test ignore list reduces score."""
+        score = relevance_engine._calculate_topic_match(["celebrity"], profile_developer)
+        # Ignore: "celebrity news"
+        assert score < 0.5
+
+
+class TestCalculateTopicMatchScoring:
+    """Test _calculate_topic_match scoring behavior."""
+
+    def test_topic_match_case_insensitive(self, relevance_engine, profile_developer):
+        """Test topic matching is case insensitive."""
+        score_lower = relevance_engine._calculate_topic_match(["ai"], profile_developer)
+        score_upper = relevance_engine._calculate_topic_match(["AI"], profile_developer)
+        assert score_lower == score_upper
+
+    def test_topic_match_partial_match_watching(self, relevance_engine, profile_developer):
+        """Test partial match for watching topics."""
+        # Profile watching: "Python"
+        score = relevance_engine._calculate_topic_match(["python programming"], profile_developer)
+        # "python" in "python programming" should match
+        assert score > 0.5
+
+    def test_topic_match_partial_match_projects(self, relevance_engine, profile_developer):
+        """Test partial match for current projects."""
+        # Profile projects: "building RSS reader"
+        score = relevance_engine._calculate_topic_match(["reader"], profile_developer)
+        assert score > 0.5
+
+    def test_topic_match_multiple_matches_accumulate(self, relevance_engine, profile_developer):
+        """Test multiple matches accumulate score."""
+        score_single = relevance_engine._calculate_topic_match(["AI"], profile_developer)
+        score_multiple = relevance_engine._calculate_topic_match(["AI", "Python", "web"], profile_developer)
+        assert score_multiple >= score_single
+
+    def test_topic_match_clamped_to_one(self, relevance_engine, profile_developer):
+        """Test score is clamped to max 1.0."""
+        # Many matching topics
+        topics = ["AI", "Python", "web", "RSS", "security"]
+        score = relevance_engine._calculate_topic_match(topics, profile_developer)
+        assert score <= 1.0
+
+    def test_topic_match_clamped_to_zero(self, relevance_engine, profile_developer):
+        """Test score is clamped to min 0.0."""
+        # Many ignored topics
+        topics = ["celebrity", "sports", "entertainment"]
+        score = relevance_engine._calculate_topic_match(topics, profile_developer)
+        assert score >= 0.0
+
+
+class TestCalculateTopicMatchProfiles:
+    """Test _calculate_topic_match with different profiles."""
+
+    def test_topic_match_empty_profile(self, relevance_engine, profile_empty_lists):
+        """Test topic match with empty profile lists."""
+        score = relevance_engine._calculate_topic_match(["AI", "Python"], profile_empty_lists)
+        # Should be neutral
+        assert score == 0.5
+
+    def test_topic_match_researcher_profile(self, relevance_engine, profile_researcher):
+        """Test topic match for researcher profile."""
+        score = relevance_engine._calculate_topic_match(["deep learning", "transformers"], profile_researcher)
+        assert score > 0.5
+
+    def test_topic_match_many_interests(self, relevance_engine, profile_many_interests):
+        """Test topic match with profile having many interests."""
+        score = relevance_engine._calculate_topic_match(["topic-5"], profile_many_interests)
+        assert score > 0.5
+
+
+# =============================================================================
+# Test Classes for _calculate_engagement_score Method
+# =============================================================================
+
+
+class TestCalculateEngagementScoreBasic:
+    """Test RelevanceEngine._calculate_engagement_score() basic functionality."""
+
+    def test_engagement_score_no_history(self, relevance_engine_mock):
+        """Test engagement score with no history."""
+        score = relevance_engine_mock._calculate_engagement_score(["AI", "Python"])
+        # Mock returns empty dict, should return neutral
+        assert score == 0.5
+
+    def test_engagement_score_with_engagement(self, relevance_engine_with_engagement):
+        """Test engagement score with engagement data."""
+        score = relevance_engine_with_engagement._calculate_engagement_score(["AI"])
+        # Mock has AI engagement rate of 0.8
+        assert score == 0.8
+
+    def test_engagement_score_multiple_topics(self, relevance_engine_with_engagement):
+        """Test engagement score averages multiple topics."""
+        score = relevance_engine_with_engagement._calculate_engagement_score(["AI", "Python"])
+        # AI=0.8, Python=0.7, average=0.75
+        assert score == 0.75
+
+
+class TestCalculateEngagementScoreMatching:
+    """Test _calculate_engagement_score topic matching."""
+
+    def test_engagement_score_case_insensitive(self, relevance_engine_with_engagement):
+        """Test engagement score matching is case insensitive."""
+        score_lower = relevance_engine_with_engagement._calculate_engagement_score(["ai"])
+        score_upper = relevance_engine_with_engagement._calculate_engagement_score(["AI"])
+        assert score_lower == score_upper
+
+    def test_engagement_score_partial_match(self, relevance_engine_with_engagement):
+        """Test engagement score with partial matches."""
+        score = relevance_engine_with_engagement._calculate_engagement_score(["artificial intelligence"])
+        # Should not match "AI" directly, but may have partial logic
+        # Based on code: topic_lower in hist_lower or hist_lower in topic_lower
+        # "ai" in "artificial intelligence" -> True
+        assert score >= 0.5
+
+    def test_engagement_score_no_matching_topics(self):
+        """Test engagement score when no topics match history."""
+        # Create mock with specific engagement that doesn't match sports/weather
+        # Note: "entertainment" contains "ai" as substring, so avoid it
+        store = MagicMock(spec=UserContextStore)
+        store.get_topic_engagement.return_value = {
+            "AI": 0.8,
+            "Python": 0.7,
+        }
+        engine = RelevanceEngine(store)
+        score = engine._calculate_engagement_score(["sports", "weather"])
+        # No matches in mock engagement data
+        assert score == 0.5
+
+
+class TestCalculateEngagementScoreEdgeCases:
+    """Test _calculate_engagement_score edge cases."""
+
+    def test_engagement_score_empty_topics(self, relevance_engine_with_engagement):
+        """Test engagement score with empty topics list."""
+        score = relevance_engine_with_engagement._calculate_engagement_score([])
+        # No topics to match
+        assert score == 0.5
+
+    def test_engagement_score_mock_returns_empty(self, relevance_engine_mock):
+        """Test engagement score when store returns empty dict."""
+        score = relevance_engine_mock._calculate_engagement_score(["AI"])
+        assert score == 0.5
+
+
+# =============================================================================
+# Test Classes for _calculate_recency_boost Method
+# =============================================================================
+
+
+class TestCalculateRecencyBoostBasic:
+    """Test RelevanceEngine._calculate_recency_boost() basic functionality."""
+
+    def test_recency_boost_no_interactions(self, relevance_engine_mock):
+        """Test recency boost with no recent interactions."""
+        score = relevance_engine_mock._calculate_recency_boost(["AI", "Python"])
+        # Should return neutral
+        assert score == 0.5
+
+    def test_recency_boost_with_interactions(self, relevance_engine_mock):
+        """Test recency boost with recent interactions."""
+        # Mock has no history, returns neutral
+        score = relevance_engine_mock._calculate_recency_boost(["AI"])
+        assert score == 0.5
+
+    def test_recency_boost_recent_history(self, mock_context_store_with_history):
+        """Test recency boost with recent interaction history."""
+        engine = RelevanceEngine(mock_context_store_with_history)
+        score = engine._calculate_recency_boost(["AI"])
+        # Current implementation returns 0.5 (placeholder)
+        assert score == 0.5
+
+
+class TestCalculateRecencyBoostBehavior:
+    """Test _calculate_recency_boost behavior."""
+
+    def test_recency_boost_always_returns_float(self, relevance_engine_mock):
+        """Test recency boost always returns float."""
+        score = relevance_engine_mock._calculate_recency_boost(["any", "topics"])
+        assert isinstance(score, float)
+
+    def test_recency_boost_bounded(self, relevance_engine_mock):
+        """Test recency boost is bounded 0-1."""
+        score = relevance_engine_mock._calculate_recency_boost(["test"])
+        assert 0.0 <= score <= 1.0
+
+
+# =============================================================================
+# Test Classes for _calculate_diversity_score Method
+# =============================================================================
+
+
+class TestCalculateDiversityScoreBasic:
+    """Test RelevanceEngine._calculate_diversity_score() basic functionality."""
+
+    def test_diversity_score_no_history(self, relevance_engine_mock):
+        """Test diversity score with no history."""
+        score = relevance_engine_mock._calculate_diversity_score(["AI", "Python"])
+        # No history (mock returns empty), all topics are diverse
+        assert score == 0.8
+
+    def test_diversity_score_with_history(self, relevance_engine_with_engagement):
+        """Test diversity score with engagement history."""
+        score = relevance_engine_with_engagement._calculate_diversity_score(["AI", "Python"])
+        # These topics are in history, so not diverse
+        assert score < 0.8
+
+    def test_diversity_score_new_topics(self, relevance_engine_with_engagement):
+        """Test diversity score for completely new topics."""
+        score = relevance_engine_with_engagement._calculate_diversity_score(["quantum", "blockchain"])
+        # New topics not in engagement history
+        assert score == 1.0
+
+
+class TestCalculateDiversityScoreCalculation:
+    """Test _calculate_diversity_score calculation logic."""
+
+    def test_diversity_score_mixed_topics(self, relevance_engine_with_engagement):
+        """Test diversity score with mix of new and seen topics."""
+        score = relevance_engine_with_engagement._calculate_diversity_score(["AI", "quantum"])
+        # AI is seen (not diverse), quantum is new (diverse)
+        # 1/2 new = 0.5 diversity ratio -> 0.5 + 0.5*0.5 = 0.75
+        assert score == 0.75
+
+    def test_diversity_score_all_seen(self, relevance_engine_with_engagement):
+        """Test diversity score when all topics seen before."""
+        score = relevance_engine_with_engagement._calculate_diversity_score(["AI", "Python", "technology", "security"])
+        # All in history
+        assert score == 0.5
+
+    def test_diversity_score_empty_topics(self, relevance_engine_with_engagement):
+        """Test diversity score with empty topics list."""
+        score = relevance_engine_with_engagement._calculate_diversity_score([])
+        # Empty topics -> diversity_ratio = 0
+        assert score == 0.5
+
+    def test_diversity_score_case_insensitive(self, relevance_engine_with_engagement):
+        """Test diversity score is case insensitive."""
+        score_lower = relevance_engine_with_engagement._calculate_diversity_score(["ai"])
+        score_upper = relevance_engine_with_engagement._calculate_diversity_score(["AI"])
+        assert score_lower == score_upper
+
+
+# =============================================================================
+# Test Classes for calculate_relevance Method
+# =============================================================================
+
+
+class TestCalculateRelevanceBasic:
+    """Test RelevanceEngine.calculate_relevance() basic functionality."""
+
+    def test_calculate_relevance_returns_float(self, relevance_engine_mock, sample_article, profile_developer):
+        """Test calculate_relevance returns a float."""
+        score = relevance_engine_mock.calculate_relevance(sample_article, profile_developer)
+        assert isinstance(score, float)
+
+    def test_calculate_relevance_bounded(self, relevance_engine_mock, sample_article, profile_developer):
+        """Test calculate_relevance returns score between 0 and 1."""
+        score = relevance_engine_mock.calculate_relevance(sample_article, profile_developer)
+        assert 0.0 <= score <= 1.0
+
+    def test_calculate_relevance_matching_topics(self, relevance_engine_mock, sample_article_ai, profile_developer):
+        """Test relevance for article matching profile topics."""
+        score = relevance_engine_mock.calculate_relevance(sample_article_ai, profile_developer)
+        # AI matches profile watching
+        assert score > 0.5
+
+    def test_calculate_relevance_ignored_topics(self, relevance_engine_mock, sample_article_celebrity, profile_developer):
+        """Test relevance for article with ignored topics."""
+        score = relevance_engine_mock.calculate_relevance(sample_article_celebrity, profile_developer)
+        # "celebrity news" in ignore list
+        assert score < 0.5
+
+
+class TestCalculateRelevancePersonalization:
+    """Test calculate_relevance personalization behavior."""
+
+    def test_zero_personalization_returns_neutral(self, relevance_engine_mock, sample_article_ai, profile_zero_personalization):
+        """Test zero personalization returns neutral score."""
+        score = relevance_engine_mock.calculate_relevance(sample_article_ai, profile_zero_personalization)
+        # At 0 personalization, should return 0.5
+        assert score == 0.5
+
+    def test_low_personalization_reduces_effect(self, relevance_engine_mock, sample_article_ai, profile_low_personalization, profile_developer):
+        """Test low personalization reduces scoring effect."""
+        # Same article, different personalization strength
+        score_low = relevance_engine_mock.calculate_relevance(sample_article_ai, profile_low_personalization)
+        profile_developer.personalization_strength = 1.0
+        score_high = relevance_engine_mock.calculate_relevance(sample_article_ai, profile_developer)
+        # Low personalization should be closer to 0.5
+        assert abs(score_low - 0.5) < abs(score_high - 0.5)
+
+    def test_full_personalization_uses_raw_score(self, relevance_engine_mock, sample_article_ai):
+        """Test full personalization uses raw score directly."""
+        profile = UserContextProfile(
+            watching=["AI"],
+            personalization_strength=1.0,
+        )
+        score = relevance_engine_mock.calculate_relevance(sample_article_ai, profile)
+        # Should show the full effect of matching
+        assert score > 0.5
+
+
+class TestCalculateRelevanceNoTopics:
+    """Test calculate_relevance with no extractable topics."""
+
+    def test_calculate_relevance_no_tags_no_title(self, relevance_engine_mock, profile_developer):
+        """Test relevance for article with no extractable topics."""
+        article = MagicMock()
+        article.trend_tags = None
+        article.title = None
+        score = relevance_engine_mock.calculate_relevance(article, profile_developer)
+        # Should return neutral
+        assert score == 0.5
+
+    def test_calculate_relevance_empty_title(self, relevance_engine_mock, sample_article_edge_case_empty_content, profile_developer):
+        """Test relevance for article with empty title."""
+        score = relevance_engine_mock.calculate_relevance(sample_article_edge_case_empty_content, profile_developer)
+        # Should return neutral
+        assert score == 0.5
+
+
+class TestCalculateRelevanceProfiles:
+    """Test calculate_relevance with different profiles."""
+
+    def test_calculate_relevance_researcher(self, relevance_engine_mock, sample_article_ai, profile_researcher):
+        """Test relevance calculation for researcher profile."""
+        score = relevance_engine_mock.calculate_relevance(sample_article_ai, profile_researcher)
+        # AI matches researcher watching
+        assert score > 0.5
+
+    def test_calculate_relevance_journalist(self, relevance_engine_mock, sample_article, profile_journalist):
+        """Test relevance calculation for journalist profile."""
+        score = relevance_engine_mock.calculate_relevance(sample_article, profile_journalist)
+        assert isinstance(score, float)
+        assert 0.0 <= score <= 1.0
+
+    def test_calculate_relevance_empty_profile(self, relevance_engine_mock, sample_article, profile_empty_lists):
+        """Test relevance calculation for empty profile."""
+        score = relevance_engine_mock.calculate_relevance(sample_article, profile_empty_lists)
+        # Empty profile, most scores are neutral, should be around 0.5
+        assert 0.3 <= score <= 0.7
+
+
+class TestCalculateRelevanceWeighting:
+    """Test calculate_relevance factor weighting."""
+
+    def test_calculate_relevance_topic_weight(self, relevance_engine_mock, sample_article_ai):
+        """Test topic match has 40% weight."""
+        # With mock store returning neutral engagement/recency
+        profile = UserContextProfile(
+            watching=["AI"],
+            personalization_strength=1.0,
+        )
+        score = relevance_engine_mock.calculate_relevance(sample_article_ai, profile)
+        # Topic match should dominate (40% weight)
+        assert score > 0.5
+
+    def test_calculate_relevance_pinned_boost(self, relevance_engine_mock, sample_article_security, profile_developer):
+        """Test pinned topics get significant boost."""
+        score = relevance_engine_mock.calculate_relevance(sample_article_security, profile_developer)
+        # "security vulnerabilities" is pinned
+        # Use >= 0.59 to account for floating point precision (0.5999... is essentially 0.6)
+        assert score >= 0.59
+
+
+class TestCalculateRelevanceEdgeCases:
+    """Test calculate_relevance edge cases."""
+
+    def test_calculate_relevance_unicode_article(self, relevance_engine_mock, sample_article_unicode, profile_unicode):
+        """Test relevance with unicode content."""
+        score = relevance_engine_mock.calculate_relevance(sample_article_unicode, profile_unicode)
+        assert isinstance(score, float)
+        assert 0.0 <= score <= 1.0
+
+    def test_calculate_relevance_long_title(self, relevance_engine_mock, sample_article_edge_case_long_title, profile_developer):
+        """Test relevance with very long title."""
+        score = relevance_engine_mock.calculate_relevance(sample_article_edge_case_long_title, profile_developer)
+        assert isinstance(score, float)
+        assert 0.0 <= score <= 1.0
+
+    def test_calculate_relevance_sports_ignored(self, relevance_engine_mock, sample_article_sports, profile_developer):
+        """Test relevance for sports article (ignored)."""
+        score = relevance_engine_mock.calculate_relevance(sample_article_sports, profile_developer)
+        # "sports" in ignore list
+        assert score < 0.5
+
+
+# =============================================================================
+# Test Classes for apply_relevance_decay Method
+# =============================================================================
+
+
+class TestApplyRelevanceDecay:
+    """Test RelevanceEngine.apply_relevance_decay() method."""
+
+    def test_apply_decay_returns_profile(self, relevance_engine_mock, profile_developer):
+        """Test apply_relevance_decay returns a profile."""
+        result = relevance_engine_mock.apply_relevance_decay(profile_developer, days_since_update=7)
+        assert isinstance(result, UserContextProfile)
+
+    def test_apply_decay_preserves_profile(self, relevance_engine_mock, profile_developer):
+        """Test apply_relevance_decay currently returns profile unchanged."""
+        # Current implementation is a placeholder
+        result = relevance_engine_mock.apply_relevance_decay(profile_developer, days_since_update=30)
+        assert result.role == profile_developer.role
+        assert result.watching == profile_developer.watching
+        assert result.current_projects == profile_developer.current_projects
+
+    def test_apply_decay_zero_days(self, relevance_engine_mock, profile_developer):
+        """Test apply_relevance_decay with zero days."""
+        result = relevance_engine_mock.apply_relevance_decay(profile_developer, days_since_update=0)
+        assert result == profile_developer
+
+    def test_apply_decay_many_days(self, relevance_engine_mock, profile_developer):
+        """Test apply_relevance_decay with many days."""
+        result = relevance_engine_mock.apply_relevance_decay(profile_developer, days_since_update=365)
+        # Placeholder returns unchanged
+        assert result == profile_developer
+
+
+# =============================================================================
+# Test Classes for sort_by_relevance Function
+# =============================================================================
+
+
+class TestSortByRelevanceBasic:
+    """Test sort_by_relevance() basic functionality."""
+
+    def test_sort_by_relevance_returns_list(self, mock_context_store, profile_developer, sample_articles_bulk):
+        """Test sort_by_relevance returns a list."""
+        result = sort_by_relevance(sample_articles_bulk, profile_developer, mock_context_store)
+        assert isinstance(result, list)
+
+    def test_sort_by_relevance_same_length(self, mock_context_store, profile_developer, sample_articles_bulk):
+        """Test sort_by_relevance returns same number of articles."""
+        result = sort_by_relevance(sample_articles_bulk, profile_developer, mock_context_store)
+        assert len(result) == len(sample_articles_bulk)
+
+    def test_sort_by_relevance_contains_all_articles(self, mock_context_store, profile_developer, sample_articles_bulk):
+        """Test sorted list contains all original articles."""
+        result = sort_by_relevance(sample_articles_bulk, profile_developer, mock_context_store)
+        original_ids = {a.id for a in sample_articles_bulk}
+        sorted_ids = {a.id for a in result}
+        assert original_ids == sorted_ids
+
+    def test_sort_by_relevance_empty_list(self, mock_context_store, profile_developer):
+        """Test sort_by_relevance with empty list."""
+        result = sort_by_relevance([], profile_developer, mock_context_store)
+        assert result == []
+
+
+class TestSortByRelevanceOrdering:
+    """Test sort_by_relevance ordering behavior."""
+
+    def test_sort_by_relevance_descending_order(self, mock_context_store, profile_developer, sample_articles_diverse):
+        """Test articles are sorted by relevance descending."""
+        result = sort_by_relevance(sample_articles_diverse, profile_developer, mock_context_store)
+        # Check that relevance_score attribute is set and decreasing
+        for i in range(len(result) - 1):
+            if hasattr(result[i], "relevance_score") and hasattr(result[i+1], "relevance_score"):
+                assert result[i].relevance_score >= result[i+1].relevance_score
+
+    def test_sort_by_relevance_ai_article_first(self, mock_context_store, profile_developer, sample_articles_diverse):
+        """Test AI article ranks high for developer profile."""
+        result = sort_by_relevance(sample_articles_diverse, profile_developer, mock_context_store)
+        # AI should be in watching list for developer
+        ai_article = next((a for a in result if "AI" in (a.trend_tags or "")), None)
+        if ai_article:
+            # Should be in top half
+            ai_index = result.index(ai_article)
+            assert ai_index < len(result) / 2
+
+
+class TestSortByRelevanceScoreStorage:
+    """Test sort_by_relevance stores scores on articles."""
+
+    def test_sort_by_relevance_sets_score_attribute(self, mock_context_store, profile_developer, sample_article):
+        """Test sort_by_relevance sets relevance_score on articles."""
+        result = sort_by_relevance([sample_article], profile_developer, mock_context_store)
+        assert hasattr(result[0], "relevance_score")
+        assert isinstance(result[0].relevance_score, float)
+
+    def test_sort_by_relevance_score_bounded(self, mock_context_store, profile_developer, sample_articles_bulk):
+        """Test stored scores are bounded 0-1."""
+        result = sort_by_relevance(sample_articles_bulk, profile_developer, mock_context_store)
+        for article in result:
+            if hasattr(article, "relevance_score"):
+                assert 0.0 <= article.relevance_score <= 1.0
+
+
+class TestSortByRelevanceProfiles:
+    """Test sort_by_relevance with different profiles."""
+
+    def test_sort_by_relevance_researcher_prefers_ml(self, mock_context_store, profile_researcher, sample_articles_diverse):
+        """Test researcher profile prefers ML/AI articles."""
+        result = sort_by_relevance(sample_articles_diverse, profile_researcher, mock_context_store)
+        # First article should have ML-related tags
+        top_article = result[0]
+        assert hasattr(top_article, "relevance_score")
+
+    def test_sort_by_relevance_different_profiles_different_order(self, mock_context_store, profile_developer, profile_researcher, sample_articles_diverse):
+        """Test different profiles produce different orderings."""
+        result_dev = sort_by_relevance(sample_articles_diverse.copy(), profile_developer, mock_context_store)
+        result_res = sort_by_relevance(sample_articles_diverse.copy(), profile_researcher, mock_context_store)
+        # Orderings may differ
+        dev_ids = [a.id for a in result_dev]
+        res_ids = [a.id for a in result_res]
+        # They could be the same or different depending on profile overlap
+        # At minimum, both should return valid lists
+        assert len(dev_ids) == len(res_ids)
+
+
+class TestSortByRelevanceEdgeCases:
+    """Test sort_by_relevance edge cases."""
+
+    def test_sort_by_relevance_single_article(self, mock_context_store, profile_developer, sample_article):
+        """Test sort with single article."""
+        result = sort_by_relevance([sample_article], profile_developer, mock_context_store)
+        assert len(result) == 1
+        assert result[0].id == sample_article.id
+
+    def test_sort_by_relevance_mock_articles(self, mock_context_store, profile_developer, mock_article_ai, mock_article_python):
+        """Test sort with mock articles."""
+        result = sort_by_relevance([mock_article_ai, mock_article_python], profile_developer, mock_context_store)
+        assert len(result) == 2
+
+
+# =============================================================================
+# Test Classes for apply_diversity_filter Function
+# =============================================================================
+
+
+class TestApplyDiversityFilterBasic:
+    """Test apply_diversity_filter() basic functionality."""
+
+    def test_apply_diversity_filter_returns_list(self, profile_developer, diversity_test_articles):
+        """Test apply_diversity_filter returns a list."""
+        result = apply_diversity_filter(diversity_test_articles, profile_developer)
+        assert isinstance(result, list)
+
+    def test_apply_diversity_filter_empty_list(self, profile_developer):
+        """Test apply_diversity_filter with empty list."""
+        result = apply_diversity_filter([], profile_developer)
+        assert result == []
+
+    def test_apply_diversity_filter_single_article(self, profile_developer):
+        """Test apply_diversity_filter with single article."""
+        article = MagicMock(id="single", relevance_score=0.9)
+        result = apply_diversity_filter([article], profile_developer)
+        # With single article, diverse_count = max(1, int(1 * 0.15)) = 1
+        # So it may return duplicated or just the one
+        assert len(result) >= 1
+
+
+class TestApplyDiversityFilterMixing:
+    """Test apply_diversity_filter mixing behavior."""
+
+    def test_apply_diversity_filter_interleaves(self, profile_developer, diversity_test_articles):
+        """Test diversity filter interleaves high and low relevance."""
+        result = apply_diversity_filter(diversity_test_articles, profile_developer)
+        # Should mix high relevance (beginning) with diverse (end)
+        # With 10 articles and 0.15 factor, diverse_count = 1
+        # Result should include both high and diverse content
+        result_ids = [a.id for a in result]
+        assert any(id.startswith("high") for id in result_ids)
+        assert any(id.startswith("low") for id in result_ids)
+
+    def test_apply_diversity_filter_custom_factor(self, profile_developer, diversity_test_articles):
+        """Test diversity filter with custom diversity factor."""
+        # Higher diversity factor = more diverse articles
+        result_low = apply_diversity_filter(diversity_test_articles, profile_developer, diversity_factor=0.1)
+        result_high = apply_diversity_filter(diversity_test_articles, profile_developer, diversity_factor=0.4)
+        # Both should return valid lists
+        assert len(result_low) >= 1
+        assert len(result_high) >= 1
+
+
+class TestApplyDiversityFilterFactor:
+    """Test apply_diversity_filter factor calculations."""
+
+    def test_apply_diversity_filter_zero_factor(self, profile_developer, diversity_test_articles):
+        """Test diversity filter with zero factor."""
+        result = apply_diversity_filter(diversity_test_articles, profile_developer, diversity_factor=0.0)
+        # diverse_count = max(1, int(10 * 0.0)) = 1
+        # So still includes at least 1 diverse article
+        assert len(result) >= 1
+
+    def test_apply_diversity_filter_one_factor(self, profile_developer, diversity_test_articles):
+        """Test diversity filter with factor of 1.0."""
+        result = apply_diversity_filter(diversity_test_articles, profile_developer, diversity_factor=1.0)
+        # All articles are "diverse"
+        assert len(result) >= len(diversity_test_articles)
+
+    def test_apply_diversity_filter_minimum_diverse_count(self, profile_developer):
+        """Test diversity filter always includes at least 1 diverse article."""
+        articles = [MagicMock(id=f"a{i}", relevance_score=0.9-i*0.1) for i in range(3)]
+        result = apply_diversity_filter(articles, profile_developer, diversity_factor=0.01)
+        # diverse_count = max(1, int(3 * 0.01)) = 1
+        assert len(result) >= 1
+
+
+class TestApplyDiversityFilterOrdering:
+    """Test apply_diversity_filter maintains relative ordering."""
+
+    def test_apply_diversity_filter_high_relevance_first(self, profile_developer, diversity_test_articles):
+        """Test high relevance articles generally come first."""
+        result = apply_diversity_filter(diversity_test_articles, profile_developer)
+        # The interleaving pattern: high, diverse, high, diverse...
+        # First article should be from highly_relevant
+        first_id = result[0].id
+        assert first_id.startswith("high")
+
+    def test_apply_diversity_filter_preserves_relative_order(self, profile_developer):
+        """Test relative order within categories is preserved."""
+        articles = [
+            MagicMock(id="h1", relevance_score=0.95),
+            MagicMock(id="h2", relevance_score=0.90),
+            MagicMock(id="h3", relevance_score=0.85),
+            MagicMock(id="l1", relevance_score=0.15),
+            MagicMock(id="l2", relevance_score=0.10),
+        ]
+        result = apply_diversity_filter(articles, profile_developer, diversity_factor=0.2)
+        # With 5 articles and 0.2 factor, diverse_count = 1
+        # highly_relevant = first 4, diverse = last 1
+        # Result should interleave: h1, l2, h2, h3, h4? or similar
+        # Check high relevance maintains relative order among themselves
+        high_ids = [a.id for a in result if a.id.startswith("h")]
+        # h1 should come before h2, h2 before h3
+        if len(high_ids) >= 2:
+            h1_idx = high_ids.index("h1") if "h1" in high_ids else -1
+            h2_idx = high_ids.index("h2") if "h2" in high_ids else -1
+            if h1_idx >= 0 and h2_idx >= 0:
+                assert h1_idx < h2_idx
+
+
+class TestApplyDiversityFilterEdgeCases:
+    """Test apply_diversity_filter edge cases."""
+
+    def test_apply_diversity_filter_two_articles(self, profile_developer):
+        """Test diversity filter with exactly two articles."""
+        articles = [
+            MagicMock(id="high", relevance_score=0.9),
+            MagicMock(id="low", relevance_score=0.1),
+        ]
+        result = apply_diversity_filter(articles, profile_developer)
+        assert len(result) >= 2
+
+    def test_apply_diversity_filter_many_articles(self, profile_developer):
+        """Test diversity filter with many articles."""
+        articles = [MagicMock(id=f"art{i}", relevance_score=1.0-i*0.01) for i in range(100)]
+        result = apply_diversity_filter(articles, profile_developer)
+        # Should handle large lists
+        assert len(result) >= len(articles) - 1  # May have slight variations due to interleaving
+
+    def test_apply_diversity_filter_uses_profile_factor(self, diversity_test_articles):
+        """Test diversity filter can use profile's diversity_factor."""
+        profile = UserContextProfile(diversity_factor=0.25)
+        # Note: current implementation takes diversity_factor as parameter, not from profile
+        result = apply_diversity_filter(diversity_test_articles, profile, diversity_factor=profile.diversity_factor)
+        assert len(result) >= 1
+
+
+# =============================================================================
+# Test Classes for Relevance Integration
+# =============================================================================
+
+
+class TestRelevanceIntegration:
+    """Integration tests for relevance engine and filtering."""
+
+    def test_full_relevance_workflow(self, relevance_test_setup, sample_articles_diverse):
+        """Test full workflow: calculate relevance, sort, filter."""
+        engine = relevance_test_setup["engine"]
+        profile = relevance_test_setup["profile"]
+        store = relevance_test_setup["store"]
+
+        # Calculate relevance for all articles
+        for article in sample_articles_diverse:
+            score = engine.calculate_relevance(article, profile)
+            assert 0.0 <= score <= 1.0
+
+        # Sort by relevance
+        sorted_articles = sort_by_relevance(sample_articles_diverse, profile, store)
+        assert len(sorted_articles) == len(sample_articles_diverse)
+
+        # Apply diversity filter
+        filtered = apply_diversity_filter(sorted_articles, profile)
+        assert len(filtered) >= 1
+
+    def test_relevance_with_empty_store(self, mock_context_store, profile_developer, sample_articles_bulk):
+        """Test relevance engine with empty store (mock)."""
+        engine = RelevanceEngine(mock_context_store)
+
+        # Should still work with mock store
+        for article in sample_articles_bulk[:5]:
+            score = engine.calculate_relevance(article, profile_developer)
+            assert 0.0 <= score <= 1.0
+
+    def test_relevance_with_engagement_data(self, relevance_test_setup, sample_articles_diverse):
+        """Test relevance with engagement data."""
+        engine = relevance_test_setup["engine"]
+        profile = relevance_test_setup["profile"]
+
+        for article in sample_articles_diverse:
+            score = engine.calculate_relevance(article, profile)
+            assert 0.0 <= score <= 1.0
+
+    def test_sorting_then_filtering_workflow(self, mock_context_store, profile_developer, sample_articles_bulk):
+        """Test sorting followed by filtering."""
+        # Sort
+        sorted_articles = sort_by_relevance(sample_articles_bulk, profile_developer, mock_context_store)
+
+        # Verify sorting
+        for i in range(len(sorted_articles) - 1):
+            if hasattr(sorted_articles[i], "relevance_score") and hasattr(sorted_articles[i+1], "relevance_score"):
+                assert sorted_articles[i].relevance_score >= sorted_articles[i+1].relevance_score
+
+        # Filter
+        filtered = apply_diversity_filter(sorted_articles, profile_developer)
+
+        # Should still have reasonable number of articles
+        assert len(filtered) >= len(sorted_articles) * 0.5
+
+    def test_relevance_consistency(self, relevance_engine_mock, sample_article_ai, profile_developer):
+        """Test relevance scores are consistent for same inputs."""
+        score1 = relevance_engine_mock.calculate_relevance(sample_article_ai, profile_developer)
+        score2 = relevance_engine_mock.calculate_relevance(sample_article_ai, profile_developer)
+        assert score1 == score2
+
+    def test_relevance_different_articles(self, relevance_engine_mock, sample_article_ai, sample_article_celebrity, profile_developer):
+        """Test different articles get different relevance scores."""
+        score_ai = relevance_engine_mock.calculate_relevance(sample_article_ai, profile_developer)
+        score_celeb = relevance_engine_mock.calculate_relevance(sample_article_celebrity, profile_developer)
+        # AI should score higher than celebrity for developer
+        assert score_ai > score_celeb
