@@ -5,8 +5,13 @@ An AI-powered RSS feed summarizer with trend prediction. Fetch articles from mul
 ## Features
 
 - **RSS Feed Ingestion**: Fetch and store articles from multiple RSS feeds
-- **Summarization**: Generate concise summaries (simple extractive or LLM-powered)
-- **Trend Detection**: Categorize articles and identify trending topics
+- **AI-Powered Analysis**: Generate summaries, extract insights, detect connections
+- **Embedding-Based Similarity**: Semantic matching using vector embeddings (requires LM Studio or Ollama)
+- **Story Clustering**: Automatically group related articles into stories
+- **Knowledge Extraction**: Build a knowledge base of facts, entities, and relationships
+- **Trend Detection**: Categorize articles using embedding similarity
+- **Signal Tagging**: Classify article quality (primary/secondary sources, factual/opinion, etc.)
+- **Multi-Perspective Synthesis**: See how different sources cover the same story
 - **CLI Interface**: Easy-to-use command-line interface
 
 ## Quick Start
@@ -104,11 +109,17 @@ Or edit `config/feeds.txt` directly.
 | Command | Description |
 |---------|-------------|
 | `rss update` | Main command: fetch, summarize, and display digest |
+| `rss report` | Generate comprehensive intelligence report with stories and insights |
 | `rss setup` | Interactive setup wizard for LLM providers |
 | `rss providers` | List available LLM providers and their status |
 | `rss fetch` | Fetch articles from all configured RSS feeds |
 | `rss summarize` | Generate summaries for unsummarized articles |
 | `rss trends` | Analyze and display trending topics |
+| `rss stories` | View and manage story clusters |
+| `rss knowledge` | Query the knowledge base |
+| `rss perspectives` | Generate multi-perspective synthesis for stories |
+| `rss signals` | View signal tags for articles |
+| `rss context` | Manage personal context and interests |
 | `rss list` | List fetched articles |
 | `rss stats` | Show database statistics |
 | `rss add-feed URL` | Add a new RSS feed |
@@ -168,24 +179,32 @@ rss setup
 ai-rss-summarizer/
 ├── src/
 │   ├── __init__.py
-│   ├── cli.py           # CLI entry point (Typer)
-│   ├── commands.py      # User-facing commands (update, setup)
-│   ├── llm_providers.py # LLM provider abstraction layer
-│   ├── rss.py           # RSS feed fetching
-│   ├── storage.py       # SQLite storage layer
-│   ├── summarizer.py    # Legacy summarization (use llm_providers)
-│   └── trends.py        # Trend detection
+│   ├── cli.py             # CLI entry point (Typer)
+│   ├── cli_*.py           # CLI subcommand modules (context, perspectives, signals, etc.)
+│   ├── commands.py        # User-facing commands (update, setup)
+│   ├── clustering.py      # Story clustering and evolution tracking
+│   ├── embeddings.py      # Embedding service for semantic similarity
+│   ├── embedding_providers.py  # Embedding provider abstraction
+│   ├── emergence.py       # Emergence detection (novel patterns)
+│   ├── knowledge.py       # Knowledge base (facts, entities, relationships)
+│   ├── llm_providers.py   # LLM provider abstraction layer
+│   ├── model_manager.py   # LM Studio model management
+│   ├── perspectives.py    # Multi-perspective synthesis
+│   ├── report.py          # Intelligence report generation
+│   ├── rss.py             # RSS feed fetching
+│   ├── signal_tagger.py   # Signal tagging (source type, factuality)
+│   ├── storage.py         # SQLite storage layer
+│   ├── summarizer.py      # Article summarization
+│   ├── trends.py          # Embedding-based trend detection
+│   └── user_context.py    # Personal context engine
 ├── config/
-│   ├── feeds.txt        # RSS feed URLs
-│   └── llm.json         # LLM provider configuration (generated)
+│   ├── feeds.txt          # RSS feed URLs
+│   └── llm.json           # LLM provider configuration (generated)
 ├── tests/
-│   ├── test_storage.py
-│   ├── test_rss.py
-│   ├── test_summarizer.py
-│   └── test_trends.py
+│   └── test_*.py          # Comprehensive test suite
 ├── pyproject.toml
 ├── requirements.txt
-├── requirements-llm.txt # Optional LLM dependencies
+├── requirements-llm.txt   # Optional LLM dependencies
 └── README.md
 ```
 
@@ -222,7 +241,7 @@ http://feeds.bbci.co.uk/news/rss.xml
 
 ### Trend Categories
 
-Trend categories are defined in `src/trends.py`. Edit `TREND_CATEGORIES` to customize.
+Trend categories are defined in `src/trends.py`. Edit `TREND_CATEGORY_DESCRIPTIONS` to customize. Categories are matched using embedding-based semantic similarity rather than keyword matching.
 
 ## Roadmap
 
@@ -239,15 +258,17 @@ See [Issue #7](https://github.com/bryanpaget/ai-rss-summarizer/issues/7) for the
 - [x] Provider transparency footer
 - [x] Claude Agent SDK integration
 
+### Advanced Features (Complete)
+- [x] Story clustering & evolution tracking
+- [x] Signal tagging system (primary/secondary sources, factual/opinion)
+- [x] Multi-perspective synthesis
+- [x] Personal context engine
+- [x] Emergence detection (novel patterns)
+- [x] Knowledge extraction (facts, entities, relationships)
+- [x] Intelligence report generation
+- [x] Embedding-based semantic similarity
+
 ### Future
-- [ ] Advanced trend analysis (see [docs/TREND_ANALYSIS_FEATURES.md](docs/TREND_ANALYSIS_FEATURES.md))
-  - Story clustering & evolution tracking
-  - Signal tagging system
-  - Perspective synthesis
-  - Personal context engine
-  - Emergence detection
-  - Knowledge extraction
-  - Intelligence briefs
 - [ ] Standalone executable (PyInstaller) - no Python required
 - [ ] FastAPI web interface
 - [ ] Docker containerization
