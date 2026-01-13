@@ -271,7 +271,9 @@ def detect_emerging_trends(
                 pub_str = pub_str.replace("Z", "+00:00")
             pub_time = datetime.fromisoformat(pub_str)
             pub_time = pub_time.replace(tzinfo=None)
-        except (ValueError, TypeError):
+        except (ValueError, TypeError) as e:
+            import sys
+            print(f"Date parsing failed for emergence detection: {e}", file=sys.stderr)
             continue
 
         # Extract terms from article
@@ -422,8 +424,9 @@ def format_emerging_trend(trend: EmergingTrend, storage: Storage) -> str:
                             pub_str = pub_str.replace("Z", "+00:00")
                         pub_time = datetime.fromisoformat(pub_str)
                         date_str = pub_time.strftime("%b %d")
-                    except (ValueError, TypeError):
-                        pass
+                    except (ValueError, TypeError) as e:
+                        import sys
+                        print(f"Date formatting failed for trend display: {e}", file=sys.stderr)
 
                 output.append(f'    - "{title}" ({date_str})')
 

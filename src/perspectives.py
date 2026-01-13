@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from .storage import Storage, Article
+from .constitution import get_constitution_context
 
 
 # Perspective category definitions
@@ -146,7 +147,7 @@ def build_perspective_prompt(category: str, articles: list[Article]) -> str:
         source = article.feed_url.split('/')[2] if '/' in article.feed_url else article.feed_url
         text = f"[Article {i} - {source}]\n"
         text += f"Title: {article.title}\n"
-        text += f"Content: {(article.content or '')[:500]}...\n"
+        text += f"Content: {article.content or ''}\n"
         article_texts.append(text)
 
     articles_section = "\n\n".join(article_texts)
@@ -337,7 +338,15 @@ Look for:
 This requires the articles to reference past predictions.""",
     }
 
-    return prompts.get(category, f"Analyze these articles from a {category} perspective:\n\n{articles_section}")
+    # Get user's analysis principles if configured
+    constitution_context = get_constitution_context()
+
+    prompt = prompts.get(category, f"Analyze these articles from a {category} perspective:\n\n{articles_section}")
+
+    # Prepend constitution context if available
+    if constitution_context:
+        return constitution_context + prompt
+    return prompt
 
 
 def estimate_confidence(
@@ -386,8 +395,9 @@ def estimate_confidence(
 
                 if now - pub_time < timedelta(hours=24):
                     recent_count += 1
-            except (ValueError, TypeError):
-                pass
+            except (ValueError, TypeError) as e:
+                import sys
+                print(f"Date parsing failed for perspective confidence: {e}", file=sys.stderr)
 
     if recent_count >= len(articles) * 0.7:
         score += 0.2

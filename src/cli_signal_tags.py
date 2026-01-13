@@ -11,8 +11,48 @@ from .storage import Storage
 app = typer.Typer(
     name="tag",
     help="Signal tag management commands",
+    invoke_without_command=True,
 )
 console = Console(force_terminal=True, legacy_windows=True)
+
+
+@app.callback(invoke_without_command=True)
+def tag_main(ctx: typer.Context):
+    """
+    Manage signal tags for articles.
+
+    Signal tags identify article characteristics like:
+    - Content type: breaking, analysis, opinion, how-to
+    - Tone: urgent, neutral, positive, negative
+    - Source type: official, expert, user-generated
+    """
+    if ctx.invoked_subcommand is None:
+        # No subcommand provided - show interactive help
+        console.print()
+        console.print(Panel("[bold]Signal Tag Management[/bold]", style="blue"))
+        console.print()
+        console.print("Signal tags identify article characteristics like content type,")
+        console.print("tone, and source credibility.")
+        console.print()
+        console.print("[bold]Commands:[/bold]")
+        console.print()
+
+        table = Table(show_header=False, box=None, padding=(0, 2))
+        table.add_column("Command", style="cyan")
+        table.add_column("Description")
+
+        table.add_row("articles", "Assign signal tags to articles")
+        table.add_row("stats", "Show tag distribution statistics")
+        table.add_row("filter", "Filter articles by tags")
+
+        console.print(table)
+        console.print()
+        console.print("[dim]Examples:[/dim]")
+        console.print("  rss tag articles           [dim]# Tag untagged articles[/dim]")
+        console.print("  rss tag articles --llm     [dim]# Use LLM for better accuracy[/dim]")
+        console.print("  rss tag filter -i breaking [dim]# Show breaking news[/dim]")
+        console.print("  rss tag stats              [dim]# View tag distribution[/dim]")
+        console.print()
 
 
 @app.command("articles")

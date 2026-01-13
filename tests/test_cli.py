@@ -4187,7 +4187,8 @@ class TestExtractKnowledgeErrorHandling:
              patch("src.cli.KnowledgeBase") as mock_kb, \
              patch("src.cli.extract_insights_from_article") as mock_extract, \
              patch("src.cli.extract_triples_from_article") as mock_triples, \
-             patch("src.cli.extract_entity_relationships_from_article") as mock_entity_rels:
+             patch("src.cli.extract_entity_relationships_from_article") as mock_entity_rels, \
+             patch("src.cli.detect_connections") as mock_detect:
             mock_setup.return_value = None
             mock_provider = MagicMock()
             mock_llm.return_value = mock_provider
@@ -4205,6 +4206,7 @@ class TestExtractKnowledgeErrorHandling:
             mock_extract.side_effect = [Exception("Failed"), [MagicMock()]]
             mock_triples.return_value = []
             mock_entity_rels.return_value = []
+            mock_detect.return_value = []  # No relationships detected
 
             result = cli_runner.invoke(app, ["extract-knowledge"])
             # Should still complete and show results

@@ -148,11 +148,8 @@ def add_perspective_commands(app: typer.Typer):
                         conf_bar = "█" * conf_width + "░" * (8 - conf_width)
 
                         console.print(f"[cyan][{cat_info['name']}][/cyan] {conf_bar}")
-                        # Show first 200 chars
-                        content = perspective.content[:200]
-                        if len(perspective.content) > 200:
-                            content += "..."
-                        console.print(f"[dim]{content}[/dim]")
+                        # Full content - wraps naturally
+                        console.print(f"[dim]{perspective.content}[/dim]")
 
                 console.print(f"[dim]View all: rss perspectives {cluster['id']}[/dim]")
 

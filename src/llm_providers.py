@@ -19,8 +19,9 @@ class ProviderType(str, Enum):
     OPENAI = "openai"  # OpenAI API
     OPENAI_COMPATIBLE = "openai-compatible"  # Any OpenAI-compatible endpoint
     TRANSFORMERS = "transformers"  # HuggingFace transformers (local)
-    CLAUDE = "claude"  # Claude via basic SDK (requires API key)
-    CLAUDE_CODE = "claude-code"  # Claude via Claude Code CLI (uses Claude Code auth)
+    CLAUDE = "claude"  # Claude via basic SDK (requires API key) - LAST RESORT
+    CLAUDE_AGENT_SDK = "claude-agent-sdk"  # Claude Agent SDK (uses Claude Code auth, Python native)
+    CLAUDE_CODE = "claude-code"  # Claude via Claude Code CLI subprocess (uses Claude Code auth)
     GEMINI = "gemini"  # Google Gemini API
     GEMINI_CLI = "gemini-cli"  # Gemini via CLI (uses stored OAuth)
     CODEX_CLI = "codex-cli"  # OpenAI Codex CLI (uses ChatGPT subscription auth)
@@ -213,8 +214,12 @@ class OpenAICompatibleProvider(LLMProvider):
                 models = data.get("data", [])
                 if models:
                     return models[0].get("id", "default")
-        except Exception:
-            pass
+        except (httpx.RequestError, httpx.TimeoutException) as e:
+            import sys
+            print(f"Server unreachable when discovering models: {e}", file=sys.stderr)
+        except Exception as e:
+            import sys
+            print(f"Error discovering models: {e}", file=sys.stderr)
 
         return "default"
 
@@ -404,7 +409,9 @@ class LMStudioProvider(OpenAICompatibleProvider):
                 return False
 
             return True
-        except Exception:
+        except Exception as e:
+            import sys
+            print(f"Warning: Auto-load model failed: {e}", file=sys.stderr)
             return False
 
     def _check_post_load_headroom(self, loaded_model: str) -> bool:
@@ -434,14 +441,16 @@ class LMStudioProvider(OpenAICompatibleProvider):
 
             if available_mb < MIN_HEADROOM_MB:
                 # System is resource-constrained - unload and return False
+                import sys
+                print(f"Warning: Low memory ({available_mb}MB < {MIN_HEADROOM_MB}MB required), unloading model", file=sys.stderr)
                 try:
                     subprocess.run(
                         ["lms", "unload", "--yes"],
                         capture_output=True,
                         timeout=30,
                     )
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(f"Warning: Failed to unload model: {e}", file=sys.stderr)
                 return False
 
             return True
@@ -515,6 +524,16 @@ class LMStudioProvider(OpenAICompatibleProvider):
 
     def _make_request(self, prompt: str, max_tokens: int, is_summarize: bool = False) -> str:
         """Make a request with auto-load retry on 'No models loaded' error."""
+        # Ensure text model is loaded (handles switching from embedding model)
+        try:
+            from .model_manager import ensure_text_model
+            ensure_text_model()
+        except ImportError:
+            pass  # model_manager not available, use existing auto-load
+        except Exception as e:
+            import sys
+            print(f"Warning: model_manager.ensure_text_model() failed: {e}", file=sys.stderr)
+
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.api_key}",
@@ -547,8 +566,10 @@ class LMStudioProvider(OpenAICompatibleProvider):
                         if self._auto_load_model():
                             # Retry the request
                             return self._make_request(prompt, max_tokens, is_summarize)
-            except Exception:
-                pass
+            except (json.JSONDecodeError, KeyError, TypeError) as e:
+                # Could not parse error response - log and continue to raise_for_status
+                import sys
+                print(f"Warning: Could not parse LM Studio error response: {e}", file=sys.stderr)
 
         response.raise_for_status()
 
@@ -712,6 +733,9 @@ def get_provider(config: Optional[LLMConfig] = None) -> LLMProvider:
     elif config.provider == ProviderType.CLAUDE_CODE:
         return ClaudeCodeProvider(model=config.model or "sonnet")
 
+    elif config.provider == ProviderType.CLAUDE_AGENT_SDK:
+        return ClaudeAgentSDKProvider(model=config.model or "sonnet")
+
     elif config.provider == ProviderType.GEMINI:
         return GeminiProvider(model=config.model or "gemini-1.5-flash")
 
@@ -774,6 +798,12 @@ def list_providers() -> list[dict]:
             "name": "Claude Code",
             "available": ClaudeCodeProvider().is_available(),
             "description": "Uses Claude Code CLI auth (no API key needed)",
+        },
+        {
+            "type": ProviderType.CLAUDE_AGENT_SDK,
+            "name": "Claude Agent SDK",
+            "available": ClaudeAgentSDKProvider().is_available(),
+            "description": "Python native SDK using Claude Code auth (no API key needed)",
         },
         {
             "type": ProviderType.GEMINI,
@@ -951,6 +981,108 @@ class ClaudeCodeProvider(LLMProvider):
             self._record_usage(original_text, summary, self._model)
 
         return summary
+
+
+class ClaudeAgentSDKProvider(LLMProvider):
+    """
+    Claude provider using the Claude Agent SDK.
+    Uses your existing Claude CLI authentication (no API key needed).
+
+    This is the preferred way to use Claude without an API key - uses the
+    claude-agent-sdk Python package directly rather than subprocess calls.
+
+    Requires:
+    - pip install claude-agent-sdk
+    - Claude CLI authenticated (run 'claude' and log in)
+    """
+
+    def __init__(self, model: str = "sonnet"):
+        super().__init__()
+        self._model = model
+
+    @property
+    def name(self) -> str:
+        return "Claude Agent SDK"
+
+    @property
+    def model_name(self) -> str:
+        return self._model
+
+    def is_available(self) -> bool:
+        """Check if Claude Agent SDK is available and authenticated."""
+        try:
+            from claude_agent_sdk import query  # noqa
+            # SDK is installed - check if CLI is authenticated
+            import shutil
+            from pathlib import Path
+
+            # Check if claude CLI exists
+            if not shutil.which("claude"):
+                return False
+
+            # Check for auth config
+            config_path = Path.home() / ".claude" / "config.json"
+            return config_path.exists()
+        except ImportError:
+            return False
+
+    def _run_async(self, coro):
+        """Run async coroutine synchronously."""
+        import asyncio
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop and loop.is_running():
+            # We're inside an async context - need new thread
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, coro)
+                return future.result()
+        else:
+            return asyncio.run(coro)
+
+    async def _query_claude(self, prompt: str) -> str:
+        """Query Claude using the Agent SDK."""
+        from claude_agent_sdk import query, AssistantMessage, TextBlock
+
+        result_text = ""
+        async for message in query(prompt=prompt):
+            if isinstance(message, AssistantMessage):
+                for block in message.content:
+                    if isinstance(block, TextBlock):
+                        result_text += block.text
+
+        return result_text
+
+    def summarize(self, text: str, max_length: int = 150) -> str:
+        """Generate summary using Claude Agent SDK."""
+        if not text:
+            return ""
+
+        if not self.is_available():
+            raise RuntimeError("Claude Agent SDK not available")
+
+        original_text = text
+
+        prompt = f"Summarize this in {max_length} characters or less. Return only the summary:\n\n{text}"
+
+        summary = self._run_async(self._query_claude(prompt))
+        summary = summary.strip()
+
+        self._record_usage(original_text, summary, self._model)
+
+        return summary
+
+    def generate(self, prompt: str, max_tokens: int = 500) -> str:
+        """Generate response using Claude Agent SDK."""
+        if not self.is_available():
+            raise RuntimeError("Claude Agent SDK not available")
+
+        response = self._run_async(self._query_claude(prompt))
+        return response.strip()
 
 
 class GeminiProvider(LLMProvider):
@@ -1258,9 +1390,10 @@ class OpenAIAgentsProvider(LLMProvider):
             # Inside async context - use nest_asyncio to allow nested loop
             import nest_asyncio
             nest_asyncio.apply()
-        except RuntimeError:
-            # No running loop, sync context - proceed normally
-            pass
+        except RuntimeError as e:
+            # No running loop, sync context - this is normal for sync callers
+            import sys
+            print(f"Running in sync context (no event loop): {e}", file=sys.stderr)
 
         result = Runner.run_sync(agent, text)
         summary = str(result.final_output).strip()
@@ -1290,10 +1423,13 @@ def auto_detect_provider() -> Optional[LLMProvider]:
     1. LM Studio (if running locally - free, fast)
     2. Ollama (if running locally - free)
     3. Gemini (if API key set - has free tier)
-    4. Claude (if SDK installed and authenticated)
-    5. OpenAI (if API key set)
-    6. Transformers (if installed - can be slow first run)
-    7. None (user needs to set up a provider)
+    4. Grok (if API key set)
+    5. Claude Agent SDK (Python native, uses Claude Code auth)
+    6. Claude Code CLI (subprocess, uses Claude Code auth)
+    7. OpenAI Agents (if API key set)
+    8. Transformers (if installed - can be slow first run)
+    9. Claude API (LAST RESORT - requires expensive ANTHROPIC_API_KEY)
+    10. None (user needs to set up a provider)
     """
     # Check local providers first (free, no API costs)
     lm_studio = LMStudioProvider()
@@ -1314,25 +1450,31 @@ def auto_detect_provider() -> Optional[LLMProvider]:
     if grok.is_available():
         return grok
 
-    # Check Claude Agent SDK first (can use Claude Code auth, no API key needed)
+    # Check Claude Agent SDK first (Python native, uses Claude Code auth, no API key needed)
+    claude_agent_sdk = ClaudeAgentSDKProvider()
+    if claude_agent_sdk.is_available():
+        return claude_agent_sdk
+
+    # Check Claude Code CLI (subprocess, uses Claude Code auth, no API key needed)
     claude_code = ClaudeCodeProvider()
     if claude_code.is_available():
         return claude_code
-
-    # Check Claude API (requires ANTHROPIC_API_KEY)
-    claude = ClaudeProvider()
-    if claude.is_available():
-        return claude
 
     # Check OpenAI Agents SDK
     openai_agents = OpenAIAgentsProvider(model="gpt-4o-mini")
     if openai_agents.is_available():
         return openai_agents
 
-    # Check transformers (last because can be slow)
+    # Check transformers (can be slow on first run)
     transformers = TransformersProvider()
     if transformers.is_available():
         return transformers
+
+    # LAST RESORT: Claude API with ANTHROPIC_API_KEY
+    # Only use if nothing else is available - API key is expensive
+    claude = ClaudeProvider()
+    if claude.is_available():
+        return claude
 
     return None
 

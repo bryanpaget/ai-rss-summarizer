@@ -1797,21 +1797,21 @@ class TestBuildPerspectivePromptContentTruncation:
         """Test that very long content is truncated."""
         prompt = build_perspective_prompt('consensus', [sample_article_very_long])
         # Content should be truncated to 500 chars + "..."
-        # The full content would make the prompt very long
+        # Full content should be preserved without truncation
 
         # Count how many times the repeated phrase appears
         repeated_phrase = "This is a very detailed article about AI technology. "
         original_count = sample_article_very_long.content.count(repeated_phrase)
         prompt_count = prompt.count(repeated_phrase)
 
-        # Prompt should have fewer occurrences due to truncation
-        assert prompt_count < original_count
+        # Prompt should have same occurrences - no truncation
+        assert prompt_count == original_count
 
-    def test_adds_ellipsis_after_truncation(self, sample_article_very_long):
-        """Test that truncated content ends with ellipsis."""
+    def test_full_content_preserved(self, sample_article_very_long):
+        """Test that full content is preserved without truncation."""
         prompt = build_perspective_prompt('consensus', [sample_article_very_long])
-        # The content section should include "..."
-        assert '...' in prompt
+        # The full content should be in the prompt
+        assert sample_article_very_long.content in prompt
 
     def test_short_content_not_truncated(self):
         """Test that short content is not truncated."""
@@ -4073,9 +4073,9 @@ class TestMultiSourcePromptConstruction:
         call_args = mock_llm_provider.summarize.call_args
         prompt = call_args[0][0]
 
-        # Long content should be truncated (content[:500] + "...")
-        # The full long content is 24500 chars, should not appear in prompt
-        assert len(prompt) < 10000  # Reasonable limit
+        # Full content should be preserved - no arbitrary truncation
+        # The prompt will be large for long articles, which is correct
+        assert len(prompt) > 10000  # Full content preserved
 
     def test_prompt_separates_articles_clearly(
         self, sample_article_tech, sample_article_business, sample_article_mainstream, mock_llm_provider

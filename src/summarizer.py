@@ -137,8 +137,8 @@ def summarize_articles(
             from .signal_tagger import SignalTagger
             tagger = SignalTagger(use_llm=use_llm)
         except Exception as e:
-            # If tagging fails to initialize, continue without it
-            pass
+            import sys
+            print(f"Tagger initialization failed, continuing without tagging: {e}", file=sys.stderr)
 
     stats = {"processed": 0, "tagged": 0, "errors": []}
 

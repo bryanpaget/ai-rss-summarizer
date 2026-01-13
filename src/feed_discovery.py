@@ -134,8 +134,9 @@ def discover_feed(domain: str, timeout: float = 10.0) -> tuple[bool, Optional[Fe
                 success, info, error = validate_feed(feed_url, timeout)
                 if success:
                     return True, info, ""
-    except Exception:
-        pass
+    except Exception as e:
+        import sys
+        print(f"Feed discovery failed for {domain}: {e}", file=sys.stderr)
 
     # Try common paths
     for path in common_paths:

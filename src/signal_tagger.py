@@ -6,6 +6,7 @@ from dataclasses import dataclass, asdict
 from typing import Optional
 
 from .storage import Article
+from .constitution import get_constitution_context
 
 
 # Known satire domains
@@ -27,6 +28,7 @@ class SignalTags:
     reasoning: list[str]
     tone: list[str]
     actionability: list[str]
+    is_ad: bool = False
 
     def to_json(self) -> str:
         """Serialize to JSON string for storage."""
@@ -36,6 +38,9 @@ class SignalTags:
     def from_json(cls, json_str: str) -> "SignalTags":
         """Deserialize from JSON string."""
         data = json.loads(json_str)
+        # Handle legacy data without is_ad field
+        if "is_ad" not in data:
+            data["is_ad"] = False
         return cls(**data)
 
     def to_display_string(self) -> str:
@@ -148,12 +153,16 @@ class SignalTagger:
         # Detect actionability
         actionability = self._detect_actionability(combined_text)
 
+        # Detect if this is an ad/promotional content
+        is_ad = self._detect_is_ad(article.title.lower(), combined_text)
+
         return SignalTags(
             source_type=source_type,
             evidence=evidence,
             reasoning=reasoning,
             tone=tone,
             actionability=actionability,
+            is_ad=is_ad,
         )
 
     def _detect_source_type(self, article: Article, text: str) -> list[str]:
@@ -206,7 +215,7 @@ class SignalTagger:
         if not tags:
             tags.append("secondary")
 
-        return tags[:2]  # Limit to 2 tags
+        return tags
 
     def _detect_evidence(self, text: str) -> list[str]:
         """Detect evidence handling quality."""
@@ -248,7 +257,7 @@ class SignalTagger:
         if not tags:
             tags.append("single-source")
 
-        return tags[:2]
+        return tags
 
     def _detect_reasoning(self, text: str) -> list[str]:
         """Detect reasoning quality."""
@@ -279,7 +288,7 @@ class SignalTagger:
         if not tags:
             tags.append("logical")
 
-        return tags[:2]
+        return tags
 
     def _detect_tone(self, text: str) -> list[str]:
         """Detect tone and style."""
@@ -342,7 +351,7 @@ class SignalTagger:
         if not tags:
             tags.append("factual")
 
-        return tags[:2]
+        return tags
 
     def _detect_actionability(self, text: str) -> list[str]:
         """Detect actionability level."""
@@ -367,6 +376,43 @@ class SignalTagger:
         # Default to awareness
         return ["awareness"]
 
+    def _detect_is_ad(self, title: str, text: str) -> bool:
+        """Detect if content is advertising/promotional."""
+        # Product roundup patterns (common ad formats)
+        ad_patterns = [
+            r'\bbest\s+\d*\s*(?:of\s+\d+\s*)?(?:baby|kid|pet|home|kitchen|outdoor|tech|gadget)',
+            r'\btop\s+\d+\s+(?:best\s+)?(?:products?|picks?|choices?|options?)',
+            r'\bbest\s+(?:gear|products?|items?|picks?|buys?)\s+(?:for|of|in)',
+            r'\b(?:buyer|buying|gift)\s*(?:\'s)?\s*guide',
+            r'\b(?:stroller|crib|bassinet|car\s*seat|baby\s*monitor|high\s*chair)s?\s*(?:review|guide|best)',
+            r'\b(?:mattress|furniture|appliance)s?\s*(?:review|guide|best)',
+            r'\bwe\s*(?:tested|reviewed|tried)\s*\d+\s+(?:products?|items?)',
+            # Discount/promo patterns
+            r'\b\d{1,2}%\s*off\b',
+            r'\bpromo\s*code',
+            r'\bcoupon',
+            r'\bdiscount\s*code',
+            r'\bflash\s*sale',
+            r'\bdeal\s*of\s*the\s*day',
+            r'\blimited\s*time\s*offer',
+            r'\bsponsored\s*(?:post|content|article)',
+            r'\baffiliate',
+        ]
+
+        # Check title first (stronger signal)
+        for pattern in ad_patterns:
+            if re.search(pattern, title, re.IGNORECASE):
+                return True
+
+        # Check for multiple ad signals in content
+        ad_signals = 0
+        for pattern in ad_patterns:
+            if re.search(pattern, text, re.IGNORECASE):
+                ad_signals += 1
+
+        # Need multiple signals in content to flag as ad
+        return ad_signals >= 2
+
     def _tag_with_llm(self, article: Article) -> SignalTags:
         """
         Use LLM for more accurate, context-aware tagging.
@@ -384,13 +430,13 @@ class SignalTagger:
 
     def _build_llm_prompt(self, article: Article) -> str:
         """Build prompt for LLM tagging."""
-        # Truncate content to avoid token limits
-        content = article.content[:2000]
+        # Get user's analysis principles if configured
+        constitution_context = get_constitution_context()
 
-        return f"""Analyze this article and assign appropriate tags from each category.
+        return f"""{constitution_context}Analyze this article and assign appropriate tags from each category.
 
 Article Title: {article.title}
-Article Content: {content}
+Article Content: {article.content}
 
 Tag Categories:
 - Source Type: primary, secondary, aggregator, press-release, speculative, satirical
@@ -398,6 +444,9 @@ Tag Categories:
 - Reasoning: logical, non-sequitur, cherry-picked, balanced
 - Tone: factual, analytical, opinion, sensational, spicy, unhinged
 - Actionability: actionable, awareness, noise
+
+Also determine if this is advertising/promotional content:
+- is_ad: true if this is a product roundup, buying guide, sponsored content, affiliate content, or promotional material (e.g. "Best Baby Gear 2024", "Top 10 Products", buyer's guides). false if it's genuine news/analysis.
 
 Guidelines:
 - Assign 1-2 tags per category that best describe the article
@@ -410,7 +459,8 @@ Return ONLY a JSON object in this exact format (no markdown, no explanation):
   "evidence": ["tag1"],
   "reasoning": ["tag1"],
   "tone": ["tag1"],
-  "actionability": ["tag1"]
+  "actionability": ["tag1"],
+  "is_ad": false
 }}"""
 
     def _call_llm(self, prompt: str) -> str:
@@ -480,6 +530,7 @@ Return ONLY a JSON object in this exact format (no markdown, no explanation):
             reasoning=data.get("reasoning", ["logical"]),
             tone=data.get("tone", ["factual"]),
             actionability=data.get("actionability", ["awareness"]),
+            is_ad=data.get("is_ad", False),
         )
 
 
@@ -509,8 +560,8 @@ def tag_articles_batch(
             tags = tagger.tag_article(article)
             results[article.id] = tags
         except Exception as e:
-            if show_progress:
-                print(f"  Error: {e}")
+            import sys
+            print(f"Error tagging article '{article.title[:40]}': {e}", file=sys.stderr)
             # Store empty tags on error
             results[article.id] = SignalTags(
                 source_type=["secondary"],
@@ -518,6 +569,7 @@ def tag_articles_batch(
                 reasoning=["logical"],
                 tone=["factual"],
                 actionability=["awareness"],
+                is_ad=False,
             )
 
     return results

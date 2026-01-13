@@ -20,10 +20,15 @@ from .knowledge import (
     extract_triples_from_article,
     extract_entity_relationships_from_article,
     detect_connections,
+    format_relationship,
     query_knowledge_base,
 )
 from .cli_perspectives import add_perspective_commands
+from .cli_constitution import add_constitution_commands
 from .cli_signal_tags import app as signal_tags_app
+from .cli_schedule import app as schedule_app
+from .cli_context import app as context_app
+from .cli_stories import app as stories_app
 
 app = typer.Typer(
     name="rss",
@@ -36,8 +41,20 @@ console = Console(force_terminal=True, legacy_windows=True)
 # Register perspective commands (perspectives, perspective-config, cluster-stories)
 add_perspective_commands(app)
 
+# Register constitution commands (constitution, constitution-create)
+add_constitution_commands(app)
+
 # Register signal tagging commands as subcommand group
 app.add_typer(signal_tags_app, name="tag", help="Signal tag management commands")
+
+# Register schedule commands as subcommand group
+app.add_typer(schedule_app, name="schedule", help="Background fetch scheduling")
+
+# Register context commands as subcommand group
+app.add_typer(context_app, name="context", help="User context management")
+
+# Register stories commands as subcommand group
+app.add_typer(stories_app, name="stories", help="Story management commands")
 
 
 def is_setup_complete() -> bool:
@@ -440,6 +457,54 @@ def update(
 
 
 @app.command()
+def report(
+    limit: int = typer.Option(
+        20,
+        "--limit", "-n",
+        help="Maximum number of articles to process",
+    ),
+    skip_summarized: bool = typer.Option(
+        True,
+        "--skip-summarized/--reprocess",
+        help="Skip already-summarized articles",
+    ),
+    db_path: str = typer.Option(
+        "articles.db",
+        "--db", "-d",
+        help="Path to database file",
+    ),
+    kb_path: str = typer.Option(
+        "knowledge.db",
+        "--kb", "-k",
+        help="Path to knowledge database",
+    ),
+):
+    """
+    Generate a comprehensive report with live progress.
+
+    This is the full LLM-powered analysis workflow. Watch as each article
+    is processed - summaries generated, knowledge extracted, connections found.
+
+    The live display shows you what's happening in real-time, like watching
+    over someone's shoulder as they read and analyze the news.
+
+    Examples:
+        rss report              # Process up to 20 articles
+        rss report --limit 50   # Process more articles
+        rss report --reprocess  # Re-analyze already-summarized articles
+    """
+    require_setup()
+    from .report import generate_report
+
+    generate_report(
+        limit=limit,
+        skip_summarized=skip_summarized,
+        db_path=db_path,
+        kb_path=kb_path,
+    )
+
+
+@app.command()
 def setup():
     """
     Set up the RSS summarizer with an LLM provider.
@@ -489,8 +554,8 @@ def discover(
     # Use the LLM to suggest feeds
     prompt = f"""Find RSS feeds for someone interested in: {query}
 
-Return a list of 5-10 real, working RSS feed URLs with their descriptions.
-Focus on well-known, reliable sources.
+Return real, working RSS feed URLs with their descriptions.
+Focus on well-known, reliable sources. Include as many relevant feeds as you can identify.
 
 Format each as:
 - [Source Name]: [URL]
@@ -586,27 +651,34 @@ def help_cmd(
     console.print("[bold]Main Commands:[/bold]" + ("" if setup_done else " [dim](requires setup)[/dim]"))
     if setup_done:
         console.print("  update      Check what's new in your feeds")
+        console.print("  report      Full analysis with live progress display")
         console.print("  discover    Find new feeds based on interests")
         console.print("  trends      Analyze trending topics")
     else:
         console.print("  [dim]update      Check what's new in your feeds[/dim]")
+        console.print("  [dim]report      Full analysis with live progress display[/dim]")
         console.print("  [dim]discover    Find new feeds based on interests[/dim]")
         console.print("  [dim]trends      Analyze trending topics[/dim]")
     console.print()
-    
+
     console.print("[bold]Info Commands:[/bold]")
     console.print("  list        List fetched articles")
     console.print("  stats       Show database statistics")
     console.print("  help        Show this help")
     console.print()
 
+    console.print("[bold]Automation:[/bold]")
+    console.print("  schedule enable   Set up automatic background fetching")
+    console.print("  schedule disable  Turn off automatic fetching")
+    console.print("  schedule status   Check current schedule")
+    console.print()
+
     console.print("[bold]Advanced Analysis:[/bold]")
     console.print("  perspectives      View multi-source perspectives on stories")
     console.print("  cluster-stories   Group articles into story clusters")
     console.print("  emerging          Detect emerging trends early")
-    console.print("  tag articles      Assign signal tags to articles")
-    console.print("  tag filter        Filter articles by tags")
-    console.print("  tag stats         Show tag distribution")
+    console.print("  tag               Signal tag management (articles, filter, stats)")
+    console.print("  context           User context management (add, list, remove)")
 
 
 @app.command()
@@ -683,13 +755,13 @@ def extract_knowledge(
                 extracted_count += 1
                 total_insights += len(insights)
 
-                # Detect connections
+                # Detect connections between insights
                 for insight in insights:
                     relationships = detect_connections(insight, kb, provider)
                     if relationships:
-                        console.print(
-                            f"  [green]Found {len(relationships)} connections[/green]"
-                        )
+                        for rel in relationships:
+                            formatted = format_relationship(rel, kb)
+                            console.print(f"  [green]→ {formatted}[/green]")
 
             # Extract knowledge graph triples
             triples = extract_triples_from_article(article, provider, kb)

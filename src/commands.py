@@ -10,7 +10,7 @@ from rich.markdown import Markdown
 
 from .storage import Storage
 from .rss import fetch_all_feeds, load_feeds
-from .trends import analyze_article, TREND_CATEGORIES
+from .trends import analyze_article
 from .llm_providers import get_best_provider, get_setup_instructions
 from .user_context import UserContextStore, RelevanceEngine, sort_by_relevance
 from .signal_tagger import SignalTagger
@@ -24,6 +24,7 @@ from .knowledge import (
     extract_triples_from_article,
     extract_entity_relationships_from_article,
     detect_connections,
+    format_relationship,
 )
 
 console = Console(force_terminal=True, legacy_windows=True)
@@ -87,7 +88,8 @@ def update(
         try:
             context_store = UserContextStore(db_path=db_path)
             user_profile = context_store.load_profile()
-        except Exception:
+        except Exception as e:
+            console.print(f"[yellow]Warning: Could not load user context: {e}[/yellow]")
             use_context = False
 
     # =========================================================================
@@ -105,10 +107,13 @@ def update(
         stats["fetched"] += result["fetched"]
         stats["new"] += result["new"]
 
+    # Calculate already existing
+    already_existing = stats["fetched"] - stats["new"]
+
     if stats["new"] == 0 and not show_all:
-        console.print(f"[dim]No new articles. Analyzing {limit} recent instead.[/dim]")
+        console.print(f"[dim]No new articles ({already_existing} already in database). Analyzing {limit} recent instead.[/dim]")
     else:
-        console.print(f"[green]Found {stats['new']} new articles[/green]")
+        console.print(f"[green]Found {stats['new']} new articles[/green] [dim]({already_existing} already in database)[/dim]")
 
     # =========================================================================
     # STEP 2: Process articles (summarize, tag, extract knowledge)
@@ -126,8 +131,9 @@ def update(
                 article.summary = provider.summarize(article.content)
                 storage.update_summary(article.id, article.summary)
                 stats["summarized"] += 1
-            except Exception:
-                pass
+            except Exception as e:
+                console.print(f"[red]Error summarizing '{article.title[:40]}': {e}[/red]")
+                stats["errors"] = stats.get("errors", 0) + 1
 
         # Tag with signals if needed
         if not article.signal_tags:
@@ -136,8 +142,9 @@ def update(
                 storage.update_signal_tags(article.id, tags.to_json())
                 article.signal_tags = tags.to_json()
                 stats["tagged"] += 1
-            except Exception:
-                pass
+            except Exception as e:
+                console.print(f"[red]Error tagging '{article.title[:40]}': {e}[/red]")
+                stats["errors"] = stats.get("errors", 0) + 1
 
         # Analyze trends if needed
         if not article.trend_tags:
@@ -150,8 +157,15 @@ def update(
             insights = extract_insights_from_article(article, provider, kb)
             if insights:
                 stats["insights"] += len(insights)
+
+                # Detect connections between insights
                 for insight in insights:
-                    detect_connections(insight, kb, provider)
+                    relationships = detect_connections(insight, kb, provider)
+                    if relationships:
+                        stats["connections"] = stats.get("connections", 0) + len(relationships)
+                        for rel in relationships:
+                            formatted = format_relationship(rel, kb)
+                            console.print(f"  [green]-> {formatted}[/green]")
 
             # Extract knowledge graph triples
             triples = extract_triples_from_article(article, provider, kb)
@@ -162,8 +176,9 @@ def update(
             entity_rels = extract_entity_relationships_from_article(article, provider, kb)
             if entity_rels:
                 stats["entity_relationships"] = stats.get("entity_relationships", 0) + len(entity_rels)
-        except Exception:
-            pass
+        except Exception as e:
+            console.print(f"[red]Error extracting knowledge from '{article.title[:40]}': {e}[/red]")
+            stats["errors"] = stats.get("errors", 0) + 1
 
     # =========================================================================
     # STEP 3: Cluster into stories
@@ -173,8 +188,9 @@ def update(
         cluster_stats = batch_process_articles(articles, provider, storage)
         stats["clustered"] = cluster_stats.get("processed", 0)
         stats["stories"] = cluster_stats.get("stories_created", 0)
-    except Exception:
-        pass
+    except Exception as e:
+        console.print(f"[red]Error clustering articles: {e}[/red]")
+        stats["errors"] = stats.get("errors", 0) + 1
 
     # =========================================================================
     # STEP 4: Get stories to display
@@ -218,8 +234,8 @@ def update(
                 storage,
                 provider
             )
-        except Exception:
-            pass
+        except Exception as e:
+            console.print(f"[yellow]Warning: Could not synthesize perspectives for '{story['title'][:30]}': {e}[/yellow]")
 
         story_data.append({
             'story': story,
@@ -233,8 +249,8 @@ def update(
     emerging = []
     try:
         emerging = detect_emerging_trends(storage, limit=100, min_confidence="Medium")[:5]
-    except Exception:
-        pass
+    except Exception as e:
+        console.print(f"[yellow]Warning: Could not detect emerging trends: {e}[/yellow]")
 
     # =========================================================================
     # STEP 7: Display everything
@@ -294,8 +310,9 @@ def _display_full_digest(
                     all_tags.extend(tag_list)
                 if all_tags:
                     console.print(f"   [dim]Signals: {', '.join(all_tags[:4])}[/dim]")
-            except Exception:
-                pass
+            except (json.JSONDecodeError, TypeError, AttributeError) as e:
+                # Malformed signal tags - show warning but don't block display
+                console.print(f"   [dim red]Malformed signal tags: {e}[/dim red]")
 
         # Show perspectives
         if perspectives:
@@ -319,7 +336,7 @@ def _display_full_digest(
         console.print("[bold magenta]Emerging Trends[/bold magenta]")
         console.print("[dim]Terms gaining traction before mainstream[/dim]")
         for trend in emerging[:3]:
-            console.print(f"  • {trend.term} [dim]({trend.confidence} confidence)[/dim]")
+            console.print(f"  * {trend.term} [dim]({trend.confidence} confidence)[/dim]")
         console.print()
 
     # Show knowledge stats
@@ -1059,16 +1076,16 @@ def _parse_selection(selection: str, max_items: int) -> list[int]:
                 end_idx = int(end.strip()) - 1
                 if 0 <= start_idx < max_items and 0 <= end_idx < max_items:
                     indices.update(range(start_idx, end_idx + 1))
-            except ValueError:
-                pass
+            except ValueError as e:
+                console.print(f"[yellow]Invalid range '{part}': {e}[/yellow]")
         else:
             # Single number
             try:
                 idx = int(part) - 1
                 if 0 <= idx < max_items:
                     indices.add(idx)
-            except ValueError:
-                pass
+            except ValueError as e:
+                console.print(f"[yellow]Invalid index '{part}': {e}[/yellow]")
 
     return sorted(list(indices))
 

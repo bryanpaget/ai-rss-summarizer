@@ -21,6 +21,7 @@ from src.llm_providers import (
     TransformersProvider,
     ClaudeProvider,
     ClaudeCodeProvider,
+    ClaudeAgentSDKProvider,
     GeminiProvider,
     GeminiCLIProvider,
     CodexCLIProvider,
@@ -1386,6 +1387,7 @@ class TestProviderTypeEnum:
             "openai-compatible",
             "transformers",
             "claude",
+            "claude-agent-sdk",
             "claude-code",
             "gemini",
             "gemini-cli",
@@ -1401,7 +1403,7 @@ class TestProviderTypeEnum:
 
     def test_provider_type_count(self, all_provider_types):
         """Test that we have the expected number of provider types."""
-        assert len(all_provider_types) == 12
+        assert len(all_provider_types) == 13
 
     def test_provider_type_from_value(self):
         """Test creating ProviderType from string value."""
@@ -3882,6 +3884,361 @@ class TestClaudeProviderIntegration:
 
 
 # =============================================================================
+# Tests for ClaudeAgentSDKProvider
+# =============================================================================
+
+
+class TestClaudeAgentSDKProviderInitialization:
+    """Tests for ClaudeAgentSDKProvider initialization."""
+
+    def test_initialization_with_default_model(self):
+        """Test ClaudeAgentSDKProvider initializes with default sonnet model."""
+        provider = ClaudeAgentSDKProvider()
+
+        assert provider._model == "sonnet"
+        assert provider.name == "Claude Agent SDK"
+
+    def test_initialization_with_custom_model(self):
+        """Test ClaudeAgentSDKProvider initializes with custom model."""
+        provider = ClaudeAgentSDKProvider(model="opus")
+
+        assert provider._model == "opus"
+        assert provider.name == "Claude Agent SDK"
+
+    def test_model_name_property(self):
+        """Test model_name property returns configured model."""
+        provider = ClaudeAgentSDKProvider(model="haiku")
+        assert provider.model_name == "haiku"
+
+    def test_model_name_property_default(self):
+        """Test model_name property returns sonnet as default."""
+        provider = ClaudeAgentSDKProvider()
+        assert provider.model_name == "sonnet"
+
+    def test_inherits_from_llm_provider(self):
+        """Test ClaudeAgentSDKProvider inherits from LLMProvider."""
+        provider = ClaudeAgentSDKProvider()
+        assert isinstance(provider, LLMProvider)
+
+    def test_session_usage_initialized(self):
+        """Test session usage is initialized correctly."""
+        provider = ClaudeAgentSDKProvider()
+        assert provider.session_usage == {"calls": 0, "total_tokens": 0}
+        assert provider.last_usage is None
+
+
+class TestClaudeAgentSDKProviderIsAvailable:
+    """Tests for ClaudeAgentSDKProvider.is_available() method."""
+
+    def test_is_available_returns_true_when_sdk_and_auth_present(self):
+        """Test is_available returns True when SDK installed and auth exists."""
+        mock_query = MagicMock()
+        with patch.dict("sys.modules", {"claude_agent_sdk": mock_query}), \
+             patch("shutil.which") as mock_which, \
+             patch("pathlib.Path.exists") as mock_exists:
+            mock_which.return_value = "/usr/local/bin/claude"
+            mock_exists.return_value = True
+
+            provider = ClaudeAgentSDKProvider()
+            assert provider.is_available() is True
+
+    def test_is_available_returns_false_when_sdk_not_installed(self):
+        """Test is_available returns False when SDK not installed."""
+        with patch.dict("sys.modules", {"claude_agent_sdk": None}):
+            import sys
+            # Remove the module to simulate ImportError
+            if "claude_agent_sdk" in sys.modules:
+                del sys.modules["claude_agent_sdk"]
+
+            provider = ClaudeAgentSDKProvider()
+            # Force re-check by calling is_available
+            result = provider.is_available()
+            # Since module is None, it should return False
+            assert result is False
+
+    def test_is_available_returns_false_when_claude_cli_not_found(self):
+        """Test is_available returns False when Claude CLI not found."""
+        mock_sdk = MagicMock()
+        with patch.dict("sys.modules", {"claude_agent_sdk": mock_sdk}), \
+             patch("shutil.which") as mock_which:
+            mock_which.return_value = None
+
+            provider = ClaudeAgentSDKProvider()
+            assert provider.is_available() is False
+
+    def test_is_available_returns_false_when_config_not_found(self):
+        """Test is_available returns False when config.json doesn't exist."""
+        mock_sdk = MagicMock()
+        with patch.dict("sys.modules", {"claude_agent_sdk": mock_sdk}), \
+             patch("shutil.which") as mock_which, \
+             patch("pathlib.Path.exists") as mock_exists:
+            mock_which.return_value = "/usr/local/bin/claude"
+            mock_exists.return_value = False
+
+            provider = ClaudeAgentSDKProvider()
+            assert provider.is_available() is False
+
+    def test_is_available_checks_home_config(self):
+        """Test is_available checks ~/.claude/config.json."""
+        mock_sdk = MagicMock()
+        with patch.dict("sys.modules", {"claude_agent_sdk": mock_sdk}), \
+             patch("shutil.which") as mock_which, \
+             patch("pathlib.Path.home") as mock_home, \
+             patch("pathlib.Path.exists") as mock_exists:
+            mock_which.return_value = "/usr/local/bin/claude"
+            mock_home.return_value = Path("/home/user")
+            mock_exists.return_value = True
+
+            provider = ClaudeAgentSDKProvider()
+            provider.is_available()
+
+            # Verify Path.home was called to get config path
+            mock_home.assert_called()
+
+
+class TestClaudeAgentSDKProviderSummarize:
+    """Tests for ClaudeAgentSDKProvider.summarize() method."""
+
+    def test_summarize_returns_empty_for_empty_input(self):
+        """Test summarize returns empty string for empty input."""
+        provider = ClaudeAgentSDKProvider()
+        result = provider.summarize("")
+        assert result == ""
+
+    def test_summarize_calls_query_async(self):
+        """Test summarize calls the async query function."""
+        mock_sdk = MagicMock()
+        mock_assistant_msg = MagicMock()
+        mock_text_block = MagicMock()
+        mock_text_block.text = "SDK summary"
+
+        mock_assistant_msg.content = [mock_text_block]
+
+        # Create async generator mock
+        async def mock_query_gen(prompt):
+            yield mock_assistant_msg
+
+        mock_sdk.query = mock_query_gen
+        mock_sdk.AssistantMessage = type(mock_assistant_msg)
+        mock_sdk.TextBlock = type(mock_text_block)
+
+        with patch.dict("sys.modules", {"claude_agent_sdk": mock_sdk}), \
+             patch("shutil.which") as mock_which, \
+             patch("pathlib.Path.exists") as mock_exists:
+            mock_which.return_value = "/usr/local/bin/claude"
+            mock_exists.return_value = True
+
+            provider = ClaudeAgentSDKProvider()
+            result = provider.summarize("Test article content", max_length=150)
+
+            assert result == "SDK summary"
+
+    def test_summarize_records_usage(self):
+        """Test summarize records usage stats."""
+        mock_sdk = MagicMock()
+        mock_assistant_msg = MagicMock()
+        mock_text_block = MagicMock()
+        mock_text_block.text = "Summary"
+
+        mock_assistant_msg.content = [mock_text_block]
+
+        async def mock_query_gen(prompt):
+            yield mock_assistant_msg
+
+        mock_sdk.query = mock_query_gen
+        mock_sdk.AssistantMessage = type(mock_assistant_msg)
+        mock_sdk.TextBlock = type(mock_text_block)
+
+        with patch.dict("sys.modules", {"claude_agent_sdk": mock_sdk}), \
+             patch("shutil.which") as mock_which, \
+             patch("pathlib.Path.exists") as mock_exists:
+            mock_which.return_value = "/usr/local/bin/claude"
+            mock_exists.return_value = True
+
+            provider = ClaudeAgentSDKProvider()
+            provider.summarize("Test text for summarization")
+
+            assert provider.last_usage is not None
+            assert provider.session_usage["calls"] == 1
+
+    def test_summarize_raises_when_unavailable(self):
+        """Test summarize raises RuntimeError when provider unavailable."""
+        with patch.dict("sys.modules", {"claude_agent_sdk": None}):
+            provider = ClaudeAgentSDKProvider()
+
+            with pytest.raises(RuntimeError, match="Claude Agent SDK not available"):
+                provider.summarize("Test text")
+
+
+class TestClaudeAgentSDKProviderGenerate:
+    """Tests for ClaudeAgentSDKProvider.generate() method."""
+
+    def test_generate_returns_response(self):
+        """Test generate returns the response text."""
+        mock_sdk = MagicMock()
+        mock_assistant_msg = MagicMock()
+        mock_text_block = MagicMock()
+        mock_text_block.text = "Generated response"
+
+        mock_assistant_msg.content = [mock_text_block]
+
+        async def mock_query_gen(prompt):
+            yield mock_assistant_msg
+
+        mock_sdk.query = mock_query_gen
+        mock_sdk.AssistantMessage = type(mock_assistant_msg)
+        mock_sdk.TextBlock = type(mock_text_block)
+
+        with patch.dict("sys.modules", {"claude_agent_sdk": mock_sdk}), \
+             patch("shutil.which") as mock_which, \
+             patch("pathlib.Path.exists") as mock_exists:
+            mock_which.return_value = "/usr/local/bin/claude"
+            mock_exists.return_value = True
+
+            provider = ClaudeAgentSDKProvider()
+            result = provider.generate("Test prompt")
+
+            assert result == "Generated response"
+
+    def test_generate_raises_when_unavailable(self):
+        """Test generate raises RuntimeError when provider unavailable."""
+        with patch.dict("sys.modules", {"claude_agent_sdk": None}):
+            provider = ClaudeAgentSDKProvider()
+
+            with pytest.raises(RuntimeError, match="Claude Agent SDK not available"):
+                provider.generate("Test prompt")
+
+
+class TestClaudeAgentSDKProviderAsyncHandling:
+    """Tests for ClaudeAgentSDKProvider async handling."""
+
+    def test_run_async_creates_new_loop_when_none_running(self):
+        """Test _run_async creates new event loop when none running."""
+        provider = ClaudeAgentSDKProvider()
+
+        async def simple_coro():
+            return "result"
+
+        result = provider._run_async(simple_coro())
+        assert result == "result"
+
+    def test_run_async_handles_running_loop(self):
+        """Test _run_async handles being called from async context."""
+        import asyncio
+
+        provider = ClaudeAgentSDKProvider()
+
+        async def inner_coro():
+            return "inner result"
+
+        # This tests that the method can handle edge cases
+        result = provider._run_async(inner_coro())
+        assert result == "inner result"
+
+
+class TestClaudeAgentSDKProviderIntegration:
+    """Integration tests for ClaudeAgentSDKProvider with get_provider."""
+
+    def test_get_provider_returns_claude_agent_sdk_provider(self, clean_env):
+        """Test get_provider returns ClaudeAgentSDKProvider when configured."""
+        config = LLMConfig(
+            provider=ProviderType.CLAUDE_AGENT_SDK,
+            model="sonnet",
+        )
+
+        provider = get_provider(config)
+
+        assert isinstance(provider, ClaudeAgentSDKProvider)
+        assert provider._model == "sonnet"
+
+    def test_get_provider_with_custom_model(self, clean_env):
+        """Test get_provider uses custom model for ClaudeAgentSDKProvider."""
+        config = LLMConfig(
+            provider=ProviderType.CLAUDE_AGENT_SDK,
+            model="opus",
+        )
+
+        provider = get_provider(config)
+
+        assert isinstance(provider, ClaudeAgentSDKProvider)
+        assert provider._model == "opus"
+
+    def test_get_provider_uses_default_model(self, clean_env):
+        """Test get_provider uses default sonnet model when not specified."""
+        config = LLMConfig(
+            provider=ProviderType.CLAUDE_AGENT_SDK,
+            model=None,
+        )
+
+        provider = get_provider(config)
+
+        assert isinstance(provider, ClaudeAgentSDKProvider)
+        assert provider._model == "sonnet"
+
+    def test_list_providers_includes_claude_agent_sdk(self):
+        """Test list_providers includes Claude Agent SDK in the list."""
+        with patch("src.llm_providers.ClaudeAgentSDKProvider.is_available") as mock_sdk_available, \
+             patch("shutil.which") as mock_which, \
+             patch("httpx.get") as mock_get:
+            mock_sdk_available.return_value = True
+            mock_which.return_value = "/usr/local/bin/claude"
+            mock_get.side_effect = Exception("Connection refused")
+
+            providers = list_providers()
+
+            claude_agent_sdk_provider = next(
+                (p for p in providers if p["type"] == ProviderType.CLAUDE_AGENT_SDK),
+                None
+            )
+            assert claude_agent_sdk_provider is not None
+            assert claude_agent_sdk_provider["name"] == "Claude Agent SDK"
+            assert claude_agent_sdk_provider["available"] is True
+
+    def test_auto_detect_prefers_agent_sdk_over_claude_code(self, clean_env):
+        """Test auto_detect_provider prefers Agent SDK over Claude Code."""
+        mock_sdk = MagicMock()
+        with patch.dict("sys.modules", {"claude_agent_sdk": mock_sdk}), \
+             patch("shutil.which") as mock_which, \
+             patch("pathlib.Path.exists") as mock_exists, \
+             patch("httpx.get") as mock_get:
+            mock_which.return_value = "/usr/local/bin/claude"
+            mock_exists.return_value = True
+            mock_get.side_effect = Exception("Connection refused")
+
+            provider = auto_detect_provider()
+
+            # Should prefer Agent SDK over Claude Code CLI
+            assert isinstance(provider, ClaudeAgentSDKProvider)
+
+    def test_auto_detect_falls_back_to_claude_api_last(self, clean_env):
+        """Test auto_detect_provider uses Claude API as last resort."""
+        os.environ["ANTHROPIC_API_KEY"] = "test-key"
+
+        # Mock all other providers as unavailable
+        with patch("httpx.get") as mock_get, \
+             patch("shutil.which") as mock_which, \
+             patch("pathlib.Path.exists") as mock_exists, \
+             patch.dict("sys.modules", {
+                 "claude_agent_sdk": None,
+                 "transformers": None,
+                 "torch": None,
+                 "agents": None,
+                 "google.generativeai": None,
+             }):
+            mock_get.side_effect = Exception("Connection refused")
+            mock_which.return_value = None  # No CLI tools available
+            mock_exists.return_value = False
+
+            # Mock anthropic SDK as available
+            mock_anthropic = MagicMock()
+            with patch.dict("sys.modules", {"anthropic": mock_anthropic}):
+                provider = auto_detect_provider()
+
+                # Should fall back to Claude API as last resort
+                assert isinstance(provider, ClaudeProvider)
+
+
+# =============================================================================
 # Tests for GeminiProvider
 # =============================================================================
 
@@ -5521,30 +5878,30 @@ class TestAutoDetectProvider:
 
             assert isinstance(result, GrokProvider)
 
-    def test_auto_detect_returns_claude_code_fifth(self, clean_env):
+    def test_auto_detect_returns_claude_agent_sdk_fifth(self, clean_env):
+        """Test auto_detect_provider returns ClaudeAgentSDKProvider when higher priority unavailable."""
+        with patch.object(LMStudioProvider, 'is_available', return_value=False), \
+             patch.object(OllamaProvider, 'is_available', return_value=False), \
+             patch.object(GeminiProvider, 'is_available', return_value=False), \
+             patch.object(GrokProvider, 'is_available', return_value=False), \
+             patch.object(ClaudeAgentSDKProvider, 'is_available', return_value=True):
+
+            result = auto_detect_provider()
+
+            assert isinstance(result, ClaudeAgentSDKProvider)
+
+    def test_auto_detect_returns_claude_code_sixth(self, clean_env):
         """Test auto_detect_provider returns ClaudeCodeProvider when higher priority unavailable."""
         with patch.object(LMStudioProvider, 'is_available', return_value=False), \
              patch.object(OllamaProvider, 'is_available', return_value=False), \
              patch.object(GeminiProvider, 'is_available', return_value=False), \
              patch.object(GrokProvider, 'is_available', return_value=False), \
+             patch.object(ClaudeAgentSDKProvider, 'is_available', return_value=False), \
              patch.object(ClaudeCodeProvider, 'is_available', return_value=True):
 
             result = auto_detect_provider()
 
             assert isinstance(result, ClaudeCodeProvider)
-
-    def test_auto_detect_returns_claude_api_sixth(self, clean_env):
-        """Test auto_detect_provider returns ClaudeProvider when higher priority unavailable."""
-        with patch.object(LMStudioProvider, 'is_available', return_value=False), \
-             patch.object(OllamaProvider, 'is_available', return_value=False), \
-             patch.object(GeminiProvider, 'is_available', return_value=False), \
-             patch.object(GrokProvider, 'is_available', return_value=False), \
-             patch.object(ClaudeCodeProvider, 'is_available', return_value=False), \
-             patch.object(ClaudeProvider, 'is_available', return_value=True):
-
-            result = auto_detect_provider()
-
-            assert isinstance(result, ClaudeProvider)
 
     def test_auto_detect_returns_openai_seventh(self, clean_env):
         """Test auto_detect_provider returns OpenAIAgentsProvider when higher priority unavailable."""
@@ -5552,28 +5909,44 @@ class TestAutoDetectProvider:
              patch.object(OllamaProvider, 'is_available', return_value=False), \
              patch.object(GeminiProvider, 'is_available', return_value=False), \
              patch.object(GrokProvider, 'is_available', return_value=False), \
+             patch.object(ClaudeAgentSDKProvider, 'is_available', return_value=False), \
              patch.object(ClaudeCodeProvider, 'is_available', return_value=False), \
-             patch.object(ClaudeProvider, 'is_available', return_value=False), \
              patch.object(OpenAIAgentsProvider, 'is_available', return_value=True):
 
             result = auto_detect_provider()
 
             assert isinstance(result, OpenAIAgentsProvider)
 
-    def test_auto_detect_returns_transformers_last(self, clean_env):
-        """Test auto_detect_provider returns TransformersProvider as last resort."""
+    def test_auto_detect_returns_transformers_eighth(self, clean_env):
+        """Test auto_detect_provider returns TransformersProvider when higher priority unavailable."""
         with patch.object(LMStudioProvider, 'is_available', return_value=False), \
              patch.object(OllamaProvider, 'is_available', return_value=False), \
              patch.object(GeminiProvider, 'is_available', return_value=False), \
              patch.object(GrokProvider, 'is_available', return_value=False), \
+             patch.object(ClaudeAgentSDKProvider, 'is_available', return_value=False), \
              patch.object(ClaudeCodeProvider, 'is_available', return_value=False), \
-             patch.object(ClaudeProvider, 'is_available', return_value=False), \
              patch.object(OpenAIAgentsProvider, 'is_available', return_value=False), \
              patch.object(TransformersProvider, 'is_available', return_value=True):
 
             result = auto_detect_provider()
 
             assert isinstance(result, TransformersProvider)
+
+    def test_auto_detect_returns_claude_api_ninth(self, clean_env):
+        """Test auto_detect_provider returns ClaudeProvider as last resort."""
+        with patch.object(LMStudioProvider, 'is_available', return_value=False), \
+             patch.object(OllamaProvider, 'is_available', return_value=False), \
+             patch.object(GeminiProvider, 'is_available', return_value=False), \
+             patch.object(GrokProvider, 'is_available', return_value=False), \
+             patch.object(ClaudeAgentSDKProvider, 'is_available', return_value=False), \
+             patch.object(ClaudeCodeProvider, 'is_available', return_value=False), \
+             patch.object(OpenAIAgentsProvider, 'is_available', return_value=False), \
+             patch.object(TransformersProvider, 'is_available', return_value=False), \
+             patch.object(ClaudeProvider, 'is_available', return_value=True):
+
+            result = auto_detect_provider()
+
+            assert isinstance(result, ClaudeProvider)
 
 
 class TestAutoDetectProviderPriority:
@@ -5609,44 +5982,62 @@ class TestAutoDetectProviderPriority:
 
             assert isinstance(result, GeminiProvider)
 
-    def test_grok_over_claude_code(self, clean_env):
-        """Test Grok is preferred over Claude Code."""
+    def test_grok_over_claude_agent_sdk(self, clean_env):
+        """Test Grok is preferred over Claude Agent SDK."""
         with patch.object(LMStudioProvider, 'is_available', return_value=False), \
              patch.object(OllamaProvider, 'is_available', return_value=False), \
              patch.object(GeminiProvider, 'is_available', return_value=False), \
              patch.object(GrokProvider, 'is_available', return_value=True), \
+             patch.object(ClaudeAgentSDKProvider, 'is_available', return_value=True), \
              patch.object(ClaudeCodeProvider, 'is_available', return_value=True):
 
             result = auto_detect_provider()
 
             assert isinstance(result, GrokProvider)
 
-    def test_claude_code_over_claude_api(self, clean_env):
-        """Test Claude Code is preferred over Claude API."""
+    def test_claude_agent_sdk_over_claude_code(self, clean_env):
+        """Test Claude Agent SDK is preferred over Claude Code CLI."""
         with patch.object(LMStudioProvider, 'is_available', return_value=False), \
              patch.object(OllamaProvider, 'is_available', return_value=False), \
              patch.object(GeminiProvider, 'is_available', return_value=False), \
              patch.object(GrokProvider, 'is_available', return_value=False), \
+             patch.object(ClaudeAgentSDKProvider, 'is_available', return_value=True), \
+             patch.object(ClaudeCodeProvider, 'is_available', return_value=True):
+
+            result = auto_detect_provider()
+
+            assert isinstance(result, ClaudeAgentSDKProvider)
+
+    def test_claude_code_over_openai(self, clean_env):
+        """Test Claude Code is preferred over OpenAI."""
+        with patch.object(LMStudioProvider, 'is_available', return_value=False), \
+             patch.object(OllamaProvider, 'is_available', return_value=False), \
+             patch.object(GeminiProvider, 'is_available', return_value=False), \
+             patch.object(GrokProvider, 'is_available', return_value=False), \
+             patch.object(ClaudeAgentSDKProvider, 'is_available', return_value=False), \
              patch.object(ClaudeCodeProvider, 'is_available', return_value=True), \
-             patch.object(ClaudeProvider, 'is_available', return_value=True):
+             patch.object(OpenAIAgentsProvider, 'is_available', return_value=True):
 
             result = auto_detect_provider()
 
             assert isinstance(result, ClaudeCodeProvider)
 
-    def test_claude_api_over_openai(self, clean_env):
-        """Test Claude API is preferred over OpenAI."""
+    def test_openai_over_claude_api(self, clean_env):
+        """Test OpenAI is preferred over Claude API (Claude API is last resort)."""
         with patch.object(LMStudioProvider, 'is_available', return_value=False), \
              patch.object(OllamaProvider, 'is_available', return_value=False), \
              patch.object(GeminiProvider, 'is_available', return_value=False), \
              patch.object(GrokProvider, 'is_available', return_value=False), \
+             patch.object(ClaudeAgentSDKProvider, 'is_available', return_value=False), \
              patch.object(ClaudeCodeProvider, 'is_available', return_value=False), \
              patch.object(ClaudeProvider, 'is_available', return_value=True), \
-             patch.object(OpenAIAgentsProvider, 'is_available', return_value=True):
+             patch.object(OpenAIAgentsProvider, 'is_available', return_value=True), \
+             patch.object(TransformersProvider, 'is_available', return_value=False):
 
             result = auto_detect_provider()
 
-            assert isinstance(result, ClaudeProvider)
+            # OpenAI should be preferred over Claude API (which is last resort)
+            assert isinstance(result, OpenAIAgentsProvider)
 
     def test_openai_over_transformers(self, clean_env):
         """Test OpenAI is preferred over Transformers."""
@@ -5654,6 +6045,7 @@ class TestAutoDetectProviderPriority:
              patch.object(OllamaProvider, 'is_available', return_value=False), \
              patch.object(GeminiProvider, 'is_available', return_value=False), \
              patch.object(GrokProvider, 'is_available', return_value=False), \
+             patch.object(ClaudeAgentSDKProvider, 'is_available', return_value=False), \
              patch.object(ClaudeCodeProvider, 'is_available', return_value=False), \
              patch.object(ClaudeProvider, 'is_available', return_value=False), \
              patch.object(OpenAIAgentsProvider, 'is_available', return_value=True), \
@@ -5669,6 +6061,7 @@ class TestAutoDetectProviderPriority:
              patch.object(OllamaProvider, 'is_available', return_value=True), \
              patch.object(GeminiProvider, 'is_available', return_value=True), \
              patch.object(GrokProvider, 'is_available', return_value=True), \
+             patch.object(ClaudeAgentSDKProvider, 'is_available', return_value=True), \
              patch.object(ClaudeCodeProvider, 'is_available', return_value=True), \
              patch.object(ClaudeProvider, 'is_available', return_value=True), \
              patch.object(OpenAIAgentsProvider, 'is_available', return_value=True), \

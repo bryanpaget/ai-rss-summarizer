@@ -1,13 +1,19 @@
 """Adaptive Personal Context Engine for personalized article relevance."""
 
 import json
+import logging
 import math
 import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional, List, Dict, Iterator
+from typing import Optional, List, Dict, Iterator, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .embeddings import EmbeddingService
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -354,8 +360,18 @@ class RelevanceEngine:
     DECAY_HALF_LIFE_DAYS = 14  # Standard topic decay
     COMPLETED_DECAY_HALF_LIFE_DAYS = 7  # Faster decay for completed projects
 
-    def __init__(self, store: UserContextStore):
+    # Similarity thresholds for embedding-based matching
+    SIMILARITY_THRESHOLD_HIGH = 0.75  # Strong match (equivalent to direct match)
+    SIMILARITY_THRESHOLD_MEDIUM = 0.60  # Moderate match (equivalent to partial match)
+
+    def __init__(
+        self,
+        store: UserContextStore,
+        embedding_service: Optional["EmbeddingService"] = None,
+    ):
         self.store = store
+        self._embedding_service = embedding_service
+        self._embedding_cache: Dict[str, list[float]] = {}  # Cache for profile embeddings
 
     def calculate_relevance(
         self, article, profile: UserContextProfile
@@ -422,57 +438,128 @@ class RelevanceEngine:
     def _calculate_topic_match(
         self, topics: List[str], profile: UserContextProfile
     ) -> float:
-        """Calculate how well topics match user's profile."""
+        """Calculate how well topics match user's profile using embedding similarity.
+
+        Requires EmbeddingService. Returns neutral score (0.5) if unavailable.
+        """
         if not topics:
             return 0.5
 
+        if not self._embedding_service or not self._embedding_service.is_available():
+            logger.error("EmbeddingService required but not available for topic matching")
+            return 0.5  # Neutral - no matching possible
+
         score = 0.5  # Start neutral
 
-        # Check each topic against profile
-        topics_lower = [t.lower() for t in topics]
+        # Embed all topics together for article representation
+        article_text = " ".join(topics)
+        article_embedding = self._get_embedding(article_text)
+        if article_embedding is None:
+            logger.error("Failed to embed article topics")
+            return 0.5
 
-        # Exact matches in watching/current_projects
-        watching_lower = [w.lower() for w in profile.watching]
-        projects_lower = [p.lower() for p in profile.current_projects]
+        # Check against watching topics
+        for watch_topic in profile.watching:
+            watch_embedding = self._get_embedding(watch_topic)
+            if watch_embedding:
+                sim = self._embedding_service.cosine_similarity(
+                    article_embedding, watch_embedding
+                )
+                if sim >= self.SIMILARITY_THRESHOLD_HIGH:
+                    score += 0.4
+                elif sim >= self.SIMILARITY_THRESHOLD_MEDIUM:
+                    score += 0.2
 
-        for topic in topics_lower:
-            # Direct matches
-            if any(topic in w or w in topic for w in watching_lower):
-                score += 0.4
-            if any(topic in p or p in topic for p in projects_lower):
-                score += 0.4
+        # Check against current projects
+        for project in profile.current_projects:
+            project_embedding = self._get_embedding(project)
+            if project_embedding:
+                sim = self._embedding_service.cosine_similarity(
+                    article_embedding, project_embedding
+                )
+                if sim >= self.SIMILARITY_THRESHOLD_HIGH:
+                    score += 0.4
+                elif sim >= self.SIMILARITY_THRESHOLD_MEDIUM:
+                    score += 0.2
 
-            # Pinned topics (always maintain relevance)
-            if any(topic in p.lower() or p.lower() in topic for p in profile.pinned):
-                score = max(score, 0.7)
+        # Check pinned topics (always maintain relevance)
+        for pinned in profile.pinned:
+            pinned_embedding = self._get_embedding(pinned)
+            if pinned_embedding:
+                sim = self._embedding_service.cosine_similarity(
+                    article_embedding, pinned_embedding
+                )
+                if sim >= self.SIMILARITY_THRESHOLD_MEDIUM:
+                    score = max(score, 0.7)
 
-            # Ignore list
-            if any(topic in i.lower() or i.lower() in topic for i in profile.ignore):
-                score -= 0.5
+        # Check ignore list
+        for ignored in profile.ignore:
+            ignore_embedding = self._get_embedding(ignored)
+            if ignore_embedding:
+                sim = self._embedding_service.cosine_similarity(
+                    article_embedding, ignore_embedding
+                )
+                if sim >= self.SIMILARITY_THRESHOLD_HIGH:
+                    score -= 0.5
+                elif sim >= self.SIMILARITY_THRESHOLD_MEDIUM:
+                    score -= 0.25
 
         return max(0.0, min(1.0, score))
 
+    def _get_embedding(self, text: str) -> Optional[list[float]]:
+        """Get embedding for text, using cache."""
+        if text in self._embedding_cache:
+            return self._embedding_cache[text]
+
+        try:
+            result = self._embedding_service.embed_text(text)
+            self._embedding_cache[text] = result.vector
+            return result.vector
+        except Exception as e:
+            logger.debug(f"Failed to embed '{text[:50]}...': {e}")
+            return None
+
     def _calculate_engagement_score(self, topics: List[str]) -> float:
-        """Calculate score based on historical engagement with similar topics."""
+        """Calculate score based on historical engagement with similar topics.
+
+        Requires EmbeddingService. Returns neutral score (0.5) if unavailable.
+        """
         engagement_rates = self.store.get_topic_engagement(days=30)
 
         if not engagement_rates:
             return 0.5  # Neutral if no history
 
-        # Find engagement rates for these topics
+        if not self._embedding_service or not self._embedding_service.is_available():
+            logger.error("EmbeddingService required but not available for engagement scoring")
+            return 0.5
+
         scores = []
         for topic in topics:
-            topic_lower = topic.lower()
-            # Look for matching or similar topics in history
+            topic_embedding = self._get_embedding(topic)
+            if topic_embedding is None:
+                continue
+
+            # Find best matching historical topic
+            best_rate = None
+            best_sim = 0.0
             for hist_topic, rate in engagement_rates.items():
-                hist_lower = hist_topic.lower()
-                if topic_lower in hist_lower or hist_lower in topic_lower:
-                    scores.append(rate)
+                hist_embedding = self._get_embedding(hist_topic)
+                if hist_embedding:
+                    sim = self._embedding_service.cosine_similarity(
+                        topic_embedding, hist_embedding
+                    )
+                    if sim >= self.SIMILARITY_THRESHOLD_MEDIUM and sim > best_sim:
+                        best_sim = sim
+                        best_rate = rate
+
+            if best_rate is not None:
+                # Weight by similarity strength
+                weighted_rate = best_rate * (best_sim / 1.0)
+                scores.append(weighted_rate)
 
         if not scores:
             return 0.5
 
-        # Average engagement rate
         return sum(scores) / len(scores)
 
     def _calculate_recency_boost(self, topics: List[str]) -> float:
@@ -526,9 +613,23 @@ class RelevanceEngine:
         return profile
 
 
-def sort_by_relevance(articles: List, profile: UserContextProfile, store: UserContextStore) -> List:
-    """Sort articles by relevance score."""
-    engine = RelevanceEngine(store)
+def sort_by_relevance(
+    articles: List,
+    profile: UserContextProfile,
+    store: UserContextStore,
+    embedding_service: Optional["EmbeddingService"] = None,
+) -> List:
+    """Sort articles by relevance score.
+
+    Args:
+        articles: List of articles to sort
+        profile: User context profile
+        store: User context store for interaction history
+        embedding_service: Optional EmbeddingService for semantic similarity.
+                          If provided and available, uses embedding-based matching.
+                          If not, falls back to substring matching with a warning.
+    """
+    engine = RelevanceEngine(store, embedding_service=embedding_service)
 
     # Calculate scores
     scored_articles = []

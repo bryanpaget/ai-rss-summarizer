@@ -704,16 +704,19 @@ def mock_knowledge_extraction():
     with patch("src.commands.extract_insights_from_article") as mock_insights, \
          patch("src.commands.extract_triples_from_article") as mock_triples, \
          patch("src.commands.extract_entity_relationships_from_article") as mock_rels, \
-         patch("src.commands.detect_connections") as mock_connections:
+         patch("src.commands.detect_connections") as mock_connections, \
+         patch("src.commands.format_relationship") as mock_format:
         mock_insights.return_value = []
         mock_triples.return_value = []
         mock_rels.return_value = []
-        mock_connections.return_value = None
+        mock_connections.return_value = []
+        mock_format.return_value = "CONFIRMS existing: 'test' (similarity: 0.85)"
         yield {
             "insights": mock_insights,
             "triples": mock_triples,
             "entity_relationships": mock_rels,
             "connections": mock_connections,
+            "format_relationship": mock_format,
         }
 
 
@@ -1552,6 +1555,7 @@ class TestUpdateKnowledgeExtraction:
             mock_insights.return_value = [insight1, insight2]
             mock_triples.return_value = []
             mock_rels.return_value = []
+            mock_connections.return_value = []
 
             article = MagicMock()
             article.id = "article-1"
@@ -1575,7 +1579,8 @@ class TestUpdateKnowledgeExtraction:
 
             # Should have extracted insights
             assert result["insights"] == 2
-            mock_connections.assert_called()
+            # Should have called detect_connections for each insight
+            assert mock_connections.call_count == 2
 
     def test_update_extracts_triples(
         self, temp_db, temp_kb_db, temp_feeds_file, mock_get_best_provider,
@@ -1592,11 +1597,12 @@ class TestUpdateKnowledgeExtraction:
              patch("src.commands.extract_insights_from_article") as mock_insights, \
              patch("src.commands.extract_triples_from_article") as mock_triples, \
              patch("src.commands.extract_entity_relationships_from_article") as mock_rels, \
-             patch("src.commands.detect_connections"):
+             patch("src.commands.detect_connections") as mock_connections:
 
             mock_insights.return_value = []
             mock_triples.return_value = [MagicMock(), MagicMock(), MagicMock()]
             mock_rels.return_value = []
+            mock_connections.return_value = []
 
             article = MagicMock()
             article.id = "article-1"

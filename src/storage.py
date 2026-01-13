@@ -2,11 +2,15 @@
 
 import json
 import sqlite3
+import sys
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Iterator, Optional
+
+# Current schema version - increment when adding migrations
+SCHEMA_VERSION = 1
 
 
 @dataclass
@@ -66,122 +70,156 @@ class Storage:
         self._init_db()
 
     def _init_db(self) -> None:
-        """Initialize database schema."""
+        """Initialize database schema with version tracking."""
         with self._connect() as conn:
-            # Articles table
+            # Schema version tracking table - always create first
             conn.execute("""
-                CREATE TABLE IF NOT EXISTS articles (
-                    id TEXT PRIMARY KEY,
-                    feed_url TEXT NOT NULL,
-                    title TEXT NOT NULL,
-                    link TEXT UNIQUE NOT NULL,
-                    published TIMESTAMP,
-                    content TEXT,
-                    summary TEXT,
-                    trend_tags TEXT,
-                    signal_tags TEXT,
-                    story_id TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                CREATE TABLE IF NOT EXISTS schema_version (
+                    version INTEGER PRIMARY KEY,
+                    applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
 
-            # Add signal_tags column if it doesn't exist (migration support)
+            # Get current schema version
+            row = conn.execute(
+                "SELECT MAX(version) as v FROM schema_version"
+            ).fetchone()
+            current_version = row["v"] if row and row["v"] is not None else 0
+
+            # Run migrations only if needed
+            if current_version < SCHEMA_VERSION:
+                self._run_migrations(conn, current_version)
+                conn.execute(
+                    "INSERT INTO schema_version (version) VALUES (?)",
+                    (SCHEMA_VERSION,)
+                )
+                conn.commit()
+
+    def _run_migrations(self, conn: sqlite3.Connection, from_version: int) -> None:
+        """Run schema migrations from from_version to SCHEMA_VERSION.
+
+        Each migration is idempotent - safe to run multiple times.
+        """
+        if from_version < 1:
+            print(f"Running schema migration to version 1...", file=sys.stderr)
+            self._migrate_to_v1(conn)
+
+        # Future migrations:
+        # if from_version < 2:
+        #     self._migrate_to_v2(conn)
+
+    def _migrate_to_v1(self, conn: sqlite3.Connection) -> None:
+        """Version 1: Initial schema with all current tables."""
+        # Articles table with all columns
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS articles (
+                id TEXT PRIMARY KEY,
+                feed_url TEXT NOT NULL,
+                title TEXT NOT NULL,
+                link TEXT UNIQUE NOT NULL,
+                published TIMESTAMP,
+                content TEXT,
+                summary TEXT,
+                trend_tags TEXT,
+                signal_tags TEXT,
+                story_id TEXT,
+                analyzed_at TIMESTAMP,
+                spam_status TEXT,
+                spam_reason TEXT,
+                spam_flagged_at TIMESTAMP,
+                embedding TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        # Add columns if they don't exist (for databases created before versioning)
+        columns_to_add = [
+            ("signal_tags", "TEXT"),
+            ("story_id", "TEXT"),
+            ("analyzed_at", "TIMESTAMP"),
+            ("spam_status", "TEXT"),
+            ("spam_reason", "TEXT"),
+            ("spam_flagged_at", "TIMESTAMP"),
+            ("embedding", "TEXT"),
+        ]
+        for col_name, col_type in columns_to_add:
             try:
-                conn.execute("ALTER TABLE articles ADD COLUMN signal_tags TEXT")
+                conn.execute(f"ALTER TABLE articles ADD COLUMN {col_name} {col_type}")
             except sqlite3.OperationalError:
-                # Column already exists
-                pass
+                pass  # Column already exists
 
-            # Add story_id column if it doesn't exist (migration support)
-            try:
-                conn.execute("ALTER TABLE articles ADD COLUMN story_id TEXT")
-            except sqlite3.OperationalError:
-                # Column already exists
-                pass
-            conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_articles_feed_url ON articles(feed_url)
-            """)
-            conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_articles_published ON articles(published)
-            """)
-            conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_articles_story ON articles(story_id)
-            """)
+        # Indexes for articles
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_articles_feed_url ON articles(feed_url)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_articles_analyzed ON articles(analyzed_at)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_articles_published ON articles(published)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_articles_story ON articles(story_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_articles_spam ON articles(spam_status)")
 
-            # Stories table
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS stories (
-                    id TEXT PRIMARY KEY,
-                    title TEXT NOT NULL,
-                    description TEXT,
-                    keywords TEXT,
-                    first_seen TIMESTAMP NOT NULL,
-                    last_updated TIMESTAMP NOT NULL,
-                    lifecycle_state TEXT DEFAULT 'emerging',
-                    article_ids TEXT,
-                    news_item_ids TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_stories_lifecycle ON stories(lifecycle_state)
-            """)
-            conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_stories_last_updated ON stories(last_updated)
-            """)
+        # Stories table
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS stories (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                description TEXT,
+                keywords TEXT,
+                first_seen TIMESTAMP NOT NULL,
+                last_updated TIMESTAMP NOT NULL,
+                lifecycle_state TEXT DEFAULT 'emerging',
+                article_ids TEXT,
+                news_item_ids TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_stories_lifecycle ON stories(lifecycle_state)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_stories_last_updated ON stories(last_updated)")
 
-            # News items table
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS news_items (
-                    id TEXT PRIMARY KEY,
-                    story_id TEXT NOT NULL,
-                    title TEXT NOT NULL,
-                    description TEXT,
-                    first_reported_by TEXT,
-                    first_seen TIMESTAMP NOT NULL,
-                    article_ids TEXT,
-                    item_type TEXT DEFAULT 'new_info',
-                    confidence REAL DEFAULT 1.0,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (story_id) REFERENCES stories(id)
-                )
-            """)
-            conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_news_items_story ON news_items(story_id)
-            """)
-            conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_news_items_type ON news_items(item_type)
-            """)
-            conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_news_items_first_seen ON news_items(first_seen)
-            """)
+        # News items table
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS news_items (
+                id TEXT PRIMARY KEY,
+                story_id TEXT NOT NULL,
+                title TEXT NOT NULL,
+                description TEXT,
+                first_reported_by TEXT,
+                first_seen TIMESTAMP NOT NULL,
+                article_ids TEXT,
+                item_type TEXT DEFAULT 'new_info',
+                confidence REAL DEFAULT 1.0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (story_id) REFERENCES stories(id)
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_news_items_story ON news_items(story_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_news_items_type ON news_items(item_type)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_news_items_first_seen ON news_items(first_seen)")
 
-            # Perspective cache table
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS perspective_cache (
-                    story_id TEXT NOT NULL,
-                    category TEXT NOT NULL,
-                    content TEXT NOT NULL,
-                    source_articles TEXT,
-                    confidence REAL DEFAULT 0.5,
-                    generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    PRIMARY KEY (story_id, category),
-                    FOREIGN KEY (story_id) REFERENCES stories(id)
-                )
-            """)
+        # Perspective cache table
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS perspective_cache (
+                story_id TEXT NOT NULL,
+                category TEXT NOT NULL,
+                content TEXT NOT NULL,
+                source_articles TEXT,
+                confidence REAL DEFAULT 0.5,
+                generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (story_id, category),
+                FOREIGN KEY (story_id) REFERENCES stories(id)
+            )
+        """)
 
-            # User perspective configuration table
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS user_perspective_config (
-                    id INTEGER PRIMARY KEY DEFAULT 1,
-                    enabled_categories TEXT,
-                    default_categories TEXT,
-                    category_order TEXT,
-                    CHECK (id = 1)
-                )
-            """)
+        # User perspective configuration table
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS user_perspective_config (
+                id INTEGER PRIMARY KEY DEFAULT 1,
+                enabled_categories TEXT,
+                default_categories TEXT,
+                category_order TEXT,
+                CHECK (id = 1)
+            )
+        """)
 
-            conn.commit()
+        conn.commit()
+        print("Schema migrated to version 1", file=sys.stderr)
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
@@ -217,6 +255,7 @@ class Storage:
                 conn.commit()
                 return True
             except sqlite3.IntegrityError:
+                # Return False silently - caller should batch these into summary
                 return False
 
     def get_article(self, article_id: str) -> Optional[Article]:
@@ -228,6 +267,29 @@ class Storage:
             if row:
                 return self._row_to_article(row)
             return None
+
+    def get_articles_by_ids(self, article_ids: list[str]) -> list[Article]:
+        """Get multiple articles by their IDs.
+
+        Args:
+            article_ids: List of article IDs to retrieve
+
+        Returns:
+            List of Article objects (in order of IDs provided, skipping missing)
+        """
+        if not article_ids:
+            return []
+
+        with self._connect() as conn:
+            placeholders = ",".join("?" * len(article_ids))
+            rows = conn.execute(
+                f"SELECT * FROM articles WHERE id IN ({placeholders})",
+                article_ids,
+            ).fetchall()
+
+            # Convert rows to articles and maintain order
+            articles_by_id = {row["id"]: self._row_to_article(row) for row in rows}
+            return [articles_by_id[aid] for aid in article_ids if aid in articles_by_id]
 
     def get_articles(
         self,
@@ -249,6 +311,99 @@ class Storage:
 
         query += " ORDER BY published DESC LIMIT ? OFFSET ?"
         params.extend([limit, offset])
+
+        with self._connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+            return [self._row_to_article(row) for row in rows]
+
+    def get_unanalyzed_articles(
+        self,
+        feed_url: Optional[str] = None,
+        exclude_spam: bool = True,
+    ) -> list[Article]:
+        """Get all articles that haven't been analyzed yet.
+
+        Returns articles where analyzed_at IS NULL, ordered by published date.
+        No artificial limit - returns ALL unanalyzed articles.
+
+        Args:
+            feed_url: Optional filter by feed
+            exclude_spam: If True, excludes articles flagged as spam
+        """
+        query = "SELECT * FROM articles WHERE analyzed_at IS NULL"
+        params: list = []
+
+        if feed_url:
+            query += " AND feed_url = ?"
+            params.append(feed_url)
+
+        if exclude_spam:
+            query += " AND (spam_status IS NULL OR spam_status != 'spam')"
+
+        query += " ORDER BY published DESC"
+
+        with self._connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+            return [self._row_to_article(row) for row in rows]
+
+    def mark_as_analyzed(self, article_id: str) -> None:
+        """Mark an article as analyzed."""
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE articles SET analyzed_at = ? WHERE id = ?",
+                (datetime.now().isoformat(), article_id),
+            )
+            conn.commit()
+
+    def get_articles_needing_embeddings(self, exclude_spam: bool = True) -> list[Article]:
+        """Get articles that don't have embeddings yet.
+
+        Returns articles where embedding IS NULL, ordered by published date.
+        """
+        query = "SELECT * FROM articles WHERE embedding IS NULL"
+        params: list = []
+
+        if exclude_spam:
+            query += " AND (spam_status IS NULL OR spam_status != 'spam')"
+
+        query += " ORDER BY published DESC"
+
+        with self._connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+            return [self._row_to_article(row) for row in rows]
+
+    def save_embedding(self, article_id: str, embedding: list[float]) -> None:
+        """Save a pre-computed embedding for an article."""
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE articles SET embedding = ? WHERE id = ?",
+                (json.dumps(embedding), article_id),
+            )
+            conn.commit()
+
+    def get_embedding(self, article_id: str) -> list[float] | None:
+        """Get the pre-computed embedding for an article."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT embedding FROM articles WHERE id = ?",
+                (article_id,),
+            ).fetchone()
+            if row and row["embedding"]:
+                return json.loads(row["embedding"])
+            return None
+
+    def get_articles_with_embeddings_not_analyzed(self, exclude_spam: bool = True) -> list[Article]:
+        """Get articles that have embeddings but haven't been fully analyzed.
+
+        These are ready for Phase 2 (LLM processing).
+        """
+        query = "SELECT * FROM articles WHERE embedding IS NOT NULL AND analyzed_at IS NULL"
+        params: list = []
+
+        if exclude_spam:
+            query += " AND (spam_status IS NULL OR spam_status != 'spam')"
+
+        query += " ORDER BY published DESC"
 
         with self._connect() as conn:
             rows = conn.execute(query, params).fetchall()
@@ -351,7 +506,9 @@ class Storage:
         # Check if story_id column exists in the row
         try:
             story_id_value = row["story_id"]
-        except (KeyError, IndexError):
+        except (KeyError, IndexError) as e:
+            import sys
+            print(f"Legacy row missing story_id column: {e}", file=sys.stderr)
             story_id_value = None
 
         return Article(
@@ -404,6 +561,7 @@ class Storage:
                 conn.commit()
                 return True
             except sqlite3.IntegrityError:
+                # Return False silently - caller should batch these into summary
                 return False
 
     def get_story(self, story_id: str) -> Optional[Story]:
@@ -515,6 +673,7 @@ class Storage:
                 conn.commit()
                 return True
             except sqlite3.IntegrityError:
+                # Return False silently - caller should batch these into summary
                 return False
 
     def get_news_items(self, story_id: str) -> list[NewsItem]:

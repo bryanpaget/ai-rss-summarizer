@@ -7,15 +7,40 @@ from typing import Optional
 
 from .llm_providers import LLMProvider
 from .storage import Article, NewsItem, Storage, Story
+from .embeddings import EmbeddingService, EmbeddingError, embed_and_store_article, embed_and_store_story
+from .knowledge import KnowledgeBase
+
+
+class ClusteringError(Exception):
+    """Raised when clustering operations fail."""
+    pass
 
 
 class StoryClusterer:
-    """Handles Level 1 clustering: grouping articles into stories."""
+    """Handles Level 1 clustering: grouping articles into stories.
 
-    def __init__(self, llm_provider: LLMProvider, storage: Storage):
+    Uses vector embeddings for fast similarity comparison (O(n) instead of O(n²)).
+    LLM is only used for generating story metadata, not for comparisons.
+    """
+
+    def __init__(
+        self,
+        llm_provider: LLMProvider,
+        storage: Storage,
+        kb: Optional[KnowledgeBase] = None,
+        embedding_service: Optional[EmbeddingService] = None,
+    ):
         self.llm = llm_provider
         self.storage = storage
-        self.similarity_threshold = 0.75
+        self.kb = kb or KnowledgeBase()
+        # Use provided embedding_service or create one
+        self._embedding_service = embedding_service or EmbeddingService(self.kb)
+        self.similarity_threshold = 0.70  # Cosine similarity threshold
+
+    @property
+    def embedding_service(self) -> EmbeddingService:
+        """Access the embedding service."""
+        return self._embedding_service
 
     def cluster_article(self, article: Article) -> Story:
         """
@@ -33,19 +58,28 @@ class StoryClusterer:
             return self.create_new_story(article)
 
     def find_matching_story(self, article: Article) -> Optional[Story]:
-        """Find an existing story that matches this article."""
-        # Get active stories (not resolved)
-        active_stories = self.storage.get_active_stories(limit=50)
+        """Find an existing story that matches this article using vector similarity.
+
+        This is O(n) vector comparisons, not O(n) LLM calls.
+
+        Raises:
+            ClusteringError: If embedding provider is unavailable
+        """
+        # Get or generate article embedding
+        article_embedding = self._get_or_create_article_embedding(article)
+
+        # Get active stories
+        active_stories = self.storage.get_active_stories(limit=100)
 
         if not active_stories:
             return None
 
-        # Compare article with each story
+        # Compare article embedding with each story embedding
         best_match = None
         best_score = 0.0
 
         for story in active_stories:
-            score = self._calculate_similarity(article, story)
+            score = self._calculate_similarity(article_embedding, story)
             if score > best_score:
                 best_score = score
                 best_match = story
@@ -56,21 +90,91 @@ class StoryClusterer:
 
         return None
 
-    def _calculate_similarity(self, article: Article, story: Story) -> float:
-        """Calculate similarity between article and story using LLM."""
-        prompt = self._generate_comparison_prompt(article, story)
+    def find_matching_story_with_embedding(
+        self, article: Article, embedding: list[float]
+    ) -> Optional[Story]:
+        """Find matching story using a pre-computed embedding.
 
+        This avoids loading the embedding model during LLM phase.
+        """
+        # Get active stories
+        active_stories = self.storage.get_active_stories(limit=100)
+
+        if not active_stories:
+            return None
+
+        # Compare with each story
+        best_match = None
+        best_score = 0.0
+
+        for story in active_stories:
+            score = self._calculate_similarity(embedding, story)
+            if score > best_score:
+                best_score = score
+                best_match = story
+
+        if best_score >= self.similarity_threshold:
+            return best_match
+
+        return None
+
+    def _get_or_create_article_embedding(self, article: Article) -> list[float]:
+        """Get existing embedding or create new one for article.
+
+        Raises:
+            ClusteringError: If embedding fails
+        """
+        # Check if embedding already exists
+        existing = self.embedding_service.get_embedding(article.id, "article")
+        if existing:
+            return existing
+
+        # Generate new embedding
         try:
-            # Get LLM response - use generate() for raw prompt, not summarize()
-            response = self.llm.generate(prompt, max_tokens=200)
+            result = self.embedding_service.embed_article(article)
+            self.embedding_service.save_embedding(article.id, "article", result)
+            return result.vector
+        except EmbeddingError as e:
+            raise ClusteringError(
+                f"Cannot cluster article '{article.title}': {e}"
+            ) from e
 
-            # Try to parse JSON response
-            result = self._parse_similarity_response(response)
-            return result.get("confidence", 0.0) if result.get("is_same_story") else 0.0
+    def _calculate_similarity(self, article_embedding: list[float], story: Story) -> float:
+        """Calculate similarity between article and story using vector cosine similarity.
 
-        except Exception:
-            # Fallback: keyword-based similarity
-            return self._keyword_similarity(article, story)
+        No LLM calls, no embedding generation - just fast vector math.
+        If story has no embedding, returns 0 (no match) to avoid model switching.
+        """
+        # Get story embedding - never generate on the fly to avoid model switching
+        story_embedding = self.embedding_service.get_embedding(story.id, "story")
+
+        if not story_embedding:
+            # Story doesn't have embedding - skip it to avoid model switch
+            # Story will get embedding during next embedding phase
+            return 0.0
+
+        return self.embedding_service.cosine_similarity(article_embedding, story_embedding)
+
+    def _find_matching_story_keywords(self, article: Article) -> Optional[Story]:
+        """Fallback: find matching story using keywords (no embeddings)."""
+        active_stories = self.storage.get_active_stories(limit=50)
+
+        if not active_stories:
+            return None
+
+        best_match = None
+        best_score = 0.0
+
+        for story in active_stories:
+            score = self._keyword_similarity(article, story)
+            if score > best_score:
+                best_score = score
+                best_match = story
+
+        if best_score >= 0.5:  # Lower threshold for keyword matching
+            return best_match
+
+        return None
 
     def _generate_comparison_prompt(self, article: Article, story: Story) -> str:
         """Generate prompt for LLM to compare article with story."""
@@ -78,12 +182,12 @@ class StoryClusterer:
 
 ARTICLE:
 Title: {article.title}
-Content: {article.content[:500]}
+Content: {article.content}
 
 EXISTING STORY:
 Title: {story.title}
 Description: {story.description}
-Keywords: {', '.join(story.keywords[:10])}
+Keywords: {', '.join(story.keywords[:10]) if story.keywords else 'None'}
 
 Are these about the same ongoing story? Consider:
 - Same event or topic
@@ -107,8 +211,9 @@ Respond with JSON:
             if start >= 0 and end > start:
                 json_str = response[start:end]
                 return json.loads(json_str)
-        except Exception:
-            pass
+        except (json.JSONDecodeError, ValueError) as e:
+            import sys
+            print(f"JSON parsing failed for similarity response: {e}", file=sys.stderr)
 
         # Fallback: look for keywords
         response_lower = response.lower()
@@ -129,7 +234,10 @@ Respond with JSON:
         return matches / len(story_keywords)
 
     def create_new_story(self, article: Article) -> Story:
-        """Create a new story from an article."""
+        """Create a new story from an article.
+
+        Also generates and stores embedding for the story for future similarity matching.
+        """
         # Generate story metadata
         title = self._generate_story_title(article)
         description = self._generate_story_description(article)
@@ -143,7 +251,9 @@ Respond with JSON:
                     first_seen = datetime.fromisoformat(pub_str).replace(tzinfo=None)
                 else:
                     first_seen = article.published
-            except Exception:
+            except (ValueError, TypeError) as e:
+                import sys
+                print(f"Warning: Invalid date format for article '{article.title[:30]}': {e}", file=sys.stderr)
                 first_seen = datetime.now()
         else:
             first_seen = datetime.now()
@@ -164,10 +274,16 @@ Respond with JSON:
         self.storage.save_story(story)
         self.storage.update_article_story(article.id, story.id)
 
+        # NOTE: Story embedding is deferred to avoid model switching during LLM phase.
+        # New stories will get embeddings during the next embedding phase.
+
         return story
 
     def update_story_with_article(self, story: Story, article: Article) -> Story:
-        """Add an article to an existing story."""
+        """Add an article to an existing story.
+
+        Updates keywords and refreshes story embedding if keywords changed significantly.
+        """
         # Add article ID if not already present
         if article.id not in story.article_ids:
             story.article_ids.append(article.id)
@@ -176,10 +292,13 @@ Respond with JSON:
         story.last_updated = datetime.now()
 
         # Update story metadata (keywords may evolve)
+        old_keyword_count = len(story.keywords)
         new_keywords = self._extract_keywords(article)
+        keywords_added = 0
         for kw in new_keywords:
             if kw not in story.keywords:
                 story.keywords.append(kw)
+                keywords_added += 1
 
         # Keep only top keywords
         story.keywords = story.keywords[:20]
@@ -188,11 +307,15 @@ Respond with JSON:
         self.storage.update_story(story)
         self.storage.update_article_story(article.id, story.id)
 
+        # NOTE: Story re-embedding is deferred to avoid model switching during LLM phase.
+        # Story embeddings are refreshed during the next embedding phase when needed.
+        # The keywords are stored, so semantic matching will still work reasonably well.
+
         return story
 
     def _generate_story_title(self, article: Article) -> str:
         """Generate a story title from the article."""
-        prompt = f"""Generate a concise story title (5-10 words) for this article.
+        prompt = f"""Generate a concise story title for this article.
 Focus on the main topic/event, not specific details.
 
 Article Title: {article.title}
@@ -203,54 +326,70 @@ Story Title:"""
             title = self.llm.generate(prompt, max_tokens=50).strip()
             # Clean up the title
             title = title.replace('"', '').replace('\n', ' ')
-            return title[:100]
+            return title
         except Exception:
             # Fallback: use article title
-            return article.title[:100]
+            return article.title
 
     def _generate_story_description(self, article: Article) -> str:
         """Generate a brief story description."""
         prompt = f"""Describe what this story is about in 1-2 sentences.
 
 Article: {article.title}
-Content: {article.content[:300]}
+Content: {article.content}
 
 Description:"""
 
         try:
             desc = self.llm.generate(prompt, max_tokens=150).strip()
-            return desc[:500]
+            return desc
         except Exception:
-            # Fallback: use article summary or beginning of content
-            return article.summary or article.content[:200]
+            # Fallback: use article summary or full content
+            return article.summary or article.content or ""
 
     def _extract_keywords(self, article: Article) -> list[str]:
         """Extract keywords from article."""
-        prompt = f"""Extract 5-10 key terms from this article.
-Include: people, organizations, places, main topics.
+        prompt = f"""Extract ALL key terms from this article.
+Include: people, organizations, places, main topics. The number of terms depends on content density.
 
 Article: {article.title}
-Content: {article.content[:400]}
+Content: {article.content}
 
 Return as comma-separated list:"""
 
         try:
-            response = self.llm.generate(prompt, max_tokens=100).strip()
+            response = self.llm.generate(prompt, max_tokens=200).strip()
             # Split and clean keywords
             keywords = [kw.strip() for kw in response.split(',')]
-            return [kw for kw in keywords if kw and len(kw) > 2][:10]
+            return [kw for kw in keywords if kw and len(kw) > 2]
         except Exception:
             # Fallback: extract from title
-            return [word for word in article.title.split() if len(word) > 4][:5]
+            return [word for word in article.title.split() if len(word) > 4]
 
 
 class NewsItemExtractor:
     """Handles Level 2: extracting news items within stories."""
 
-    def __init__(self, llm_provider: LLMProvider, storage: Storage):
+    # Similarity threshold for duplicate detection
+    SIMILARITY_THRESHOLD = 0.75
+
+    def __init__(
+        self,
+        llm_provider: LLMProvider,
+        storage: Storage,
+        embedding_service: Optional[EmbeddingService] = None,
+        kb: Optional[KnowledgeBase] = None,
+    ):
         self.llm = llm_provider
         self.storage = storage
         self.min_confidence = 0.7
+        # Use provided embedding service or create one
+        if embedding_service:
+            self._embedding_service = embedding_service
+        else:
+            self._kb = kb or KnowledgeBase()
+            self._embedding_service = EmbeddingService(self._kb)
+        self._embedding_cache: dict[str, list[float]] = {}
 
     def extract_news_items(self, article: Article, story: Story) -> list[NewsItem]:
         """Extract new information from article within the context of a story."""
@@ -281,8 +420,10 @@ class NewsItemExtractor:
 
             return new_items
 
-        except Exception:
-            # On error, return empty list
+        except Exception as e:
+            # Log error for visibility, return empty list to continue processing
+            import sys
+            print(f"Error extracting news items from article '{article.title[:40]}': {e}", file=sys.stderr)
             return []
 
     def _generate_extraction_prompt(
@@ -297,7 +438,7 @@ class NewsItemExtractor:
 
 ARTICLE:
 Title: {article.title}
-Content: {article.content[:800]}
+Content: {article.content}
 
 ALREADY KNOWN (from previous articles):
 {existing_summary if existing_summary else "None"}
@@ -342,7 +483,9 @@ Respond with JSON array:
                             first_seen = datetime.fromisoformat(pub_str).replace(tzinfo=None)
                         else:
                             first_seen = article.published
-                    except Exception:
+                    except (ValueError, TypeError) as e:
+                        import sys
+                        print(f"Warning: Invalid date format for article: {e}", file=sys.stderr)
                         first_seen = datetime.now()
                 else:
                     first_seen = datetime.now()
@@ -362,8 +505,10 @@ Respond with JSON array:
                         )
                         items.append(item)
 
-        except Exception:
-            pass
+        except (json.JSONDecodeError, ValueError, TypeError) as e:
+            # Expected for non-JSON or malformed responses
+            import sys
+            print(f"Could not parse news items from LLM response: {e}", file=sys.stderr)
 
         return items
 
@@ -392,16 +537,41 @@ Respond with JSON array:
         return unique_items
 
     def _items_similar(self, item1: NewsItem, item2: NewsItem) -> bool:
-        """Check if two news items are similar (duplicates)."""
-        # Simple keyword overlap
-        words1 = set(item1.title.lower().split())
-        words2 = set(item2.title.lower().split())
+        """Check if two news items are similar (duplicates) using embedding similarity.
 
-        if len(words1) == 0 or len(words2) == 0:
-            return False
+        Requires EmbeddingService. Returns False if unavailable (assumes not duplicate).
+        """
+        if not self._embedding_service or not self._embedding_service.is_available():
+            import sys
+            print("EmbeddingService required but not available for item similarity", file=sys.stderr)
+            return False  # Can't determine similarity, assume not duplicate
 
-        overlap = len(words1 & words2) / max(len(words1), len(words2))
-        return overlap > 0.6
+        # Combine title and description for better semantic matching
+        text1 = f"{item1.title} {item1.description or ''}"
+        text2 = f"{item2.title} {item2.description or ''}"
+
+        emb1 = self._get_embedding(text1)
+        emb2 = self._get_embedding(text2)
+
+        if emb1 is None or emb2 is None:
+            return False  # Can't embed, assume not duplicate
+
+        similarity = self._embedding_service.cosine_similarity(emb1, emb2)
+        return similarity >= self.SIMILARITY_THRESHOLD
+
+    def _get_embedding(self, text: str) -> Optional[list[float]]:
+        """Get embedding for text, using cache."""
+        # Normalize text for cache key
+        cache_key = text[:500]  # Limit key length
+        if cache_key in self._embedding_cache:
+            return self._embedding_cache[cache_key]
+
+        try:
+            result = self._embedding_service.embed_text(text)
+            self._embedding_cache[cache_key] = result.vector
+            return result.vector
+        except EmbeddingError:
+            return None
 
 
 class StoryEvolutionTracker:
@@ -455,8 +625,10 @@ class StoryEvolutionTracker:
 
                     if pub_time > recent_cutoff:
                         recent_count += 1
-                except Exception:
-                    pass
+                except (ValueError, TypeError) as e:
+                    # Date parsing failed - skip this article for velocity calc
+                    import sys
+                    print(f"Warning: Invalid date format for article {article_id}: {e}", file=sys.stderr)
 
         return recent_count / (window_hours / 24)
 
@@ -520,15 +692,19 @@ def process_article_clustering(
     llm_provider: LLMProvider,
     storage: Storage,
     enable_news_extraction: bool = True,
+    kb: Optional[KnowledgeBase] = None,
 ) -> dict:
     """
     Process clustering for a single article.
 
+    Uses vector embeddings for O(n) similarity comparisons instead of O(n²) LLM calls.
+
     Args:
         article: Article to process
-        llm_provider: LLM provider for clustering
+        llm_provider: LLM provider for metadata generation
         storage: Storage instance
         enable_news_extraction: Whether to extract news items
+        kb: Optional KnowledgeBase for embedding storage
 
     Returns:
         Dictionary with processing stats
@@ -540,8 +716,8 @@ def process_article_clustering(
     }
 
     try:
-        # Level 1: Cluster article into story
-        clusterer = StoryClusterer(llm_provider, storage)
+        # Level 1: Cluster article into story (uses embeddings, not LLM calls)
+        clusterer = StoryClusterer(llm_provider, storage, kb)
         story = clusterer.cluster_article(article)
 
         stats["story_id"] = story.id
@@ -618,8 +794,10 @@ def update_story_clusters(
 
                 if pub_time < cutoff:
                     continue
-            except Exception:
-                pass
+            except (ValueError, TypeError) as e:
+                # Date parsing failed - include article anyway (conservative)
+                import sys
+                print(f"Warning: Invalid date format for article {article.id}: {e}", file=sys.stderr)
 
         unclustered.append(article)
 
@@ -647,24 +825,100 @@ def update_story_clusters(
     }
 
 
+def backfill_story_embeddings(
+    storage: Storage,
+    kb: Optional[KnowledgeBase] = None,
+    progress_callback: Optional[callable] = None,
+) -> dict:
+    """
+    Backfill embeddings for stories that don't have them.
+
+    This fixes duplicate detection for stories created before the embedding
+    phase was added. Stories without embeddings return similarity=0.
+
+    Args:
+        storage: Storage instance
+        kb: Optional KnowledgeBase (creates one if not provided)
+        progress_callback: Optional callback(current, total, story_title)
+
+    Returns:
+        Dictionary with stats: {'processed': int, 'embedded': int, 'errors': list}
+    """
+    if kb is None:
+        kb = KnowledgeBase()
+
+    embedding_service = EmbeddingService(kb)
+
+    # Check if embedding provider is available
+    if not embedding_service.is_available():
+        return {
+            'processed': 0,
+            'embedded': 0,
+            'errors': ['No embedding provider available'],
+        }
+
+    # Get all stories
+    all_stories = storage.get_all_stories(limit=1000)
+
+    # Get story IDs that already have embeddings
+    embedded_ids = kb.get_target_ids_with_embeddings("story")
+
+    # Filter to stories needing embeddings
+    stories_needing_embeddings = [
+        s for s in all_stories if s.id not in embedded_ids
+    ]
+
+    stats = {
+        'processed': 0,
+        'embedded': 0,
+        'already_embedded': len(embedded_ids),
+        'errors': [],
+    }
+
+    total = len(stories_needing_embeddings)
+    for i, story in enumerate(stories_needing_embeddings):
+        if progress_callback:
+            progress_callback(i + 1, total, story.title)
+
+        try:
+            result = embedding_service.embed_story(story)
+            embedding_service.save_embedding(story.id, "story", result)
+            stats['embedded'] += 1
+        except Exception as e:
+            stats['errors'].append(f"{story.id}: {str(e)}")
+
+        stats['processed'] += 1
+
+    return stats
+
+
 def batch_process_articles(
     articles: list[Article],
     llm_provider: LLMProvider,
     storage: Storage,
     enable_news_extraction: bool = True,
+    kb: Optional[KnowledgeBase] = None,
 ) -> dict:
     """
     Process clustering for multiple articles in batch.
 
+    Uses vector embeddings for O(n) similarity comparisons per article,
+    avoiding O(n²) LLM calls that would make batch processing slow.
+
     Args:
         articles: List of articles to process
-        llm_provider: LLM provider for clustering
+        llm_provider: LLM provider for metadata generation
         storage: Storage instance
         enable_news_extraction: Whether to extract news items
+        kb: Optional KnowledgeBase for embedding storage
 
     Returns:
         Dictionary with batch processing stats
     """
+    # Create shared KB instance if not provided
+    if kb is None:
+        kb = KnowledgeBase()
+
     stats = {
         "processed": 0,
         "stories_created": 0,
@@ -675,7 +929,7 @@ def batch_process_articles(
 
     for article in articles:
         result = process_article_clustering(
-            article, llm_provider, storage, enable_news_extraction
+            article, llm_provider, storage, enable_news_extraction, kb
         )
 
         stats["processed"] += 1

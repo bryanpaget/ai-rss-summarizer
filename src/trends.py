@@ -1,86 +1,123 @@
 """Trend detection and categorization."""
 
+import logging
 from collections import Counter
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from .storage import Storage
 from .emergence import detect_emerging_trends, format_emerging_trend
 
+if TYPE_CHECKING:
+    from .embeddings import EmbeddingService
 
-# Predefined trend categories with keywords
-TREND_CATEGORIES = {
-    "AI & Technology": [
-        "ai", "artificial intelligence", "machine learning", "llm", "gpt",
-        "neural", "algorithm", "automation", "robot", "tech", "software",
-        "startup", "silicon valley", "crypto", "blockchain", "cybersecurity",
-        "claude", "openai", "gemini", "copilot", "chatgpt", "anthropic",
-    ],
-    "Politics & Government": [
-        "election", "president", "congress", "senate", "government", "policy",
-        "democracy", "republican", "democrat", "vote", "legislation", "law",
-        "minister", "parliament", "biden", "trump",
-    ],
-    "Business & Economy": [
-        "market", "stock", "economy", "inflation", "recession", "finance",
-        "investment", "startup", "ipo", "merger", "acquisition", "revenue",
-        "profit", "gdp", "unemployment", "earnings", "quarter",
-    ],
-    "Science & Research": [
-        "research", "study", "discovery", "scientist", "experiment", "nasa",
-        "space", "physics", "biology", "chemistry", "medicine", "vaccine",
-        "clinical", "trial", "breakthrough",
-    ],
-    "Climate & Environment": [
-        "climate", "environment", "pollution", "carbon", "renewable", "solar",
-        "wind", "sustainable", "emission", "warming", "biodiversity",
-        "conservation", "wildfire", "flood", "hurricane", "ev", "electric vehicle",
-    ],
-    "Health & Medicine": [
-        "health", "medical", "hospital", "disease", "treatment", "drug",
-        "fda", "pandemic", "virus", "cancer", "mental health", "therapy",
-        "diagnosis", "patient", "doctor",
-    ],
-    "Entertainment & Culture": [
-        "movie", "film", "music", "celebrity", "entertainment", "streaming",
-        "netflix", "disney", "game", "gaming", "sports", "concert", "art",
-        "culture", "award", "oscar",
-    ],
-    "World & International": [
-        "international", "global", "united nations", "war", "conflict",
-        "peace", "treaty", "diplomatic", "foreign", "refugee", "humanitarian",
-        "ukraine", "china", "russia", "europe",
-    ],
+logger = logging.getLogger(__name__)
+
+
+# Category descriptions for embedding-based matching
+# Each category has a representative description that captures its semantic meaning
+TREND_CATEGORY_DESCRIPTIONS = {
+    "AI": "artificial intelligence, machine learning, neural networks, deep learning, large language models, GPT, ChatGPT, generative AI, AI assistants, transformers",
+    "Technology": "technology, software development, hardware, startups, programming, cybersecurity, cloud computing, data centers, tech industry, digital transformation",
+    "Politics & Government": "politics, government, elections, legislation, congress, senate, democracy, political parties, policy making, international relations",
+    "Business & Economy": "business, economy, stock market, finance, investment, startups, mergers, acquisitions, corporate earnings, economic indicators",
+    "Science & Research": "scientific research, discoveries, experiments, space exploration, physics, biology, chemistry, academic studies, breakthroughs",
+    "Climate & Environment": "climate change, environment, renewable energy, sustainability, carbon emissions, conservation, pollution, natural disasters",
+    "Health & Medicine": "health, medicine, medical research, hospitals, disease treatment, pharmaceuticals, healthcare, mental health, public health",
+    "Entertainment & Culture": "entertainment, movies, music, gaming, streaming, celebrities, cultural events, arts, sports, media",
+    "World & International": "international affairs, global events, diplomacy, conflicts, humanitarian issues, foreign policy, world news",
 }
 
+# Similarity threshold for category matching
+CATEGORY_SIMILARITY_THRESHOLD = 0.45
 
-def categorize_text(text: str) -> list[str]:
+# Cache for category embeddings (populated on first use)
+_category_embeddings_cache: dict[str, list[float]] = {}
+
+
+def _get_category_embeddings(embedding_service: "EmbeddingService") -> dict[str, list[float]]:
+    """Get or create embeddings for all categories."""
+    global _category_embeddings_cache
+
+    if _category_embeddings_cache:
+        return _category_embeddings_cache
+
+    for category, description in TREND_CATEGORY_DESCRIPTIONS.items():
+        try:
+            result = embedding_service.embed_text(description)
+            _category_embeddings_cache[category] = result.vector
+        except Exception as e:
+            logger.warning(f"Failed to embed category '{category}': {e}")
+
+    return _category_embeddings_cache
+
+
+def categorize_text(
+    text: str,
+    embedding_service: Optional["EmbeddingService"] = None,
+) -> list[str]:
     """
-    Categorize text into trend categories based on keyword matching.
-    Returns list of matching categories.
+    Categorize text into trend categories using embedding similarity.
+
+    Args:
+        text: Text to categorize
+        embedding_service: EmbeddingService for semantic matching.
+                          If not available, returns ["Uncategorized"].
+
+    Returns:
+        List of matching category names, or ["Uncategorized"] if none match.
     """
     if not text:
         return ["Uncategorized"]
 
-    text_lower = text.lower()
-    matches = []
+    # Require embedding service
+    if embedding_service is None or not embedding_service.is_available():
+        logger.error("EmbeddingService required but not available for trend categorization")
+        return ["Uncategorized"]
 
-    for category, keywords in TREND_CATEGORIES.items():
-        for keyword in keywords:
-            if keyword in text_lower:
-                matches.append(category)
-                break
+    try:
+        # Embed the input text
+        text_result = embedding_service.embed_text(text[:1000])  # Limit text length
+        text_embedding = text_result.vector
 
-    return matches if matches else ["Uncategorized"]
+        # Get category embeddings
+        category_embeddings = _get_category_embeddings(embedding_service)
+        if not category_embeddings:
+            logger.error("Failed to create category embeddings")
+            return ["Uncategorized"]
+
+        # Find matching categories by similarity
+        matches = []
+        for category, cat_embedding in category_embeddings.items():
+            similarity = embedding_service.cosine_similarity(text_embedding, cat_embedding)
+            if similarity >= CATEGORY_SIMILARITY_THRESHOLD:
+                matches.append((category, similarity))
+
+        # Sort by similarity and return category names
+        matches.sort(key=lambda x: x[1], reverse=True)
+        return [cat for cat, _ in matches] if matches else ["Uncategorized"]
+
+    except Exception as e:
+        logger.error(f"Categorization failed: {e}")
+        return ["Uncategorized"]
 
 
-def analyze_article(article) -> str:
+def analyze_article(
+    article,
+    embedding_service: Optional["EmbeddingService"] = None,
+) -> str:
     """
-    Analyze an article and return trend tags.
-    Combines title and content for better categorization.
+    Analyze an article and return trend tags using embedding similarity.
+
+    Args:
+        article: Article to analyze
+        embedding_service: EmbeddingService for semantic categorization
+
+    Returns:
+        Comma-separated category names
     """
     combined_text = f"{article.title} {article.content}"
-    categories = categorize_text(combined_text)
+    categories = categorize_text(combined_text, embedding_service=embedding_service)
     return ", ".join(categories)
 
 
@@ -224,11 +261,11 @@ def llm_categorize(article, provider) -> str:
     Use LLM to categorize an article that keyword matching missed.
     Only called for uncategorized articles when LLM is available.
     """
-    categories = list(TREND_CATEGORIES.keys())
+    categories = list(TREND_CATEGORY_DESCRIPTIONS.keys())
     prompt = f"""Categorize this article into one of these categories: {', '.join(categories)}
 
 Title: {article.title}
-Content: {article.content[:500] if article.content else 'No content'}
+Content: {article.content or 'No content'}
 
 Return only the category name, nothing else."""
 
