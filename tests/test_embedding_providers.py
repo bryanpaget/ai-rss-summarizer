@@ -268,6 +268,7 @@ class TestLMStudioProviderEmbed:
         with patch('subprocess.run') as mock_subprocess, \
              patch('builtins.open', new_callable=MagicMock) as mock_open, \
              patch('os.path.exists') as mock_exists, \
+             patch('os.path.getsize') as mock_getsize, \
              patch('os.unlink') as mock_unlink, \
              patch('tempfile.NamedTemporaryFile') as mock_tempfile:
 
@@ -282,21 +283,20 @@ class TestLMStudioProviderEmbed:
             mock_result.stdout = "FILE=/tmp/response.json\n"
             mock_subprocess.return_value = mock_result
 
-            # Response file exists and contains embedding
+            # Response file exists and has content
             mock_exists.return_value = True
-            mock_file = MagicMock()
-            mock_file.__enter__.return_value = MagicMock()
-            mock_file.__enter__.return_value.read = MagicMock()
+            mock_getsize.return_value = 100  # Non-empty file
+
+            # Set up file read to return JSON string
             response_data = {"data": [{"embedding": [0.1, 0.2, 0.3]}]}
+            mock_file = MagicMock()
+            mock_file.__enter__.return_value.read.return_value = json.dumps(response_data)
+            mock_open.return_value = mock_file
 
-            # Use side_effect for json.load
-            with patch('json.load', return_value=response_data):
-                mock_open.return_value = mock_file
+            provider = LMStudioProvider()
+            result = provider.embed("test text")
 
-                provider = LMStudioProvider()
-                result = provider.embed("test text")
-
-                assert result == [0.1, 0.2, 0.3]
+            assert result == [0.1, 0.2, 0.3]
 
     def test_embed_batch_success(self):
         """Test batch embedding returns multiple vectors."""
@@ -305,17 +305,17 @@ class TestLMStudioProviderEmbed:
         embeddings = [[0.1, 0.2], [0.3, 0.4], [0.5, 0.6]]
         call_count = [0]
 
-        def mock_json_load(*args, **kwargs):
+        def mock_file_read(*args, **kwargs):
             idx = call_count[0]
             call_count[0] += 1
-            return {"data": [{"embedding": embeddings[idx]}]}
+            return json.dumps({"data": [{"embedding": embeddings[idx]}]})
 
         with patch('subprocess.run') as mock_subprocess, \
              patch('builtins.open', new_callable=MagicMock) as mock_open, \
              patch('os.path.exists', return_value=True), \
+             patch('os.path.getsize', return_value=100), \
              patch('os.unlink'), \
-             patch('tempfile.NamedTemporaryFile') as mock_tempfile, \
-             patch('json.load', side_effect=mock_json_load):
+             patch('tempfile.NamedTemporaryFile') as mock_tempfile:
 
             mock_temp = MagicMock()
             mock_temp.__enter__.return_value.name = "/tmp/input.txt"
@@ -326,7 +326,9 @@ class TestLMStudioProviderEmbed:
             mock_result.stdout = "FILE=/tmp/response.json\n"
             mock_subprocess.return_value = mock_result
 
-            mock_open.return_value.__enter__.return_value = MagicMock()
+            mock_file = MagicMock()
+            mock_file.__enter__.return_value.read.side_effect = mock_file_read
+            mock_open.return_value = mock_file
 
             provider = LMStudioProvider()
             results = provider.embed_batch(["text1", "text2", "text3"])
@@ -403,12 +405,14 @@ class TestLMStudioProviderEmbed:
 
     def test_embed_response_with_error_field(self):
         """Test embed raises error when gateway response contains error."""
+        import json
+
         with patch('subprocess.run') as mock_subprocess, \
              patch('builtins.open', new_callable=MagicMock) as mock_open, \
              patch('os.path.exists', return_value=True), \
+             patch('os.path.getsize', return_value=100), \
              patch('os.unlink'), \
-             patch('tempfile.NamedTemporaryFile') as mock_tempfile, \
-             patch('json.load', return_value={"error": "Model not loaded"}):
+             patch('tempfile.NamedTemporaryFile') as mock_tempfile:
 
             mock_temp = MagicMock()
             mock_temp.__enter__.return_value.name = "/tmp/input.txt"
@@ -419,7 +423,9 @@ class TestLMStudioProviderEmbed:
             mock_result.stdout = "FILE=/tmp/response.json\n"
             mock_subprocess.return_value = mock_result
 
-            mock_open.return_value.__enter__.return_value = MagicMock()
+            mock_file = MagicMock()
+            mock_file.__enter__.return_value.read.return_value = json.dumps({"error": "Model not loaded"})
+            mock_open.return_value = mock_file
 
             provider = LMStudioProvider()
 
@@ -430,12 +436,14 @@ class TestLMStudioProviderEmbed:
 
     def test_embed_unexpected_response_format(self):
         """Test embed raises error on unexpected response format."""
+        import json
+
         with patch('subprocess.run') as mock_subprocess, \
              patch('builtins.open', new_callable=MagicMock) as mock_open, \
              patch('os.path.exists', return_value=True), \
+             patch('os.path.getsize', return_value=100), \
              patch('os.unlink'), \
-             patch('tempfile.NamedTemporaryFile') as mock_tempfile, \
-             patch('json.load', return_value={"unexpected": "format"}):
+             patch('tempfile.NamedTemporaryFile') as mock_tempfile:
 
             mock_temp = MagicMock()
             mock_temp.__enter__.return_value.name = "/tmp/input.txt"
@@ -446,7 +454,9 @@ class TestLMStudioProviderEmbed:
             mock_result.stdout = "FILE=/tmp/response.json\n"
             mock_subprocess.return_value = mock_result
 
-            mock_open.return_value.__enter__.return_value = MagicMock()
+            mock_file = MagicMock()
+            mock_file.__enter__.return_value.read.return_value = json.dumps({"unexpected": "format"})
+            mock_open.return_value = mock_file
 
             provider = LMStudioProvider()
 
@@ -930,18 +940,24 @@ class TestEmbeddingProviderEdgeCases:
 
     def test_embed_empty_string(self):
         """Test embedding empty string."""
+        import json
+
         with patch('subprocess.run') as mock_subprocess, \
-             patch('builtins.open', new_callable=MagicMock), \
+             patch('builtins.open', new_callable=MagicMock) as mock_open, \
              patch('os.path.exists', return_value=True), \
+             patch('os.path.getsize', return_value=100), \
              patch('os.unlink'), \
-             patch('tempfile.NamedTemporaryFile') as mock_tempfile, \
-             patch('json.load', return_value={"data": [{"embedding": [0.0] * 384}]}):
+             patch('tempfile.NamedTemporaryFile') as mock_tempfile:
 
             mock_temp = MagicMock()
             mock_temp.__enter__.return_value.name = "/tmp/input.txt"
             mock_tempfile.return_value = mock_temp
 
             mock_subprocess.return_value = MagicMock(returncode=0, stdout="FILE=/tmp/r.json\n")
+
+            mock_file = MagicMock()
+            mock_file.__enter__.return_value.read.return_value = json.dumps({"data": [{"embedding": [0.0] * 384}]})
+            mock_open.return_value = mock_file
 
             provider = LMStudioProvider()
             result = provider.embed("")
@@ -950,18 +966,24 @@ class TestEmbeddingProviderEdgeCases:
 
     def test_embed_unicode_text(self):
         """Test embedding unicode text."""
+        import json
+
         with patch('subprocess.run') as mock_subprocess, \
-             patch('builtins.open', new_callable=MagicMock), \
+             patch('builtins.open', new_callable=MagicMock) as mock_open, \
              patch('os.path.exists', return_value=True), \
+             patch('os.path.getsize', return_value=100), \
              patch('os.unlink'), \
-             patch('tempfile.NamedTemporaryFile') as mock_tempfile, \
-             patch('json.load', return_value={"data": [{"embedding": [0.1, 0.2]}]}):
+             patch('tempfile.NamedTemporaryFile') as mock_tempfile:
 
             mock_temp = MagicMock()
             mock_temp.__enter__.return_value.name = "/tmp/input.txt"
             mock_tempfile.return_value = mock_temp
 
             mock_subprocess.return_value = MagicMock(returncode=0, stdout="FILE=/tmp/r.json\n")
+
+            mock_file = MagicMock()
+            mock_file.__enter__.return_value.read.return_value = json.dumps({"data": [{"embedding": [0.1, 0.2]}]})
+            mock_open.return_value = mock_file
 
             provider = LMStudioProvider()
             result = provider.embed("Hello 世界 🌍 مرحبا")
@@ -970,18 +992,24 @@ class TestEmbeddingProviderEdgeCases:
 
     def test_embed_very_long_text(self):
         """Test embedding very long text (provider should handle truncation)."""
+        import json
+
         with patch('subprocess.run') as mock_subprocess, \
-             patch('builtins.open', new_callable=MagicMock), \
+             patch('builtins.open', new_callable=MagicMock) as mock_open, \
              patch('os.path.exists', return_value=True), \
+             patch('os.path.getsize', return_value=100), \
              patch('os.unlink'), \
-             patch('tempfile.NamedTemporaryFile') as mock_tempfile, \
-             patch('json.load', return_value={"data": [{"embedding": [0.1]}]}):
+             patch('tempfile.NamedTemporaryFile') as mock_tempfile:
 
             mock_temp = MagicMock()
             mock_temp.__enter__.return_value.name = "/tmp/input.txt"
             mock_tempfile.return_value = mock_temp
 
             mock_subprocess.return_value = MagicMock(returncode=0, stdout="FILE=/tmp/r.json\n")
+
+            mock_file = MagicMock()
+            mock_file.__enter__.return_value.read.return_value = json.dumps({"data": [{"embedding": [0.1]}]})
+            mock_open.return_value = mock_file
 
             provider = LMStudioProvider()
             long_text = "x" * 100000
@@ -991,18 +1019,24 @@ class TestEmbeddingProviderEdgeCases:
 
     def test_embed_special_characters(self):
         """Test embedding text with special characters."""
+        import json
+
         with patch('subprocess.run') as mock_subprocess, \
-             patch('builtins.open', new_callable=MagicMock), \
+             patch('builtins.open', new_callable=MagicMock) as mock_open, \
              patch('os.path.exists', return_value=True), \
+             patch('os.path.getsize', return_value=100), \
              patch('os.unlink'), \
-             patch('tempfile.NamedTemporaryFile') as mock_tempfile, \
-             patch('json.load', return_value={"data": [{"embedding": [0.1]}]}):
+             patch('tempfile.NamedTemporaryFile') as mock_tempfile:
 
             mock_temp = MagicMock()
             mock_temp.__enter__.return_value.name = "/tmp/input.txt"
             mock_tempfile.return_value = mock_temp
 
             mock_subprocess.return_value = MagicMock(returncode=0, stdout="FILE=/tmp/r.json\n")
+
+            mock_file = MagicMock()
+            mock_file.__enter__.return_value.read.return_value = json.dumps({"data": [{"embedding": [0.1]}]})
+            mock_open.return_value = mock_file
 
             provider = LMStudioProvider()
             result = provider.embed('Text with "quotes" and \n newlines \t tabs')
@@ -1011,18 +1045,24 @@ class TestEmbeddingProviderEdgeCases:
 
     def test_embed_batch_single_item(self):
         """Test batch embedding with single item."""
+        import json
+
         with patch('subprocess.run') as mock_subprocess, \
-             patch('builtins.open', new_callable=MagicMock), \
+             patch('builtins.open', new_callable=MagicMock) as mock_open, \
              patch('os.path.exists', return_value=True), \
+             patch('os.path.getsize', return_value=100), \
              patch('os.unlink'), \
-             patch('tempfile.NamedTemporaryFile') as mock_tempfile, \
-             patch('json.load', return_value={"data": [{"embedding": [0.1, 0.2]}]}):
+             patch('tempfile.NamedTemporaryFile') as mock_tempfile:
 
             mock_temp = MagicMock()
             mock_temp.__enter__.return_value.name = "/tmp/input.txt"
             mock_tempfile.return_value = mock_temp
 
             mock_subprocess.return_value = MagicMock(returncode=0, stdout="FILE=/tmp/r.json\n")
+
+            mock_file = MagicMock()
+            mock_file.__enter__.return_value.read.return_value = json.dumps({"data": [{"embedding": [0.1, 0.2]}]})
+            mock_open.return_value = mock_file
 
             provider = LMStudioProvider()
             results = provider.embed_batch(["single"])
@@ -1033,6 +1073,7 @@ class TestEmbeddingProviderEdgeCases:
     def test_provider_recovers_after_transient_error(self):
         """Test provider can recover after transient error."""
         import subprocess as sp
+        import json
 
         call_count = [0]
 
@@ -1043,15 +1084,19 @@ class TestEmbeddingProviderEdgeCases:
             return MagicMock(returncode=0, stdout="FILE=/tmp/r.json\n")
 
         with patch('subprocess.run', side_effect=subprocess_side_effect), \
-             patch('builtins.open', new_callable=MagicMock), \
+             patch('builtins.open', new_callable=MagicMock) as mock_open, \
              patch('os.path.exists', return_value=True), \
+             patch('os.path.getsize', return_value=100), \
              patch('os.unlink'), \
-             patch('tempfile.NamedTemporaryFile') as mock_tempfile, \
-             patch('json.load', return_value={"data": [{"embedding": [0.1]}]}):
+             patch('tempfile.NamedTemporaryFile') as mock_tempfile:
 
             mock_temp = MagicMock()
             mock_temp.__enter__.return_value.name = "/tmp/input.txt"
             mock_tempfile.return_value = mock_temp
+
+            mock_file = MagicMock()
+            mock_file.__enter__.return_value.read.return_value = json.dumps({"data": [{"embedding": [0.1]}]})
+            mock_open.return_value = mock_file
 
             provider = LMStudioProvider()
 
@@ -1101,12 +1146,14 @@ class TestModelManagerIntegration:
 
     def test_embed_uses_gateway_not_direct_api(self):
         """Test embed uses subprocess gateway instead of direct httpx calls."""
+        import json
+
         with patch('subprocess.run') as mock_subprocess, \
-             patch('builtins.open', new_callable=MagicMock), \
+             patch('builtins.open', new_callable=MagicMock) as mock_open, \
              patch('os.path.exists', return_value=True), \
+             patch('os.path.getsize', return_value=100), \
              patch('os.unlink'), \
              patch('tempfile.NamedTemporaryFile') as mock_tempfile, \
-             patch('json.load', return_value={"data": [{"embedding": [0.1]}]}), \
              patch('src.embedding_providers.httpx.post') as mock_httpx:
 
             mock_temp = MagicMock()
@@ -1114,6 +1161,10 @@ class TestModelManagerIntegration:
             mock_tempfile.return_value = mock_temp
 
             mock_subprocess.return_value = MagicMock(returncode=0, stdout="FILE=/tmp/r.json\n")
+
+            mock_file = MagicMock()
+            mock_file.__enter__.return_value.read.return_value = json.dumps({"data": [{"embedding": [0.1]}]})
+            mock_open.return_value = mock_file
 
             provider = LMStudioProvider()
             provider.embed("test")

@@ -226,7 +226,32 @@ class LMStudioProvider(EmbeddingProvider):
         - Model auto-loading (loads embedding model if needed)
         - Adaptive batch sizing (adjusts based on memory pressure)
         - Queue management (processes requests efficiently)
+
+        Includes retry logic for transient gateway errors.
         """
+        MAX_RETRIES = 3
+        last_error = None
+
+        for attempt in range(MAX_RETRIES):
+            try:
+                return self._embed_single(text)
+            except EmbeddingProviderError as e:
+                last_error = e
+                # Retry on transient errors (empty JSON, gateway busy)
+                if "Invalid JSON" in str(e) or "Gateway failed" in str(e):
+                    import time
+                    import sys
+                    if attempt < MAX_RETRIES - 1:
+                        print(f"\n  [yellow]Embedding failed (attempt {attempt + 1}/{MAX_RETRIES}), retrying...[/yellow]", file=sys.stderr)
+                        time.sleep(1 + attempt)  # Increasing backoff
+                        continue
+                raise  # Non-transient error, don't retry
+
+        # All retries exhausted
+        raise last_error or EmbeddingProviderError("Embedding failed after retries")
+
+    def _embed_single(self, text: str) -> list[float]:
+        """Single embedding attempt without retry logic."""
         import subprocess
         import json
         import os
@@ -274,8 +299,18 @@ class LMStudioProvider(EmbeddingProvider):
             # Wait for response file (gateway processes asynchronously)
             for _ in range(self.timeout):
                 if os.path.exists(response_path):
+                    # Check file is not empty before parsing
+                    file_size = os.path.getsize(response_path)
+                    if file_size == 0:
+                        time.sleep(0.5)  # Wait for file to be written
+                        continue
+
                     with open(response_path, 'r', encoding='utf-8') as f:
-                        response = json.load(f)
+                        content = f.read()
+                        if not content.strip():
+                            time.sleep(0.5)  # Empty content, wait
+                            continue
+                        response = json.loads(content)
 
                     if "error" in response:
                         raise EmbeddingProviderError(f"Gateway error: {response['error']}")

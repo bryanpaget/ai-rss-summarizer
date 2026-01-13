@@ -481,8 +481,18 @@ Return ONLY a JSON object in this exact format (no markdown, no explanation):
             return message.content[0].text
 
         elif hasattr(self.provider, "base_url"):
-            # OpenAI-compatible provider
+            # OpenAI-compatible provider (LM Studio, Ollama, etc.)
             import httpx
+
+            # If using LM Studio, ensure text model is loaded
+            # (embedding operations may have switched to embedding model)
+            if "localhost:1234" in self.provider.base_url:
+                try:
+                    from .model_manager import ensure_text_model
+                    ensure_text_model()
+                except Exception as e:
+                    import sys
+                    print(f"Warning: Could not ensure text model: {e}", file=sys.stderr)
 
             headers = {
                 "Content-Type": "application/json",
