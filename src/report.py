@@ -211,7 +211,7 @@ def _run_verification_step(
                 # Show sample titles for visibility
                 if samples:
                     for title in samples[:3]:
-                        console.print(f"        [dim]e.g. {title}...[/dim]")
+                        console.print(f"        [dim]e.g. {title}[/dim]")
 
         show_gap("articles missing summaries", gaps["articles_missing_summary"], gaps.get("sample_missing_summary"))
         show_gap("articles missing trend tags", gaps["articles_missing_trends"], gaps.get("sample_missing_trends"))
