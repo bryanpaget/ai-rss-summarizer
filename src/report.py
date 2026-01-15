@@ -1127,6 +1127,8 @@ def generate_report(
     # Create EmbeddingService ONCE - shared across all phases
     embedding_service = EmbeddingService(kb)
 
+    session_start = datetime.now()
+
     stats = {
         "fetched": 0,
         "new": 0,
@@ -1142,6 +1144,7 @@ def generate_report(
         "stories_matched": 0,
         "stories_created": 0,
         "errors": 0,
+        "session_start": session_start,  # For filtering session-only data
     }
 
     # Get LLM provider
