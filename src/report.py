@@ -1098,14 +1098,17 @@ def generate_report(
     console.print(Panel(f"[bold]Generating Report[/bold]\n[dim]Using {provider.name}[/dim]", style="blue"))
     console.print()
 
-    # Fetch latest articles
-    console.print("[bold]Fetching:[/bold] Latest articles...")
+    # Fetch latest articles (skip in catchup mode to avoid adding more gaps)
     feeds = load_feeds(feeds_file)
     new_article_ids = []
     stats["feeds_count"] = len(feeds) if feeds else 0
     stats["time_range"] = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-    if feeds:
+    if max_per_step > 0:
+        # Catchup mode: skip fetch to avoid adding more work than we process
+        console.print("[bold]Fetching:[/bold] [dim]Skipped (catchup mode with -m flag)[/dim]")
+    elif feeds:
+        console.print("[bold]Fetching:[/bold] Latest articles...")
         fetch_results = fetch_all_feeds(feeds_file, storage)
         for result in fetch_results:
             stats["fetched"] += result["fetched"]
@@ -1117,7 +1120,7 @@ def generate_report(
         else:
             console.print(f"  [dim]No new articles (checked {len(feeds)} feeds)[/dim]")
     else:
-        console.print("  [yellow]No feeds configured[/yellow]")
+        console.print("[bold]Fetching:[/bold] [yellow]No feeds configured[/yellow]")
 
     console.print()
 
