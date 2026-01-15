@@ -828,15 +828,18 @@ Return ONLY valid JSON."""
             if rel_type not in {"confirms", "contradicts", "refines", "extends"}:
                 continue
 
-            src_ins, _ = cluster[src_idx]
-            tgt_ins, _ = cluster[tgt_idx]
+            src_ins, src_emb = cluster[src_idx]
+            tgt_ins, tgt_emb = cluster[tgt_idx]
+
+            # Compute actual similarity from embeddings
+            similarity = _cosine_similarity(src_emb, tgt_emb)
 
             relationship = Relationship(
                 id=str(uuid.uuid4()),
                 source_insight_id=src_ins.id,
                 target_insight_id=tgt_ins.id,
                 relationship_type=rel_type,
-                strength=0.8,  # Cluster members are similar by definition
+                strength=similarity,
                 detected_at=datetime.now(),
             )
             kb.save_relationship(relationship)
