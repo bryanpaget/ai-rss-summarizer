@@ -147,7 +147,8 @@ def _run_verification_step(
     console.print("[bold]Step 1:[/bold] Verifying data completeness...")
 
     # Count TRUE backlog from DB (not just the limited articles list)
-    all_unanalyzed = storage.get_unanalyzed_articles(exclude_spam=True)
+    # Use same min_content_length filter as processing so gaps only count processable items
+    all_unanalyzed = storage.get_unanalyzed_articles(exclude_spam=True, min_content_length=min_content_length)
     for article in all_unanalyzed:
         if not article.summary:
             gaps["articles_missing_summary"] += 1
