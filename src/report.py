@@ -136,6 +136,11 @@ def _run_verification_step(
         "insights_missing_embeddings": 0,
         "articles_needing_llm": [],  # Articles that need LLM processing
         "articles_needing_embedding": [],  # Articles that need embedding
+        # Sample titles for visibility
+        "sample_missing_summary": [],
+        "sample_missing_trends": [],
+        "sample_missing_signals": [],
+        "sample_missing_embeddings": [],
     }
 
     console.print("[bold]Step 1:[/bold] Verifying data completeness...")
@@ -145,12 +150,20 @@ def _run_verification_step(
     for article in all_unanalyzed:
         if not article.summary:
             gaps["articles_missing_summary"] += 1
+            if len(gaps["sample_missing_summary"]) < 3:
+                gaps["sample_missing_summary"].append(article.title[:50])
         if not article.trend_tags:
             gaps["articles_missing_trends"] += 1
+            if len(gaps["sample_missing_trends"]) < 3:
+                gaps["sample_missing_trends"].append(article.title[:50])
         if not article.signal_tags:
             gaps["articles_missing_signals"] += 1
+            if len(gaps["sample_missing_signals"]) < 3:
+                gaps["sample_missing_signals"].append(article.title[:50])
         if storage.get_embedding(article.id) is None:
             gaps["articles_missing_embeddings"] += 1
+            if len(gaps["sample_missing_embeddings"]) < 3:
+                gaps["sample_missing_embeddings"].append(article.title[:50])
 
     # Track what will actually be processed (from limited list)
     for article in articles:
