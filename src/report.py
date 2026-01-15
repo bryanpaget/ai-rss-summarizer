@@ -655,16 +655,24 @@ def _run_connection_detection(
     """
     Detect connections between newly extracted insights and existing knowledge.
 
-    This runs AFTER the embedding phase so all insights have embeddings.
-    No model switching - all embedding work is already done.
+    BATCHED to prevent model switching:
+    1. Embed all new insights (embedding model)
+    2. Find all candidates via FAISS (no model - just math)
+    3. Classify all relationships (text model)
 
     Args:
         processed_articles: List of dicts from LLM phase, each with "insights" list
         kb: Knowledge base
         provider: LLM provider for relationship classification
         stats: Statistics dict to update
-        embedding_service: Embedding service (used for FAISS lookups only, not embedding)
+        embedding_service: Embedding service
     """
+    import json
+    import uuid
+    from datetime import datetime
+    from .knowledge import Relationship
+    from .schema import extract_json_from_response
+
     # Collect all insights that need connection detection
     all_insights = []
     for item in processed_articles:
@@ -675,29 +683,139 @@ def _run_connection_detection(
         return
 
     console.print("[bold]Step 4.5:[/bold] Detecting connections...")
-    console.print(f"  [dim]Finding connections for {len(all_insights)} insights...[/dim]")
+
+    # =========================================================================
+    # PHASE 1: Batch embed all new insights (EMBEDDING MODEL)
+    # =========================================================================
+    console.print(f"  [dim]Embedding {len(all_insights)} new insights...[/dim]")
+
+    insights_to_embed = []
+    for item, ins in all_insights:
+        existing = embedding_service.get_embedding(ins.id, "insight")
+        if not existing:
+            insights_to_embed.append(ins)
+
+    if insights_to_embed:
+        for ins in insights_to_embed:
+            try:
+                result = embedding_service.embed_text(ins.content)
+                embedding_service.save_embedding(ins.id, "insight", result)
+            except Exception as e:
+                console.print(f"    [red]Embedding failed for insight: {e}[/red]")
+                stats["errors"] += 1
+        console.print(f"  [dim]Embedded {len(insights_to_embed)} insights[/dim]")
+    else:
+        console.print(f"  [dim]All insights already embedded[/dim]")
+
+    # =========================================================================
+    # PHASE 2: Find all candidates via FAISS (NO MODEL - just vector math)
+    # =========================================================================
+    console.print(f"  [dim]Finding similar insights via FAISS...[/dim]")
+
+    # For each insight, find candidates
+    all_candidates = []  # List of (item, insight, [(existing_insight, similarity), ...])
+
+    for item, ins in all_insights:
+        embedding = embedding_service.get_embedding(ins.id, "insight")
+        if not embedding:
+            continue
+
+        similar_results = embedding_service.find_similar(
+            query_vector=embedding,
+            target_type="insight",
+            threshold=0.70,
+            limit=50,
+        )
+
+        if not similar_results:
+            continue
+
+        candidates = []
+        for target_id, similarity in similar_results:
+            if target_id == ins.id:
+                continue
+            existing = kb.get_insight(target_id)
+            if existing:
+                candidates.append((existing, similarity))
+
+        if candidates:
+            # Limit to top 10 for LLM classification
+            all_candidates.append((item, ins, candidates[:10]))
+
+    if not all_candidates:
+        console.print(f"  [dim]No similar insights found[/dim]")
+        console.print()
+        return
+
+    # =========================================================================
+    # PHASE 3: Batch classify all relationships (TEXT MODEL)
+    # =========================================================================
+    console.print(f"  [dim]Classifying {len(all_candidates)} insight groups...[/dim]")
 
     total_connections = 0
-    for item, ins in all_insights:
-        try:
-            conns = detect_connections(
-                ins, kb, provider,
-                embedding_service=embedding_service
-            ) or []
 
-            # Store connections in the processed_articles item
+    for item, ins, candidates in all_candidates:
+        # Build prompt for this insight's candidates
+        pairs_text = ""
+        for i, (existing, similarity) in enumerate(candidates):
+            pairs_text += f"\nPair {i+1} (similarity: {similarity:.2f}):\n"
+            pairs_text += f'- Existing: "{existing.content}"\n'
+            pairs_text += f'- New: "{ins.content}"\n'
+
+        prompt = f"""Classify the relationships between these insight pairs.
+{pairs_text}
+For each pair, determine the relationship from the NEW insight to the EXISTING insight:
+- confirms: New says essentially the same thing as existing
+- contradicts: New says the opposite of existing
+- refines: New adds nuance or detail to existing
+- extends: New builds on existing with new information
+- none: They are about similar topics but unrelated
+
+Return a JSON array with the relationship for each pair in order:
+["confirms", "none", "extends", ...]
+
+Return ONLY the JSON array, no other text."""
+
+        try:
+            response = provider.generate(prompt, max_tokens=200)
+            json_str = extract_json_from_response(response)
+            relationship_types = json.loads(json_str)
+
+            if not isinstance(relationship_types, list):
+                relationship_types = [relationship_types]
+
+            # Create relationships for valid classifications
+            valid_types = {"confirms", "contradicts", "refines", "extends"}
+
             if "connections" not in item:
                 item["connections"] = []
-            item["connections"].extend(conns)
-            total_connections += len(conns)
-            stats["connections"] += len(conns)
 
-            if conns:
-                for conn in conns:
-                    formatted = format_relationship(conn, kb)
-                    console.print(f"    [cyan]->[/cyan] {formatted}")
+            for i, (existing, similarity) in enumerate(candidates):
+                if i >= len(relationship_types):
+                    break
+
+                rel_type = str(relationship_types[i]).lower().strip()
+                if rel_type not in valid_types:
+                    continue
+
+                relationship = Relationship(
+                    id=str(uuid.uuid4()),
+                    source_insight_id=ins.id,
+                    target_insight_id=existing.id,
+                    relationship_type=rel_type,
+                    strength=similarity,
+                    detected_at=datetime.now(),
+                )
+
+                item["connections"].append(relationship)
+                total_connections += 1
+                stats["connections"] += 1
+
+                formatted = format_relationship(relationship, kb)
+                console.print(f"    [cyan]->[/cyan] {formatted}")
+
         except Exception as e:
-            console.print(f"    [red]ERROR: Connection detection failed: {e}[/red]")
+            console.print(f"    [red]ERROR: Classification failed: {e}[/red]")
             stats["errors"] += 1
 
     console.print(f"  [green]Found {total_connections} connections[/green]")
