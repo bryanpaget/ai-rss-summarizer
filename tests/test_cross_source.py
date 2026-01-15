@@ -255,7 +255,7 @@ class TestDiverseSources:
         assert "center" in leanings
         assert "right" in leanings or "far-right" in leanings
 
-    @patch("src.cross_source.load_feeds")
+    @patch("src.rss.load_feeds")
     def test_get_current_feed_leanings(self, mock_load):
         mock_load.return_value = [
             "https://nytimes.com/feed",
