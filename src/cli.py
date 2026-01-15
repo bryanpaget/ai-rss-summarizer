@@ -466,7 +466,7 @@ def report(
     max_per_step: int = typer.Option(
         0,
         "--max-per-step", "-m",
-        help="Limit items per step (0=unlimited, useful for testing)",
+        help="Limit items per step (0=unlimited). Use -m 5 to process incrementally when catching up on a large backlog.",
     ),
     skip_summarized: bool = typer.Option(
         True,
