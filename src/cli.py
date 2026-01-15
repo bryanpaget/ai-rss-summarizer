@@ -29,6 +29,7 @@ from .cli_signal_tags import app as signal_tags_app
 from .cli_schedule import app as schedule_app
 from .cli_context import app as context_app
 from .cli_stories import app as stories_app
+from .cli_cross_source import app as cross_source_app
 
 app = typer.Typer(
     name="rss",
