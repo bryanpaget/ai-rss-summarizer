@@ -1404,11 +1404,11 @@ def _show_final_report(
                 console.print(f"\n[bold]{topic}[/bold]")
                 for item in matching[:3]:
                     article = item["article"]
-                    console.print(f"  - {article.title[:60]}...")
+                    console.print(f"  - {article.title}")
                     if item.get("insights"):
                         insight = item['insights'][0]
                         insight_text = insight.content if hasattr(insight, 'content') else str(insight)
-                        console.print(f"    [dim]{insight_text[:80]}...[/dim]")
+                        console.print(f"    [dim]{insight_text}[/dim]")
     else:
         # Prominent notice - interests are key to personalized briefings
         console.print()
