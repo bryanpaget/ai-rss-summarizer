@@ -200,17 +200,21 @@ def _run_verification_step(
     if total_gaps > 0:
         console.print(f"  [yellow]Found {total_gaps} gaps from previous runs:[/yellow]")
 
-        def show_gap(label: str, total: int) -> None:
+        def show_gap(label: str, total: int, samples: list = None) -> None:
             if total > 0:
                 if max_per_step > 0 and total > max_per_step:
                     console.print(f"    - {total} {label} [dim](processing {max_per_step})[/dim]")
                 else:
                     console.print(f"    - {total} {label}")
+                # Show sample titles for visibility
+                if samples:
+                    for title in samples[:3]:
+                        console.print(f"        [dim]e.g. {title}...[/dim]")
 
-        show_gap("articles missing summaries", gaps["articles_missing_summary"])
-        show_gap("articles missing trend tags", gaps["articles_missing_trends"])
-        show_gap("articles missing signal tags", gaps["articles_missing_signals"])
-        show_gap("articles missing embeddings", gaps["articles_missing_embeddings"])
+        show_gap("articles missing summaries", gaps["articles_missing_summary"], gaps.get("sample_missing_summary"))
+        show_gap("articles missing trend tags", gaps["articles_missing_trends"], gaps.get("sample_missing_trends"))
+        show_gap("articles missing signal tags", gaps["articles_missing_signals"], gaps.get("sample_missing_signals"))
+        show_gap("articles missing embeddings", gaps["articles_missing_embeddings"], gaps.get("sample_missing_embeddings"))
         show_gap("stories missing embeddings", gaps["stories_missing_embeddings"])
         show_gap("insights missing embeddings", gaps["insights_missing_embeddings"])
 
