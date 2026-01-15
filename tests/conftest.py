@@ -127,7 +127,12 @@ class TestTimingPlugin:
         print(f"\n{'='*60}")
         print("TEST HARNESS TIMING REPORT")
         print(f"{'='*60}")
-        print(f"Total: {len(self.results)} tests in {total_duration:.2f}s")
+        if stopped_early:
+            remaining = collected_count - ran_count
+            print(f"STOPPED EARLY: Ran {ran_count} of {collected_count} tests ({remaining} not run)")
+            print(f"Reason: Test failure with -x flag (stop on first failure)")
+        else:
+            print(f"Total: {len(self.results)} tests in {total_duration:.2f}s")
         print(f"Passed: {passed_count}, Failed: {failed_count}")
         print(f"\nTop 5 slowest tests:")
         for i, test in enumerate(sorted_results[:5], 1):
