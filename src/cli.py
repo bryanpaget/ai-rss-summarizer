@@ -689,6 +689,12 @@ def help_cmd(
     console.print("  emerging          Detect emerging trends early")
     console.print("  tag               Signal tag management (articles, filter, stats)")
     console.print("  context           User context management (add, list, remove)")
+    console.print()
+    console.print("[bold]Cross-Source Comparison:[/bold]")
+    console.print("  sources compare   Compare how different outlets cover a story")
+    console.print("  sources balance   Show political balance of your feeds")
+    console.print("  sources suggest   Get suggestions for diverse sources")
+    console.print("  sources multi     List stories covered by multiple sources")
 
 
 @app.command()
