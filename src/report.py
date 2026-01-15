@@ -1236,7 +1236,7 @@ def generate_report(
 
     # Step 1: Verification (Self-Healing)
     step_start = time.time()
-    gaps = _run_verification_step(storage, kb, articles, embedding_service, max_per_step)
+    gaps = _run_verification_step(storage, kb, articles, embedding_service, max_per_step, MIN_CONTENT_LENGTH)
     console.print(f"  [dim]Step 1 completed in {time.time() - step_start:.1f}s[/dim]\n")
 
     # Step 2: Pre-embed existing stories/insights
