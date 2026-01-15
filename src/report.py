@@ -1274,6 +1274,7 @@ def generate_report(
 
     # Show total pipeline time
     total_time = time.time() - pipeline_start
+    stats["pipeline_duration"] = total_time  # Store for session stats display
     if total_time > 60:
         console.print(f"[green]Pipeline completed in {total_time / 60:.1f} minutes[/green]\n")
     else:
