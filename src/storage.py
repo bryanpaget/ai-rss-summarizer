@@ -320,6 +320,7 @@ class Storage:
         self,
         feed_url: Optional[str] = None,
         exclude_spam: bool = True,
+        min_content_length: int = 0,
     ) -> list[Article]:
         """Get all articles that haven't been analyzed yet.
 
@@ -329,6 +330,7 @@ class Storage:
         Args:
             feed_url: Optional filter by feed
             exclude_spam: If True, excludes articles flagged as spam
+            min_content_length: Minimum content length (filters out short articles at DB level)
         """
         query = "SELECT * FROM articles WHERE analyzed_at IS NULL"
         params: list = []
@@ -339,6 +341,10 @@ class Storage:
 
         if exclude_spam:
             query += " AND (spam_status IS NULL OR spam_status != 'spam')"
+
+        if min_content_length > 0:
+            query += " AND content IS NOT NULL AND LENGTH(content) >= ?"
+            params.append(min_content_length)
 
         query += " ORDER BY published DESC"
 
