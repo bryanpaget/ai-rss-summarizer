@@ -1505,11 +1505,20 @@ Only return valid JSON array, no other text."""
                 if not isinstance(data, dict):
                     continue
 
+                # Extract and correct inverted predicates
+                raw_subject = data.get("subject", "")
+                raw_predicate = data.get("predicate", "")
+                raw_object = data.get("object", "")
+
+                corrected_subject, corrected_predicate, corrected_object = _correct_inverted_predicate(
+                    raw_subject, raw_predicate, raw_object
+                )
+
                 triple = Triple(
                     id=str(uuid.uuid4()),
-                    subject=data.get("subject", ""),
-                    predicate=data.get("predicate", ""),
-                    object=data.get("object", ""),
+                    subject=corrected_subject,
+                    predicate=corrected_predicate,
+                    object=corrected_object,
                     subject_type=data.get("subject_type", "entity"),
                     object_type=data.get("object_type", "entity"),
                     source_article_id=article.id,
