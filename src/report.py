@@ -959,6 +959,7 @@ def _run_connection_detection(
 
         # Update stats
         stats["connections"] += len(connections)
+        stats["cluster_triples"] += len(new_triples)
 
     console.print(f"  [green]Added {total_triples} triples to knowledge graph[/green]")
     console.print(f"  [green]Found {total_connections} insight connections[/green]")
