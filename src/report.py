@@ -1361,6 +1361,7 @@ def _show_final_report(
     console.print("[dim]Insights from combining multiple sources[/dim]")
     console.print()
 
+    # First check in-memory connections (from article-level processing)
     all_connections = []
     for item in processed_articles:
         for conn in item.get("connections", []):
@@ -1371,6 +1372,16 @@ def _show_final_report(
             formatted = format_relationship(conn, kb)
             console.print(f"  - [cyan]{article.title[:40]}...[/cyan]")
             console.print(f"    {formatted}")
+    elif stats.get("connections", 0) > 0:
+        # Cluster-based connections were found - query KB for recent ones
+        recent_connections = kb.get_relationships()[:10]  # Most recent, ordered by detected_at
+        if recent_connections:
+            console.print(f"  [green]{stats['connections']} insight connections discovered via clustering:[/green]")
+            for conn in recent_connections[:5]:
+                formatted = format_relationship(conn, kb)
+                console.print(f"    {formatted}")
+        else:
+            console.print("   [dim]No cross-source connections found this session.[/dim]")
     else:
         console.print("   [dim]No cross-source connections found this session.[/dim]")
     console.print()
