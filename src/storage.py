@@ -361,6 +361,23 @@ class Storage:
             )
             conn.commit()
 
+    def mark_short_articles_as_skipped(self, min_content_length: int) -> int:
+        """Mark all short articles as analyzed (skipped due to insufficient content).
+
+        Returns count of articles marked.
+        """
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """UPDATE articles
+                   SET analyzed_at = ?
+                   WHERE analyzed_at IS NULL
+                   AND (content IS NULL OR LENGTH(content) < ?)
+                   AND (spam_status IS NULL OR spam_status != 'spam')""",
+                (datetime.now().isoformat(), min_content_length),
+            )
+            conn.commit()
+            return cursor.rowcount
+
     def get_articles_needing_embeddings(self, exclude_spam: bool = True) -> list[Article]:
         """Get articles that don't have embeddings yet.
 
