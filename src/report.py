@@ -64,7 +64,7 @@ def _cleanup_gateway():
 
 def _signal_handler(signum, frame):
     """Handle interrupt signals by cleaning up and exiting."""
-    console.print("\n[yellow]Interrupted - cleaning up gateway...[/yellow]")
+    console.print("\n[yellow]Interrupted - cleaning up and unloading models...[/yellow]")
     _cleanup_gateway()
     sys.exit(130)  # Standard exit code for SIGINT
 
