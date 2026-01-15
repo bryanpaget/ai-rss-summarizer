@@ -1750,10 +1750,8 @@ def format_relationship(relationship: Relationship, knowledge_base: KnowledgeBas
 
     target_preview = "unknown"
     if target_insight:
-        # Truncate for display
-        target_preview = target_insight.content[:60]
-        if len(target_insight.content) > 60:
-            target_preview += "..."
+        # Show full content - let terminal wrap naturally
+        target_preview = target_insight.content
 
     rel_type = relationship.relationship_type.upper()
     strength = relationship.strength
