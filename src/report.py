@@ -1521,7 +1521,7 @@ def _show_final_report(
     table.add_row("Processing time", duration_str)
     table.add_row("Insights extracted", str(stats["insights"]))
     table.add_row("Facts added", str(stats.get("triples_new", stats.get("triples", 0))))
-    table.add_row("Graph triples (clusters)", str(stats.get("cluster_triples", 0)))
+    table.add_row("New graph triples", str(stats.get("cluster_triples", 0)))
     table.add_row("Connections found", str(stats["connections"]))
     table.add_row("Stories updated", str(stats.get("stories_matched", 0) + stats.get("stories_created", 0)))
 
