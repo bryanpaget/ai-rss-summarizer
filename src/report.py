@@ -1405,7 +1405,13 @@ def _show_final_report(
                         insight_text = insight.content if hasattr(insight, 'content') else str(insight)
                         console.print(f"    [dim]{insight_text[:80]}...[/dim]")
     else:
-        console.print("[dim]No tracked topics. Use 'rss context watch <topic>' to add interests.[/dim]")
+        # Prominent notice - interests are key to personalized briefings
+        console.print()
+        console.print("[yellow]  This section is empty because you haven't set up interests yet.[/yellow]")
+        console.print("  [bold]Set up your interests to get personalized content:[/bold]")
+        console.print("    rss context watch \"AI Safety\"      - Track a topic")
+        console.print("    rss context add project \"My App\"   - Track a project")
+        console.print("    rss context list                   - See your interests")
     console.print()
 
     # =========================================================================
