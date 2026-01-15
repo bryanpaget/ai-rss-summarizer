@@ -131,30 +131,37 @@ Or edit `config/feeds.txt` directly.
 
 | Command | Description |
 |---------|-------------|
-| `rss update` | Main command: fetch, summarize, and display digest |
-| `rss report` | Generate comprehensive intelligence report with stories and insights |
+| `rss report` | **Main command**: Generate intelligence briefing with all 6 sections |
+| `rss report -m 5` | Process incrementally (5 articles at a time) for large backlogs |
+| `rss update` | Quick fetch + summarize + display digest |
 | `rss setup` | Interactive setup wizard for LLM providers |
 | `rss providers` | List available LLM providers and their status |
 | `rss fetch` | Fetch articles from all configured RSS feeds |
-| `rss summarize` | Generate summaries for unsummarized articles |
-| `rss trends` | Analyze and display trending topics |
-| `rss stories` | View and manage story clusters |
-| `rss knowledge` | Query the knowledge base |
+| `rss discover` | Find new RSS feeds based on your interests |
+| `rss stories list` | View story clusters with lifecycle states |
+| `rss stories stats` | Show embedding coverage for stories |
+| `rss stories backfill-embeddings` | Embed stories missing vectors |
+| `rss context add watching "Topic"` | Track a topic for personalized briefings |
+| `rss context add project "Project"` | Track a project you're working on |
+| `rss context list` | View your tracked topics and projects |
+| `rss constitution` | View/edit your analysis guidelines |
+| `rss graph "Entity"` | Explore knowledge graph around an entity |
+| `rss contradictions` | Show contradictions in the knowledge base |
 | `rss perspectives` | Generate multi-perspective synthesis for stories |
-| `rss signals` | View signal tags for articles |
-| `rss context` | Manage personal context and interests |
+| `rss schedule start` | Run scheduled background fetches |
 | `rss list` | List fetched articles |
 | `rss stats` | Show database statistics |
 | `rss add-feed URL` | Add a new RSS feed |
 
-### Options
+### Key Options
 
-Most commands support these options:
-
-- `--db`, `-d`: Path to database file (default: `articles.db`)
-- `--limit`, `-n`: Limit number of items to process
-- `--topic`, `-t`: Filter by topic (for `update` command)
-- `--help`: Show command help
+| Option | Description |
+|--------|-------------|
+| `-m`, `--max-per-step` | Limit items per step (use `-m 5` for incremental processing) |
+| `-n`, `--limit` | Limit total items to process |
+| `-d`, `--db` | Path to database file (default: `articles.db`) |
+| `-k`, `--kb` | Path to knowledge database (default: `knowledge.db`) |
+| `--help` | Show command help |
 
 ## LLM Providers
 
