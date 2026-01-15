@@ -1205,12 +1205,15 @@ def generate_report(
     deleted_spam = cleanup_old_spam(storage, days=30)
 
     # Report filtering - only actionable info
-    if skipped_as_spam > 0 or deleted_spam > 0:
-        filter_msgs = []
-        if skipped_as_spam > 0:
-            filter_msgs.append(f"{skipped_as_spam} spam")
-        if deleted_spam > 0:
-            filter_msgs.append(f"{deleted_spam} old spam deleted")
+    filter_msgs = []
+    if skipped_short > 0:
+        filter_msgs.append(f"{skipped_short} short skipped")
+    if skipped_as_spam > 0:
+        filter_msgs.append(f"{skipped_as_spam} spam")
+    if deleted_spam > 0:
+        filter_msgs.append(f"{deleted_spam} old spam deleted")
+
+    if filter_msgs:
         console.print(f"  [dim]Processing {len(articles)} articles ({', '.join(filter_msgs)})[/dim]")
     else:
         console.print(f"  [dim]Processing {len(articles)} articles[/dim]")
