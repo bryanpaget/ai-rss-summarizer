@@ -45,6 +45,31 @@ console = Console(force_terminal=True, legacy_windows=True)
 
 
 # =============================================================================
+# =============================================================================
+# HELPER FUNCTIONS
+# =============================================================================
+
+def _cosine_similarity(vec1: list[float], vec2: list[float]) -> float:
+    """Compute cosine similarity between two vectors."""
+    import math
+    if not vec1 or not vec2:
+        return 0.0
+    if len(vec1) != len(vec2):
+        # Pad shorter vector
+        max_len = max(len(vec1), len(vec2))
+        vec1 = list(vec1) + [0.0] * (max_len - len(vec1))
+        vec2 = list(vec2) + [0.0] * (max_len - len(vec2))
+
+    dot_product = sum(a * b for a, b in zip(vec1, vec2))
+    mag1 = math.sqrt(sum(a * a for a in vec1))
+    mag2 = math.sqrt(sum(b * b for b in vec2))
+
+    if mag1 == 0 or mag2 == 0:
+        return 0.0
+    return dot_product / (mag1 * mag2)
+
+
+# =============================================================================
 # CLEANUP HANDLING - Prevent orphaned gateway requests on cancel
 # =============================================================================
 
