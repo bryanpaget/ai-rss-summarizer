@@ -57,6 +57,9 @@ app.add_typer(context_app, name="context", help="User context management")
 # Register stories commands as subcommand group
 app.add_typer(stories_app, name="stories", help="Story management commands")
 
+# Register cross-source comparison commands
+app.add_typer(cross_source_app, name="sources", help="Cross-source comparison and diverse feeds")
+
 
 def is_setup_complete() -> bool:
     """Check if LLM provider has been configured."""
