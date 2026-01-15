@@ -107,9 +107,35 @@ Each section is a module. The system:
 
 ## Implementation
 
-Phase 4 synthesis prompt receives:
-- All extracted data from Phase 1
-- All embeddings from Phase 2
-- All discovered connections from Phase 3
+### Pipeline Phases
+
+1. **Pre-embedding** - Embed existing insights/stories (EMBEDDING MODEL)
+2. **LLM Analysis** - Extract insights, facts, tags (TEXT MODEL)
+3. **Embedding** - Embed new articles (EMBEDDING MODEL)
+4. **Connection Detection** - Cluster-based discovery (see below)
+5. **Story Matching** - Match articles to story clusters
+
+### Connection Detection (Cluster-Based)
+
+Step 4.5 uses cluster-based analysis for O(clusters) efficiency:
+
+1. **Embed new insights** (EMBEDDING MODEL - batched)
+2. **Cluster by similarity** (FAISS only - no model switching)
+3. **Analyze clusters** (TEXT MODEL - one call per cluster)
+
+For each cluster, LLM extracts:
+- **Theme**: Overarching topic (1-3 words)
+- **Subcategories**: Specific aspects within the theme
+- **Triples**: Subject-predicate-object relationships stored in knowledge graph
+- **Insight relationships**: confirms/contradicts/refines/extends
+
+Output goes directly to knowledge graph as queryable triples.
+
+### Report Synthesis
+
+The final report receives:
+- All extracted data from LLM phase
+- All embeddings
+- All discovered connections (from KB query)
 - User's interest profile and context
 - Template indicating which sections to generate
