@@ -70,13 +70,36 @@ The setup wizard will:
 ### Basic Usage
 
 ```bash
-# Main command: fetch, summarize, and show what's new
+# Main command: generate an intelligence briefing
+rss report
+
+# Limit processing for large backlogs (process 5 at a time)
+rss report -m 5
+
+# Fetch, summarize, and show what's new (quick update)
 rss update
 
 # Filter by topic
 rss update --topic tech
 rss update --topic politics
+```
 
+### Intelligence Briefing (`rss report`)
+
+The main interaction loop. Produces a personalized 6-section briefing:
+
+1. **Top Priority** - 1-3 must-read items with insights and context
+2. **Your Interest Areas** - Articles matching your tracked topics
+3. **Discovered Connections** - Cross-source synthesis
+4. **Knowledge Graph Updates** - New facts extracted
+5. **Quick Scan** - Everything else by relevance
+6. **Session Stats** - Processing summary
+
+**Incremental Processing:** If you have a large backlog (50+ unprocessed articles), the system will warn you and suggest using `-m 5` to process 5 articles at a time. Run `rss report -m 5` multiple times to catch up gradually.
+
+### Other Commands
+
+```bash
 # Fetch articles from configured feeds
 rss fetch
 
