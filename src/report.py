@@ -1436,8 +1436,9 @@ def _show_final_report(
             console.print(f"  - [cyan]{article.title}[/cyan]")
             console.print(f"    {formatted}")
     elif stats.get("connections", 0) > 0:
-        # Cluster-based connections were found - query KB for recent ones
-        recent_connections = kb.get_relationships()[:10]  # Most recent, ordered by detected_at
+        # Cluster-based connections were found - query KB for THIS SESSION's connections only
+        session_start = stats.get("session_start")
+        recent_connections = kb.get_relationships(since=session_start)[:10]
         if recent_connections:
             console.print(f"  [green]{stats['connections']} insight connections discovered via clustering:[/green]")
             for conn in recent_connections[:5]:
