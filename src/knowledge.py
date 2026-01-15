@@ -737,6 +737,22 @@ class KnowledgeBase:
             rows = conn.execute(query, params).fetchall()
             return [self._row_to_triple(row) for row in rows]
 
+    def get_triples_by_article(self, article_id: str, limit: int = 10) -> list[Triple]:
+        """Get triples extracted from a specific article.
+
+        Returns facts that were actually extracted from this article,
+        not random KB matches.
+        """
+        query = """
+            SELECT * FROM knowledge_triples
+            WHERE source_article_id = ?
+            ORDER BY extracted_at DESC
+            LIMIT ?
+        """
+        with self._connect() as conn:
+            rows = conn.execute(query, (article_id, limit)).fetchall()
+            return [self._row_to_triple(row) for row in rows]
+
     # =========================================================================
     # Entity Relationship Methods - Option B Enhancement
     # =========================================================================
