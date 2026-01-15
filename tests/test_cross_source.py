@@ -255,15 +255,16 @@ class TestDiverseSources:
         assert "center" in leanings
         assert "right" in leanings or "far-right" in leanings
 
-    @patch("src.rss.load_feeds")
-    def test_get_current_feed_leanings(self, mock_load):
-        mock_load.return_value = [
-            "https://nytimes.com/feed",
-            "https://foxnews.com/feed",
-            "https://reuters.com/feed",
-        ]
+    def test_get_current_feed_leanings(self, tmp_path):
+        # Create a temp feeds file
+        feeds_file = tmp_path / "feeds.txt"
+        feeds_file.write_text("""
+https://nytimes.com/feed
+https://foxnews.com/feed
+https://reuters.com/feed
+""")
 
-        result = get_current_feed_leanings("config/feeds.txt")
+        result = get_current_feed_leanings(str(feeds_file))
 
         assert "nytimes.com" in result["left"]
         assert "foxnews.com" in result["right"]
