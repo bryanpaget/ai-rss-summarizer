@@ -892,24 +892,46 @@ def generate_report(
     if max_per_step > 0:
         articles = articles[:max_per_step]
 
+    # Track total pipeline time
+    pipeline_start = time.time()
+
     # Step 1: Verification (Self-Healing)
+    step_start = time.time()
     gaps = _run_verification_step(storage, kb, articles, embedding_service, max_per_step)
+    console.print(f"  [dim]Step 1 completed in {time.time() - step_start:.1f}s[/dim]\n")
 
     # Step 2: Pre-embed existing stories/insights
     # This MUST happen before LLM phase so detect_connections has embeddings to compare against
+    step_start = time.time()
     _run_pre_embedding_phase(storage, kb, embedding_service, stats, max_per_step)
+    console.print(f"  [dim]Step 2 completed in {time.time() - step_start:.1f}s[/dim]\n")
 
     # Step 3: LLM Phase (now has embeddings to compare against)
+    step_start = time.time()
     processed_articles = _run_llm_phase(articles, storage, kb, provider, stats, embedding_service, max_per_step)
+    console.print(f"  [dim]Step 3 completed in {time.time() - step_start:.1f}s[/dim]\n")
 
     # Step 4: Embedding Phase (for new articles)
+    step_start = time.time()
     _run_embedding_phase(articles, storage, kb, stats, embedding_service, max_per_step)
+    console.print(f"  [dim]Step 4 completed in {time.time() - step_start:.1f}s[/dim]\n")
 
     # Step 4.5: Batched Connection Detection (AFTER embeddings, no model switching)
+    step_start = time.time()
     _run_connection_detection(processed_articles, kb, provider, stats, embedding_service)
+    console.print(f"  [dim]Step 4.5 completed in {time.time() - step_start:.1f}s[/dim]\n")
 
     # Step 5: Story Matching
+    step_start = time.time()
     _run_story_matching(articles, storage, kb, provider, stats, embedding_service, max_per_step)
+    console.print(f"  [dim]Step 5 completed in {time.time() - step_start:.1f}s[/dim]\n")
+
+    # Show total pipeline time
+    total_time = time.time() - pipeline_start
+    if total_time > 60:
+        console.print(f"[green]Pipeline completed in {total_time / 60:.1f} minutes[/green]\n")
+    else:
+        console.print(f"[green]Pipeline completed in {total_time:.1f}s[/green]\n")
 
     # Final Report
     _show_final_report(processed_articles, stats, kb, provider, storage)
