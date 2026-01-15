@@ -456,11 +456,32 @@ def _run_llm_phase(
             "errors": article_errors,
         })
 
-        # Summary for this article
-        if article_errors:
-            console.print(f"  [yellow][!] Completed with {len(article_errors)} errors[/yellow]")
+        # Summary for this article with timing and ETA
+        article_elapsed = time.time() - article_start
+        articles_done = idx + 1
+        articles_remaining = len(articles) - articles_done
+
+        # Calculate ETA based on current rate
+        if articles_remaining > 0 and articles_done > 0:
+            # Use cumulative time from step start for more stable rate
+            step_elapsed = time.time() - step_start
+            rate_per_article = step_elapsed / articles_done
+            eta_seconds = articles_remaining * rate_per_article
+
+            if eta_seconds > 60:
+                eta_str = f"~{eta_seconds / 60:.1f}m remaining"
+            else:
+                eta_str = f"~{eta_seconds:.0f}s remaining"
+
+            if article_errors:
+                console.print(f"  [yellow][!] {article_elapsed:.1f}s | {eta_str}[/yellow]")
+            else:
+                console.print(f"  [bold green][OK][/bold green] [dim]{article_elapsed:.1f}s | {eta_str}[/dim]")
         else:
-            console.print(f"  [bold green][OK] Done[/bold green]")
+            if article_errors:
+                console.print(f"  [yellow][!] {article_elapsed:.1f}s[/yellow]")
+            else:
+                console.print(f"  [bold green][OK][/bold green] [dim]{article_elapsed:.1f}s[/dim]")
         console.print()
 
     return processed_articles
