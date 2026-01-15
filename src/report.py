@@ -342,6 +342,7 @@ def _run_llm_phase(
     console.print()
 
     for idx, article in enumerate(articles):
+        article_start = time.time()
         insights = []
         triples = []
         connections = []
