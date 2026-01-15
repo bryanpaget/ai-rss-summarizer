@@ -1037,41 +1037,52 @@ def _run_story_matching(
     created = 0
 
     for article in articles:
+        article_title = article.title[:50] if article.title else "Untitled"
         try:
             embedding = storage.get_embedding(article.id)
             if not embedding:
                 # No embedding - create new story without matching
+                console.print(f"    [dim]{article_title}...[/dim]")
+                console.print(f"      [yellow]No embedding - creating new story[/yellow]")
                 try:
-                    clusterer.create_new_story(article)
+                    new_story = clusterer.create_new_story(article)
                     created += 1
+                    if new_story:
+                        console.print(f"      [green]-> New story: {new_story.title[:40]}[/green]")
                 except Exception as e:
-                    console.print(f"  [red]ERROR creating story for '{article.title[:40]}': {e}[/red]")
+                    console.print(f"      [red]ERROR creating story: {e}[/red]")
                     stats["errors"] += 1
                 continue
 
             # Try to match to existing story
             matched_story = clusterer.find_matching_story_with_embedding(article, embedding)
 
+            console.print(f"    [dim]{article_title}...[/dim]")
             if matched_story:
                 try:
                     clusterer.update_story_with_article(matched_story, article)
                     matched += 1
+                    console.print(f"      [cyan]-> Matched to: {matched_story.title[:40]}[/cyan]")
                 except Exception as e:
-                    console.print(f"  [red]ERROR updating story: {e}[/red]")
+                    console.print(f"      [red]ERROR updating story: {e}[/red]")
                     stats["errors"] += 1
             else:
-                # Create new story
+                # Create new story - show why no match
+                console.print(f"      [yellow]No similar story found - creating new[/yellow]")
                 try:
-                    clusterer.create_new_story(article)
+                    new_story = clusterer.create_new_story(article)
                     created += 1
+                    if new_story:
+                        console.print(f"      [green]-> New story: {new_story.title[:40]}[/green]")
                 except Exception as e:
-                    console.print(f"  [red]ERROR creating story: {e}[/red]")
+                    console.print(f"      [red]ERROR creating story: {e}[/red]")
                     stats["errors"] += 1
 
         except Exception as e:
-            console.print(f"  [red]ERROR matching article '{article.title[:40]}': {e}[/red]")
+            console.print(f"    [red]ERROR matching '{article_title}': {e}[/red]")
             stats["errors"] += 1
 
+    console.print()
     console.print(f"  [green]Matched {matched} articles to existing stories[/green]")
     console.print(f"  [green]Created {created} new stories[/green]")
 
