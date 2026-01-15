@@ -2576,7 +2576,8 @@ class TestCreateNewStoryAndUpdateIntegration:
 
         def generate_response(*args, **kwargs):
             call_count[0] += 1
-            if "title" in args[0].lower():
+            # Check for headline prompt (title generation uses "headline" not "title")
+            if "headline" in args[0].lower():
                 return "AI Technology Story"
             elif "describe" in args[0].lower():
                 return "Story about AI technology developments."
