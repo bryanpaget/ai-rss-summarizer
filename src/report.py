@@ -905,8 +905,7 @@ def generate_report(
     if len(articles) > LARGE_BATCH_THRESHOLD and max_per_step == 0:
         console.print()
         console.print(f"[yellow]Warning: {len(articles)} articles to process - this could take a while[/yellow]")
-        console.print("[yellow]Tip: Use 'rss report -m 5' to limit to 5 articles per run[/yellow]")
-        console.print("[yellow]     Run multiple times to process incrementally[/yellow]")
+        console.print("[yellow]Tip: Use 'rss report -m 5' to process 5 articles before generating the briefing[/yellow]")
         console.print()
 
     console.print()
