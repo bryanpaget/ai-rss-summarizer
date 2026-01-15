@@ -1160,7 +1160,6 @@ def generate_report(
     feeds = load_feeds(feeds_file)
     new_article_ids = []
     stats["feeds_count"] = len(feeds) if feeds else 0
-    stats["time_range"] = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     if feeds:
         fetch_results = fetch_all_feeds(feeds_file, storage)
