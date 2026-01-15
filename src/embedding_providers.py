@@ -6,19 +6,14 @@ Supports multiple embedding backends:
 
 NO FALLBACKS. If no provider is available, operations fail loudly.
 
-Uses ModelManager to ensure correct model is loaded before embedding requests.
+Model loading is handled by the gateway module - all requests go through
+src/gateway.py which coordinates with safe-model-load.sh.
 """
 
 import httpx
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Optional
-
-from .model_manager import (
-    ensure_embedding_model,
-    ModelManagerError,
-    LMStudioNotReachableError,
-)
 
 
 class EmbeddingProviderError(Exception):
@@ -142,11 +137,10 @@ class LMStudioProvider(EmbeddingProvider):
         return "unknown"
 
     def is_available(self) -> bool:
-        """Check if LM Studio is running and can provide embeddings.
+        """Check if LM Studio is running.
 
-        If auto_load_model is enabled and LM Studio is running but no model
-        (or wrong model) is loaded, this will trigger auto-loading of the
-        configured embedding model.
+        NOTE: Model loading is handled by the gateway - this just checks connectivity.
+        The gateway will automatically load the correct model when embed requests are made.
         """
         try:
             resp = httpx.get(
@@ -156,24 +150,9 @@ class LMStudioProvider(EmbeddingProvider):
             if not resp.is_success:
                 return False
 
-            # LM Studio is running - check if we need to auto-load
-            data = resp.json()
-            has_model = bool(data.get("data"))
-
-            if self._auto_load_model:
-                # Trigger auto-load to ensure correct model is loaded
-                # This handles: no model loaded, or wrong model type loaded
-                try:
-                    loaded_model = ensure_embedding_model()
-                    if loaded_model:
-                        self._cached_model = loaded_model
-                    return True
-                except (ModelManagerError, LMStudioNotReachableError):
-                    # Auto-load failed - fall back to checking if any model works
-                    return has_model
-
-            # No auto-load - just check if any model is loaded
-            return has_model
+            # LM Studio is running - we're good
+            # The gateway handles model loading when requests are made
+            return True
         except (httpx.RequestError, httpx.TimeoutException) as e:
             import sys
             print(f"LM Studio not reachable: {e}", file=sys.stderr)
@@ -224,31 +203,25 @@ class LMStudioProvider(EmbeddingProvider):
 
         The gateway handles:
         - Model auto-loading (loads embedding model if needed)
-        - Adaptive batch sizing (adjusts based on memory pressure)
-        - Queue management (processes requests efficiently)
-
-        Includes retry logic for transient gateway errors.
+        - Queue management and batching by type
+        - Model switching coordination
         """
-        MAX_RETRIES = 3
-        last_error = None
+        # Use the shared gateway module
+        try:
+            from .gateway import get_gateway, GatewayUnavailableError
 
-        for attempt in range(MAX_RETRIES):
-            try:
-                return self._embed_single(text)
-            except EmbeddingProviderError as e:
-                last_error = e
-                # Retry on transient errors (empty JSON, gateway busy)
-                if "Invalid JSON" in str(e) or "Gateway failed" in str(e):
-                    import time
-                    import sys
-                    if attempt < MAX_RETRIES - 1:
-                        print(f"\n  [yellow]Embedding failed (attempt {attempt + 1}/{MAX_RETRIES}), retrying...[/yellow]", file=sys.stderr)
-                        time.sleep(1 + attempt)  # Increasing backoff
-                        continue
-                raise  # Non-transient error, don't retry
+            gateway = get_gateway()
+            if gateway.is_available():
+                return gateway.request_embedding(text)
 
-        # All retries exhausted
-        raise last_error or EmbeddingProviderError("Embedding failed after retries")
+        except (ImportError, GatewayUnavailableError):
+            pass  # Fall back to legacy implementation
+        except Exception as e:
+            import sys
+            print(f"Warning: Gateway embedding failed, falling back: {e}", file=sys.stderr)
+
+        # Fallback: Use legacy direct implementation
+        return self._embed_single(text)
 
     def _embed_single(self, text: str) -> list[float]:
         """Single embedding attempt without retry logic."""
@@ -354,9 +327,29 @@ class LMStudioProvider(EmbeddingProvider):
                     print(f"Failed to clean up response file {response_path}: {e}", file=sys.stderr)
 
     def embed_batch(self, texts: list[str]) -> list[list[float]]:
-        """Generate embeddings - gateway handles batching automatically."""
-        # Gateway handles batching internally, just submit each request
-        # The gateway queues them and batches intelligently
+        """Generate embeddings for multiple texts efficiently.
+
+        Uses the gateway's batch functionality which submits all requests
+        first (allowing queue batching) then collects responses.
+        """
+        if not texts:
+            return []
+
+        # Use the shared gateway module for efficient batching
+        try:
+            from .gateway import get_gateway, GatewayUnavailableError
+
+            gateway = get_gateway()
+            if gateway.is_available():
+                return gateway.batch_embedding(texts)
+
+        except (ImportError, GatewayUnavailableError):
+            pass  # Fall back to sequential processing
+        except Exception as e:
+            import sys
+            print(f"Warning: Gateway batch embedding failed, falling back: {e}", file=sys.stderr)
+
+        # Fallback: Sequential processing
         return [self.embed(text) for text in texts]
 
 

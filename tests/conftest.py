@@ -137,7 +137,22 @@ class TestTimingPlugin:
 # =============================================================================
 
 def pytest_configure(config):
-    """Register the timing plugin."""
+    """Register the timing plugin and enforce warnings as errors."""
+    import warnings
+
+    # ==========================================================================
+    # WARNINGS AS ERRORS - CANNOT BE BYPASSED
+    # ==========================================================================
+    # This runs AFTER command line parsing, overriding any -W flags.
+    # Warnings are errors. Period. No exceptions except documented ones below.
+    # ==========================================================================
+
+    warnings.filterwarnings("error")
+
+    # Approved suppressions (each must be documented with date and reason):
+    # - FAISS SWIG internal types lack __module__ (upstream SWIG issue, 2026-01-15)
+    warnings.filterwarnings("ignore", message=r"builtin type Swig.*has no __module__")
+
     config.pluginmanager.register(TestTimingPlugin(), "test_timing_plugin")
 
     # Register custom markers
@@ -184,6 +199,38 @@ def _test_timing_context(request):
     if duration > timeout * 0.8:
         print(f"\n  WARNING: Test '{request.node.name}' took {duration:.2f}s "
               f"(80%+ of {timeout}s timeout)")
+
+
+
+
+# =============================================================================
+# UNBYPASSABLE WARNINGS AS ERRORS
+# =============================================================================
+
+@pytest.fixture(autouse=True)
+def _enforce_warnings_as_errors():
+    """
+    Enforce warnings as errors for EVERY test.
+    
+    This cannot be bypassed by -W flags because it runs inside each test.
+    """
+    import warnings
+    
+    # Save current filters
+    old_filters = warnings.filters[:]
+    
+    # Force warnings as errors
+    warnings.resetwarnings()
+    warnings.filterwarnings("error")
+    
+    # Approved suppressions only:
+    # - FAISS SWIG internal types (upstream issue, 2026-01-15)
+    warnings.filterwarnings("ignore", message=r"builtin type Swig.*has no __module__")
+    
+    yield
+    
+    # Restore (though test should have failed if warning occurred)
+    warnings.filters[:] = old_filters
 
 
 @pytest.fixture

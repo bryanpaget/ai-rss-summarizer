@@ -212,6 +212,8 @@ class KnowledgeBase:
             """)
 
             # RDF-style triples table (Option B enhancement)
+            # UNIQUE constraint on (subject, predicate, object) prevents exact duplicates
+            # Semantic duplicates ("USA" vs "United States") handled by cleanup operation
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS knowledge_triples (
                     id TEXT PRIMARY KEY,
@@ -223,7 +225,8 @@ class KnowledgeBase:
                     source_article_id TEXT,
                     confidence TEXT DEFAULT 'medium',
                     extracted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (source_article_id) REFERENCES articles(id)
+                    FOREIGN KEY (source_article_id) REFERENCES articles(id),
+                    UNIQUE(subject, predicate, object)
                 )
             """)
 
@@ -1283,21 +1286,24 @@ def _find_similar_triple(
     embedding_service: Optional["EmbeddingService"] = None,
     similarity_threshold: float = 0.75,
 ) -> Optional[Triple]:
-    """Check if a semantically similar triple already exists using embeddings.
+    """Check if an exact matching triple already exists.
 
-    Requires EmbeddingService for semantic similarity. Without it, only exact
-    matches are found.
+    IMPORTANT: This function now only checks for EXACT matches.
+    Semantic deduplication (e.g., "USA" vs "United States") is deferred
+    to the graph cleanup operation which runs separately and doesn't
+    block ingestion.
 
     Args:
-        triple: Triple to check for similarity
+        triple: Triple to check for duplicates
         knowledge_base: Knowledge base to search
-        embedding_service: EmbeddingService for semantic similarity (required for fuzzy matching)
-        similarity_threshold: Cosine similarity threshold (default 0.75)
+        embedding_service: UNUSED - kept for API compatibility
+        similarity_threshold: UNUSED - kept for API compatibility
 
     Returns:
         Matching triple if found, None otherwise
     """
-    # Exact match on subject-predicate-object
+    # Exact match on subject-predicate-object only
+    # This is O(1) with the database index, no embedding calls needed
     existing = knowledge_base.get_triples(
         subject=triple.subject,
         predicate=triple.predicate,
@@ -1307,36 +1313,8 @@ def _find_similar_triple(
     if existing:
         return existing[0]
 
-    # Check for same subject-predicate with similar object
-    similar = knowledge_base.get_triples(
-        subject=triple.subject,
-        predicate=triple.predicate,
-        limit=10
-    )
-
-    if not similar:
-        return None
-
-    # Embedding-based similarity required for fuzzy matching
-    if embedding_service is None or not embedding_service.is_available():
-        logger.debug("EmbeddingService not available, only exact triple matches possible")
-        return None
-
-    # Embed the new triple's object
-    new_embedding = embedding_service.embed_text(triple.object)
-    if new_embedding is None:
-        return None
-
-    # Compare against candidates
-    for t in similar:
-        existing_embedding = embedding_service.embed_text(t.object)
-        if existing_embedding:
-            similarity = embedding_service.cosine_similarity(
-                new_embedding.vector, existing_embedding.vector
-            )
-            if similarity >= similarity_threshold:
-                return t
-
+    # No embedding-based dedup here - that's handled by cleanup operation
+    # See Issue 8 in PIPELINE_ISSUES_TRACKING.md
     return None
 
 
@@ -1607,15 +1585,16 @@ def detect_connections(
     """
     Detect relationships between a new insight and existing knowledge.
 
-    Uses EMBEDDING SIMILARITY (not word overlap) to find semantically related
-    insights, then uses LLM to classify the relationship type.
+    OPTIMIZED (Issue 4): Uses FAISS for O(log N) candidate finding instead of
+    O(N) brute force, then ONE batched LLM call to classify all relationships
+    instead of N separate calls.
 
     Args:
         new_insight: Newly extracted insight to find connections for
         knowledge_base: Knowledge base with existing insights
         llm_provider: LLM provider for relationship classification
         similarity_threshold: Minimum cosine similarity to consider (0.0-1.0)
-        max_comparisons: Maximum existing insights to compare against
+        max_comparisons: Maximum candidates to consider (used as FAISS k)
         embedding_service: Optional EmbeddingService (for testing injection).
                           If not provided, one will be created.
 
@@ -1624,12 +1603,6 @@ def detect_connections(
     """
     import sys
     from .embeddings import EmbeddingService, EmbeddingError
-
-    # Get existing insights to compare against
-    existing_insights = knowledge_base.get_insights(limit=max_comparisons)
-
-    if not existing_insights:
-        return []
 
     # Initialize embedding service if not provided
     if embedding_service is None:
@@ -1642,7 +1615,6 @@ def detect_connections(
             print(f"Warning: Could not initialize embedding service: {e}", file=sys.stderr)
             return []
     else:
-        # Use the provided embedding service (for testing)
         if not embedding_service.is_available():
             return []
 
@@ -1650,7 +1622,6 @@ def detect_connections(
     try:
         new_embedding = embedding_service.get_embedding(new_insight.id, "insight")
         if not new_embedding:
-            # Generate embedding for new insight
             result = embedding_service.embed_text(new_insight.content)
             new_embedding = result.vector
             embedding_service.save_embedding(new_insight.id, "insight", result)
@@ -1658,67 +1629,92 @@ def detect_connections(
         print(f"Warning: Could not embed new insight: {e}", file=sys.stderr)
         return []
 
-    # Find semantically similar insights using embeddings
-    similar_insights = []
-    for existing in existing_insights:
-        if existing.id == new_insight.id:
+    # Use FAISS to find similar insights - O(log N) instead of O(N)
+    similar_results = embedding_service.find_similar(
+        query_vector=new_embedding,
+        target_type="insight",
+        threshold=similarity_threshold,
+        limit=max_comparisons,
+    )
+
+    if not similar_results:
+        return []
+
+    # Filter out self-match and get insight objects
+    candidates = []
+    for target_id, similarity in similar_results:
+        if target_id == new_insight.id:
             continue
+        insight = knowledge_base.get_insight(target_id)
+        if insight:
+            candidates.append((insight, similarity))
 
-        # Get existing insight's embedding
-        existing_embedding = embedding_service.get_embedding(existing.id, "insight")
-        if not existing_embedding:
-            # Skip insights without embeddings rather than generating on the fly
-            continue
+    if not candidates:
+        return []
 
-        # Calculate semantic similarity
-        similarity = embedding_service.cosine_similarity(new_embedding, existing_embedding)
+    # Limit to top 10 for LLM classification
+    candidates = candidates[:10]
 
-        if similarity >= similarity_threshold:
-            similar_insights.append((existing, similarity))
+    # ONE batched LLM call to classify ALL relationships
+    pairs_text = ""
+    for i, (existing, similarity) in enumerate(candidates):
+        pairs_text += f"\nPair {i+1} (similarity: {similarity:.2f}):\n"
+        pairs_text += f'- Existing: "{existing.content}"\n'
+        pairs_text += f'- New: "{new_insight.content}"\n'
 
-    # Sort by similarity, highest first
-    similar_insights.sort(key=lambda x: x[1], reverse=True)
-
-    # For high-similarity pairs, use LLM to classify relationship
-    relationships = []
-    for existing, similarity in similar_insights[:5]:  # Limit LLM calls to top 5
-        prompt = f"""Compare these two insights and determine their relationship.
-
-Insight A (existing): "{existing.content}"
-Insight B (new): "{new_insight.content}"
-
-What is the relationship from B to A?
-- confirms: B says essentially the same thing as A
-- contradicts: B says the opposite of A
-- refines: B adds nuance or detail to A
-- extends: B builds on A with new information
+    prompt = f"""Classify the relationships between these insight pairs.
+{pairs_text}
+For each pair, determine the relationship from the NEW insight to the EXISTING insight:
+- confirms: New says essentially the same thing as existing
+- contradicts: New says the opposite of existing
+- refines: New adds nuance or detail to existing
+- extends: New builds on existing with new information
 - none: They are about similar topics but unrelated
 
-Respond with ONLY one word: confirms/contradicts/refines/extends/none"""
+Return a JSON array with the relationship for each pair in order:
+["confirms", "none", "extends", ...]
 
-        try:
-            response = llm_provider.summarize(prompt, max_length=50).strip().lower()
+Return ONLY the JSON array, no other text."""
 
-            # Extract just the relationship word
-            for rel_type in ["confirms", "contradicts", "refines", "extends"]:
-                if rel_type in response:
-                    relationship = Relationship(
-                        id=str(uuid.uuid4()),
-                        source_insight_id=new_insight.id,
-                        target_insight_id=existing.id,
-                        relationship_type=rel_type,
-                        strength=similarity,
-                        detected_at=datetime.now(),
-                    )
-                    knowledge_base.save_relationship(relationship)
-                    relationships.append(relationship)
-                    break
+    try:
+        response = llm_provider.generate(prompt, max_tokens=200)
 
-        except Exception as e:
-            print(f"Warning: Failed to classify relationship: {e}", file=sys.stderr)
-            continue
+        # Parse the response
+        from .schema import extract_json_from_response
+        json_str = extract_json_from_response(response)
+        relationship_types = json.loads(json_str)
 
-    return relationships
+        if not isinstance(relationship_types, list):
+            relationship_types = [relationship_types]
+
+        # Create relationships for valid classifications
+        relationships = []
+        valid_types = {"confirms", "contradicts", "refines", "extends"}
+
+        for i, (existing, similarity) in enumerate(candidates):
+            if i >= len(relationship_types):
+                break
+
+            rel_type = str(relationship_types[i]).lower().strip()
+            if rel_type not in valid_types:
+                continue
+
+            relationship = Relationship(
+                id=str(uuid.uuid4()),
+                source_insight_id=new_insight.id,
+                target_insight_id=existing.id,
+                relationship_type=rel_type,
+                strength=similarity,
+                detected_at=datetime.now(),
+            )
+            knowledge_base.save_relationship(relationship)
+            relationships.append(relationship)
+
+        return relationships
+
+    except Exception as e:
+        print(f"Warning: Failed to classify relationships: {e}", file=sys.stderr)
+        return []
 
 
 def format_relationship(relationship: Relationship, knowledge_base: KnowledgeBase) -> str:
@@ -1733,13 +1729,8 @@ def format_relationship(relationship: Relationship, knowledge_base: KnowledgeBas
         Human-readable string like:
         "New insight CONFIRMS existing: 'AI improves productivity' (similarity: 0.85)"
     """
-    # Get the target insight content
-    target_insight = None
-    all_insights = knowledge_base.get_insights(limit=500)
-    for insight in all_insights:
-        if insight.id == relationship.target_insight_id:
-            target_insight = insight
-            break
+    # Get the target insight content by direct ID lookup
+    target_insight = knowledge_base.get_insight(relationship.target_insight_id)
 
     target_preview = "unknown"
     if target_insight:
@@ -1810,3 +1801,170 @@ Mention which insights support your answer."""
             "summary": f"Error processing query: {str(e)}",
             "total_insights": len(all_insights),
         }
+
+
+# ============================================================================
+# Combined Extraction - Issue 7: ONE LLM call extracts everything
+# ============================================================================
+
+@dataclass
+class CombinedExtractionOutput:
+    """Output from combined extraction operation."""
+    insights: list[Insight]
+    triples: list[Triple]
+    signal_tags: list[dict]  # {"tag": str, "confidence": float}
+    summary: str
+    is_ad: bool
+    chunks_processed: int
+
+
+def extract_all_from_article(
+    article: Article,
+    llm_provider,
+    knowledge_base: KnowledgeBase,
+) -> CombinedExtractionOutput:
+    """Extract everything from an article in ONE LLM call.
+
+    This is the Issue 7 solution - instead of making 6 separate LLM calls
+    (chunk, insights, triples, signal tags, summary, etc.), we make ONE call
+    that extracts everything at once.
+
+    Args:
+        article: Article to process
+        llm_provider: LLM provider for extraction
+        knowledge_base: Knowledge base to save results to
+
+    Returns:
+        CombinedExtractionOutput with all extracted data
+    """
+    from .schema import parse_combined_extraction, CombinedExtractionResult
+    from .constitution import get_constitution_context
+
+    if not article.content or len(article.content) < 100:
+        return CombinedExtractionOutput(
+            insights=[],
+            triples=[],
+            signal_tags=[],
+            summary="",
+            is_ad=False,
+            chunks_processed=0,
+        )
+
+    constitution_context = get_constitution_context()
+
+    # ONE prompt that extracts everything
+    prompt = f"""{constitution_context}Analyze this article completely. Extract ALL information in a single structured response.
+
+Article: "{article.title}"
+
+Content:
+{article.content}
+
+Instructions:
+1. Divide the content into semantically coherent chunks (by topic/section)
+2. For EACH chunk, extract:
+   - Insights (key learnings, facts, claims)
+   - Triples (subject-predicate-object relationships)
+3. For the ENTIRE article, provide:
+   - Signal tags (topics, themes, categories)
+   - Whether this appears to be an advertisement/sponsored content
+   - A concise summary (2-3 sentences)
+
+Return as JSON with this exact structure:
+{{
+  "chunks": [
+    {{
+      "content": "The chunk text...",
+      "insights": [
+        {{"content": "Insight text", "type": "technical|tool|statistic|opinion", "confidence": "high|medium|low", "reason": "Why this confidence"}}
+      ],
+      "triples": [
+        {{"subject": "Entity", "predicate": "relationship", "object": "Entity/Value", "subject_type": "entity", "object_type": "entity|literal", "confidence": "high|medium|low"}}
+      ]
+    }}
+  ],
+  "signal_tags": [
+    {{"tag": "topic name", "confidence": 0.9, "reason": "Why this tag"}}
+  ],
+  "is_ad": false,
+  "summary": "Concise 2-3 sentence summary of the article."
+}}
+
+Extract ALL relevant information. The number of chunks, insights, and triples depends entirely on the content density.
+Return ONLY valid JSON, no other text."""
+
+    try:
+        # ONE LLM call for everything
+        response = llm_provider.generate(prompt, max_tokens=4000)
+
+        # Parse with schema validation
+        try:
+            result = parse_combined_extraction(response)
+        except ValueError as e:
+            logger.warning(f"Schema validation failed, attempting fallback: {e}")
+            # Fallback: try to extract JSON manually
+            from .schema import parse_json_response
+            data = parse_json_response(response)
+            result = CombinedExtractionResult.model_validate(data)
+
+        # Process extracted data and save to knowledge base
+        all_insights = []
+        all_triples = []
+
+        for chunk in result.chunks:
+            # Save insights from this chunk
+            for insight_data in chunk.insights:
+                insight = Insight(
+                    id=str(uuid.uuid4()),
+                    article_id=article.id,
+                    content=insight_data.content,
+                    insight_type=insight_data.type,
+                    confidence=insight_data.confidence,
+                    confidence_reason=insight_data.reason,
+                )
+                if knowledge_base.save_insight(insight):
+                    all_insights.append(insight)
+
+            # Save triples from this chunk
+            for triple_data in chunk.triples:
+                if not (triple_data.subject and triple_data.predicate and triple_data.object):
+                    continue
+                triple = Triple(
+                    id=str(uuid.uuid4()),
+                    subject=triple_data.subject,
+                    predicate=triple_data.predicate,
+                    object=triple_data.object,
+                    subject_type=triple_data.subject_type,
+                    object_type=triple_data.object_type,
+                    source_article_id=article.id,
+                    confidence=triple_data.confidence,
+                )
+                if knowledge_base.save_triple(triple):
+                    all_triples.append(triple)
+
+        # Convert signal tags to dict format
+        signal_tags = [
+            {"tag": t.tag, "confidence": t.confidence, "reason": t.reason}
+            for t in result.signal_tags
+        ]
+
+        return CombinedExtractionOutput(
+            insights=all_insights,
+            triples=all_triples,
+            signal_tags=signal_tags,
+            summary=result.summary,
+            is_ad=result.is_ad,
+            chunks_processed=len(result.chunks),
+        )
+
+    except Exception as e:
+        logger.error(f"Combined extraction failed for '{article.title[:40]}': {e}")
+        # Return empty result on failure
+        return CombinedExtractionOutput(
+            insights=[],
+            triples=[],
+            signal_tags=[],
+            summary="",
+            is_ad=False,
+            chunks_processed=0,
+        )

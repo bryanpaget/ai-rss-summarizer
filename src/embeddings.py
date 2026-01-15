@@ -231,7 +231,7 @@ class EmbeddingService:
         target_type: str,
         embedding: EmbeddingResult,
     ) -> bool:
-        """Save embedding to knowledge base.
+        """Save embedding to knowledge base and FAISS index.
 
         Args:
             target_id: ID of the article, story, or insight
@@ -240,7 +240,21 @@ class EmbeddingService:
 
         Returns:
             True if saved successfully
+
+        Raises:
+            EmbeddingError: If FAISS is not available (NO FALLBACKS - fix it, don't work around it)
         """
+        # FAIL FAST: FAISS must be available. No silent degradation.
+        try:
+            from .vector_index import get_vector_index
+        except ImportError as e:
+            raise EmbeddingError(
+                f"FAISS not available: {e}\n"
+                "This is a FATAL error - embeddings without FAISS won't be searchable.\n"
+                "Fix: pip install faiss-cpu\n"
+                "DO NOT catch this error and continue - that hides the problem."
+            ) from e
+
         emb = Embedding(
             id=str(uuid.uuid4()),
             target_id=target_id,
@@ -248,7 +262,14 @@ class EmbeddingService:
             vector=pickle.dumps(embedding.vector),
             model=embedding.model,
         )
-        return self.kb.save_embedding(emb)
+        saved = self.kb.save_embedding(emb)
+
+        # Also add to FAISS index for fast similarity search
+        if saved:
+            index = get_vector_index(dimensions=len(embedding.vector))
+            index.add(target_id, target_type, embedding.vector)
+
+        return saved
 
     def get_embedding(self, target_id: str, target_type: str) -> Optional[list[float]]:
         """Get stored embedding for a target.
@@ -297,7 +318,10 @@ class EmbeddingService:
         threshold: float = 0.7,
         limit: int = 10,
     ) -> list[tuple[str, float]]:
-        """Find similar items by vector similarity.
+        """Find similar items by vector similarity using FAISS.
+
+        Uses approximate nearest neighbor search for O(log N) performance
+        instead of brute-force O(N) scanning.
 
         Args:
             query_vector: Vector to compare against
@@ -307,30 +331,34 @@ class EmbeddingService:
 
         Returns:
             List of (target_id, similarity_score) tuples, sorted by score desc
+
+        Raises:
+            EmbeddingError: If FAISS is not available (NO FALLBACKS)
         """
-        results = []
+        # FAIL FAST: FAISS must be available
+        try:
+            from .vector_index import get_vector_index
+        except ImportError as e:
+            raise EmbeddingError(
+                f"FAISS not available: {e}\n"
+                "Fix: pip install faiss-cpu"
+            ) from e
 
-        # Get all embeddings of this type
-        # This is O(n) but with fast vector ops, not LLM calls
-        with self.kb._connect() as conn:
-            rows = conn.execute(
-                "SELECT target_id, vector FROM knowledge_embeddings WHERE target_type = ?",
-                (target_type,)
-            ).fetchall()
+        # Get or initialize the FAISS index
+        index = get_vector_index(dimensions=len(query_vector))
 
-        for row in rows:
-            target_id = row["target_id"]
-            stored_vector = pickle.loads(row["vector"])
+        # Load from DB if not already loaded
+        index.load_from_db(self.kb, target_type)
 
-            similarity = self.cosine_similarity(query_vector, stored_vector)
+        # Search using FAISS (O(log N))
+        results = index.search(
+            query_vector=query_vector,
+            target_type=target_type,
+            k=limit,
+            threshold=threshold,
+        )
 
-            if similarity >= threshold:
-                results.append((target_id, similarity))
-
-        # Sort by similarity descending
-        results.sort(key=lambda x: x[1], reverse=True)
-
-        return results[:limit]
+        return [(r.target_id, r.score) for r in results]
 
     def is_available(self) -> bool:
         """Check if the configured embedding provider is available."""

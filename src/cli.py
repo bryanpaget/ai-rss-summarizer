@@ -463,6 +463,11 @@ def report(
         "--limit", "-n",
         help="Maximum number of articles to process",
     ),
+    max_per_step: int = typer.Option(
+        0,
+        "--max-per-step", "-m",
+        help="Limit items per step (0=unlimited, useful for testing)",
+    ),
     skip_summarized: bool = typer.Option(
         True,
         "--skip-summarized/--reprocess",
@@ -501,6 +506,7 @@ def report(
         skip_summarized=skip_summarized,
         db_path=db_path,
         kb_path=kb_path,
+        max_per_step=max_per_step,
     )
 
 

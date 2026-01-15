@@ -412,10 +412,11 @@ class TestModelManagerEnsureModel:
         manager = ModelManager(config=config)
 
         with patch.object(manager, 'check_lm_studio', return_value=True):
-            with pytest.raises(ModelManagerError) as exc_info:
-                manager.ensure_model_for_request("unknown")
+            with patch.object(manager, 'get_loaded_model', return_value=None):
+                with pytest.raises(ModelManagerError) as exc_info:
+                    manager.ensure_model_for_request("unknown")
 
-            assert "Unknown request type" in str(exc_info.value)
+                assert "Unknown request type" in str(exc_info.value)
 
     def test_ensure_model_raises_when_no_model_configured(self):
         """Test raises error when target model not configured."""

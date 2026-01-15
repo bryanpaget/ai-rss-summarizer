@@ -12,6 +12,9 @@ Key principles:
 - Semantic embeddings - Embed distilled content, not raw articles
 """
 
+import atexit
+import signal
+import sys
 import time
 from datetime import datetime, timedelta
 from typing import Optional
@@ -36,8 +39,50 @@ from .signal_tagger import SignalTagger
 from .embeddings import EmbeddingService
 from .clustering import StoryClusterer
 from .storage_perspectives import add_perspective_methods
+from .user_context import UserContextStore, UserContextProfile
 
 console = Console(force_terminal=True, legacy_windows=True)
+
+
+# =============================================================================
+# CLEANUP HANDLING - Prevent orphaned gateway requests on cancel
+# =============================================================================
+
+_cleanup_registered = False
+
+
+def _cleanup_gateway():
+    """Clean up gateway on exit to prevent orphaned requests."""
+    try:
+        from .gateway import get_gateway
+        gateway = get_gateway()
+        gateway.clear_queue()
+    except Exception:
+        pass  # Best effort cleanup
+
+
+def _signal_handler(signum, frame):
+    """Handle interrupt signals by cleaning up and exiting."""
+    console.print("\n[yellow]Interrupted - cleaning up gateway...[/yellow]")
+    _cleanup_gateway()
+    sys.exit(130)  # Standard exit code for SIGINT
+
+
+def _register_cleanup():
+    """Register cleanup handlers (only once)."""
+    global _cleanup_registered
+    if _cleanup_registered:
+        return
+
+    # Register atexit handler
+    atexit.register(_cleanup_gateway)
+
+    # Register signal handlers (skip on Windows for SIGTERM)
+    signal.signal(signal.SIGINT, _signal_handler)
+    if hasattr(signal, 'SIGTERM'):
+        signal.signal(signal.SIGTERM, _signal_handler)
+
+    _cleanup_registered = True
 
 
 # =============================================================================
@@ -49,6 +94,7 @@ def _run_verification_step(
     kb: KnowledgeBase,
     articles: list[Article],
     embedding_service: EmbeddingService,
+    max_per_step: int = 0,
 ) -> dict:
     """
     Step 1: Verify data completeness and report gaps.
@@ -69,26 +115,22 @@ def _run_verification_step(
 
     console.print("[bold]Step 1:[/bold] Verifying data completeness...")
 
-    # Check each article
-    for article in articles:
-        needs_llm = False
-        needs_embedding = False
-
-        # Check for missing LLM outputs
+    # Count TRUE backlog from DB (not just the limited articles list)
+    all_unanalyzed = storage.get_unanalyzed_articles(exclude_spam=True)
+    for article in all_unanalyzed:
         if not article.summary:
             gaps["articles_missing_summary"] += 1
-            needs_llm = True
         if not article.trend_tags:
             gaps["articles_missing_trends"] += 1
-            needs_llm = True
         if not article.signal_tags:
             gaps["articles_missing_signals"] += 1
-            needs_llm = True
-
-        # Check for missing embedding
         if storage.get_embedding(article.id) is None:
             gaps["articles_missing_embeddings"] += 1
-            needs_embedding = True
+
+    # Track what will actually be processed (from limited list)
+    for article in articles:
+        needs_llm = not article.summary or not article.trend_tags or not article.signal_tags
+        needs_embedding = storage.get_embedding(article.id) is None
 
         if needs_llm:
             gaps["articles_needing_llm"].append(article)
@@ -119,19 +161,25 @@ def _run_verification_step(
 
     if total_gaps > 0:
         console.print(f"  [yellow]Found {total_gaps} gaps from previous runs:[/yellow]")
-        if gaps["articles_missing_summary"] > 0:
-            console.print(f"    - {gaps['articles_missing_summary']} articles missing summaries")
-        if gaps["articles_missing_trends"] > 0:
-            console.print(f"    - {gaps['articles_missing_trends']} articles missing trend tags")
-        if gaps["articles_missing_signals"] > 0:
-            console.print(f"    - {gaps['articles_missing_signals']} articles missing signal tags")
-        if gaps["articles_missing_embeddings"] > 0:
-            console.print(f"    - {gaps['articles_missing_embeddings']} articles missing embeddings")
-        if gaps["stories_missing_embeddings"] > 0:
-            console.print(f"    - {gaps['stories_missing_embeddings']} stories missing embeddings")
-        if gaps["insights_missing_embeddings"] > 0:
-            console.print(f"    - {gaps['insights_missing_embeddings']} insights missing embeddings")
-        console.print("  [dim]These will be filled during processing[/dim]")
+
+        def show_gap(label: str, total: int) -> None:
+            if total > 0:
+                if max_per_step > 0 and total > max_per_step:
+                    console.print(f"    - {total} {label} [dim](processing {max_per_step})[/dim]")
+                else:
+                    console.print(f"    - {total} {label}")
+
+        show_gap("articles missing summaries", gaps["articles_missing_summary"])
+        show_gap("articles missing trend tags", gaps["articles_missing_trends"])
+        show_gap("articles missing signal tags", gaps["articles_missing_signals"])
+        show_gap("articles missing embeddings", gaps["articles_missing_embeddings"])
+        show_gap("stories missing embeddings", gaps["stories_missing_embeddings"])
+        show_gap("insights missing embeddings", gaps["insights_missing_embeddings"])
+
+        if max_per_step > 0:
+            console.print(f"  [dim]Limited to {max_per_step} items per step[/dim]")
+        else:
+            console.print("  [dim]These will be filled during processing[/dim]")
     else:
         console.print("  [green]All data complete, no gaps found[/green]")
 
@@ -148,25 +196,17 @@ def _run_pre_embedding_phase(
     kb: KnowledgeBase,
     embedding_service: EmbeddingService,
     stats: dict,
+    max_per_step: int = 0,
 ) -> None:
     """
     Step 2: Pre-embed existing stories and insights.
 
     This MUST run BEFORE the LLM phase so that detect_connections
     has embeddings to compare against when finding relationships.
+
+    NOTE: Model loading is handled by the gateway - no ensure_*_model() calls needed.
     """
-    from .model_manager import ensure_embedding_model
-
     console.print("[bold]Step 2:[/bold] Pre-embedding existing content...")
-
-    # Ensure embedding model is loaded
-    try:
-        ensure_embedding_model()
-    except Exception as e:
-        console.print(f"  [red]ERROR: Cannot load embedding model: {e}[/red]")
-        console.print("  [yellow]Connection detection will be limited[/yellow]")
-        console.print()
-        return
 
     # Check if embedding service is available
     if not embedding_service.is_available():
@@ -181,6 +221,8 @@ def _run_pre_embedding_phase(
     # Embed insights first (these are what detect_connections compares against)
     insights = kb.get_insights(limit=500)
     insights_needing_embedding = [i for i in insights if not embedding_service.get_embedding(i.id, "insight")]
+    if max_per_step > 0:
+        insights_needing_embedding = insights_needing_embedding[:max_per_step]
 
     BATCH_SIZE = 10
 
@@ -224,6 +266,8 @@ def _run_pre_embedding_phase(
     # Embed stories
     stories = storage.get_active_stories(limit=200)
     stories_needing_embedding = [s for s in stories if not embedding_service.get_embedding(s.id, "story")]
+    if max_per_step > 0:
+        stories_needing_embedding = stories_needing_embedding[:max_per_step]
 
     if stories_needing_embedding:
         total = len(stories_needing_embedding)
@@ -276,29 +320,21 @@ def _run_llm_phase(
     provider,
     stats: dict,
     embedding_service: EmbeddingService,
+    max_per_step: int = 0,
 ) -> list[dict]:
     """
     Step 3: LLM processing for all articles.
 
     Generates: summaries, insights, facts (triples), signal tags, trend tags.
-    Text model is loaded ONCE at the start.
     Uses embedding_service for connection detection and trend categorization.
+
+    NOTE: Model loading is handled by the gateway - no ensure_*_model() calls needed.
+    The gateway automatically loads the correct model based on request type.
 
     NO SILENT FAILURES - Every error is surfaced to the user.
     """
-    from .model_manager import ensure_text_model
-
     console.print("[bold]Step 3:[/bold] LLM Analysis...")
-
-    # Load text model ONCE
-    console.print("  [dim]Loading text model...[/dim]")
-    try:
-        ensure_text_model()
-        console.print(f"  [green]Using {provider.name}[/green]")
-    except Exception as e:
-        console.print(f"  [red]ERROR loading text model: {e}[/red]")
-        console.print("  [red]Cannot proceed without LLM. Aborting.[/red]")
-        raise RuntimeError(f"LLM unavailable: {e}")
+    console.print(f"  [green]Using {provider.name}[/green]")
 
     tagger = SignalTagger(use_llm=True, provider=provider)
     processed_articles = []
@@ -331,32 +367,9 @@ def _run_llm_phase(
             console.print(f"    [red]ERROR: {error_msg}[/red]")
             stats["errors"] += 1
 
-        # --- Detect connections between insights ---
-        if insights:
-            console.print("  [dim]- Finding connections...[/dim]")
-            article_connections = []
-            for ins in insights:
-                try:
-                    conns = detect_connections(
-                        ins, kb, provider,
-                        embedding_service=embedding_service
-                    ) or []
-                    for conn in conns:
-                        connections.append(conn)
-                        article_connections.append(conn)
-                        stats["connections"] += 1
-                except Exception as e:
-                    error_msg = f"Connection detection failed: {e}"
-                    article_errors.append(error_msg)
-                    console.print(f"    [red]ERROR: {error_msg}[/red]")
-                    stats["errors"] += 1
-
-            if article_connections:
-                for conn in article_connections:
-                    formatted = format_relationship(conn, kb)
-                    console.print(f"    [cyan]->[/cyan] {formatted}")
-            else:
-                console.print("    [dim]No connections found[/dim]")
+        # --- Connection detection DEFERRED ---
+        # Connections are detected AFTER Step 4 (embedding phase) to avoid model switching.
+        # The insights are collected and connections will be found in batch later.
 
         # --- Extract facts/triples (LLM call) ---
         console.print("  [dim]- Extracting facts...[/dim]")
@@ -500,6 +513,7 @@ def _run_embedding_phase(
     kb: KnowledgeBase,
     stats: dict,
     embedding_service: EmbeddingService,
+    max_per_step: int = 0,
 ) -> int:
     """
     Step 4: Generate embeddings for new articles using semantic cards.
@@ -563,6 +577,8 @@ def _run_embedding_phase(
     # Any new stories created during LLM phase need embeddings
     stories = storage.get_active_stories(limit=200)
     stories_needing_embedding = [s for s in stories if not embedding_service.get_embedding(s.id, "story")]
+    if max_per_step > 0:
+        stories_needing_embedding = stories_needing_embedding[:max_per_step]
 
     if stories_needing_embedding:
         total = len(stories_needing_embedding)
@@ -603,6 +619,69 @@ def _run_embedding_phase(
 
 
 # =============================================================================
+# STEP 4.5: BATCHED CONNECTION DETECTION
+# =============================================================================
+
+def _run_connection_detection(
+    processed_articles: list[dict],
+    kb: KnowledgeBase,
+    provider,
+    stats: dict,
+    embedding_service: EmbeddingService,
+) -> None:
+    """
+    Detect connections between newly extracted insights and existing knowledge.
+
+    This runs AFTER the embedding phase so all insights have embeddings.
+    No model switching - all embedding work is already done.
+
+    Args:
+        processed_articles: List of dicts from LLM phase, each with "insights" list
+        kb: Knowledge base
+        provider: LLM provider for relationship classification
+        stats: Statistics dict to update
+        embedding_service: Embedding service (used for FAISS lookups only, not embedding)
+    """
+    # Collect all insights that need connection detection
+    all_insights = []
+    for item in processed_articles:
+        for ins in item.get("insights", []):
+            all_insights.append((item, ins))
+
+    if not all_insights:
+        return
+
+    console.print("[bold]Step 4.5:[/bold] Detecting connections...")
+    console.print(f"  [dim]Finding connections for {len(all_insights)} insights...[/dim]")
+
+    total_connections = 0
+    for item, ins in all_insights:
+        try:
+            conns = detect_connections(
+                ins, kb, provider,
+                embedding_service=embedding_service
+            ) or []
+
+            # Store connections in the processed_articles item
+            if "connections" not in item:
+                item["connections"] = []
+            item["connections"].extend(conns)
+            total_connections += len(conns)
+            stats["connections"] += len(conns)
+
+            if conns:
+                for conn in conns:
+                    formatted = format_relationship(conn, kb)
+                    console.print(f"    [cyan]->[/cyan] {formatted}")
+        except Exception as e:
+            console.print(f"    [red]ERROR: Connection detection failed: {e}[/red]")
+            stats["errors"] += 1
+
+    console.print(f"  [green]Found {total_connections} connections[/green]")
+    console.print()
+
+
+# =============================================================================
 # STEP 5: STORY MATCHING
 # =============================================================================
 
@@ -613,6 +692,7 @@ def _run_story_matching(
     provider,
     stats: dict,
     embedding_service: EmbeddingService,
+    max_per_step: int = 0,
 ) -> None:
     """
     Step 5: Match articles to stories using embeddings.
@@ -682,6 +762,7 @@ def generate_report(
     db_path: str = "articles.db",
     kb_path: str = "knowledge.db",
     feeds_file: str = "config/feeds.txt",
+    max_per_step: int = 0,
 ) -> dict:
     """
     Generate a comprehensive report with self-healing pipeline.
@@ -694,6 +775,9 @@ def generate_report(
 
     NO SILENT FAILURES - Every error is surfaced.
     """
+    # Register cleanup handlers to prevent orphaned gateway requests on cancel
+    _register_cleanup()
+
     storage = Storage(db_path)
     add_perspective_methods(storage)
     kb = KnowledgeBase(kb_path)
@@ -732,6 +816,8 @@ def generate_report(
     console.print("[bold]Fetching:[/bold] Latest articles...")
     feeds = load_feeds(feeds_file)
     new_article_ids = []
+    stats["feeds_count"] = len(feeds) if feeds else 0
+    stats["time_range"] = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     if feeds:
         fetch_results = fetch_all_feeds(feeds_file, storage)
@@ -793,24 +879,31 @@ def generate_report(
 
     console.print()
 
+    # Apply max_per_step limit to articles if set
+    if max_per_step > 0:
+        articles = articles[:max_per_step]
+
     # Step 1: Verification (Self-Healing)
-    gaps = _run_verification_step(storage, kb, articles, embedding_service)
+    gaps = _run_verification_step(storage, kb, articles, embedding_service, max_per_step)
 
     # Step 2: Pre-embed existing stories/insights
     # This MUST happen before LLM phase so detect_connections has embeddings to compare against
-    _run_pre_embedding_phase(storage, kb, embedding_service, stats)
+    _run_pre_embedding_phase(storage, kb, embedding_service, stats, max_per_step)
 
     # Step 3: LLM Phase (now has embeddings to compare against)
-    processed_articles = _run_llm_phase(articles, storage, kb, provider, stats, embedding_service)
+    processed_articles = _run_llm_phase(articles, storage, kb, provider, stats, embedding_service, max_per_step)
 
     # Step 4: Embedding Phase (for new articles)
-    _run_embedding_phase(articles, storage, kb, stats, embedding_service)
+    _run_embedding_phase(articles, storage, kb, stats, embedding_service, max_per_step)
+
+    # Step 4.5: Batched Connection Detection (AFTER embeddings, no model switching)
+    _run_connection_detection(processed_articles, kb, provider, stats, embedding_service)
 
     # Step 5: Story Matching
-    _run_story_matching(articles, storage, kb, provider, stats, embedding_service)
+    _run_story_matching(articles, storage, kb, provider, stats, embedding_service, max_per_step)
 
     # Final Report
-    _show_final_report(processed_articles, stats, kb, provider)
+    _show_final_report(processed_articles, stats, kb, provider, storage)
 
     return stats
 
@@ -820,88 +913,319 @@ def _show_final_report(
     stats: dict,
     kb: KnowledgeBase,
     provider,
+    storage: Optional[Storage] = None,
 ) -> None:
-    """Show the final synthesized report."""
+    """Generate the intelligence briefing per REPORT_DESIGN_SPEC.md.
 
-    console.print(Panel("[bold]Report Complete[/bold]", style="green"))
+    Sections:
+    1. Top Priority - 1-3 must-read items
+    2. Your Interest Areas - Dynamic sections based on tracked topics
+    3. Discovered Connections - Cross-source synthesis
+    4. Knowledge Graph Updates - New entities/relationships
+    5. Quick Scan - Everything else
+    6. Session Stats - Processing summary
+    """
+    console.print()
+    console.print(Panel("[bold]INTELLIGENCE BRIEFING[/bold]", style="blue"))
     console.print()
 
-    # Summary statistics
-    table = Table(title="Processing Summary", show_header=False)
-    table.add_column("Metric", style="cyan")
-    table.add_column("Count", justify="right", style="green")
+    # Load user context for personalization
+    ctx_store = UserContextStore()
+    profile = ctx_store.load_profile()
 
-    table.add_row("Articles Processed", str(stats["processed"]))
-    if stats.get("embeddings_generated", 0) > 0:
-        table.add_row("Article Embeddings", str(stats["embeddings_generated"]))
-    if stats.get("story_embeddings_generated", 0) > 0:
-        table.add_row("Story Embeddings", str(stats["story_embeddings_generated"]))
-    table.add_row("Insights Extracted", str(stats["insights"]))
+    # Score articles for priority ranking
+    scored_articles = _score_articles_for_briefing(processed_articles, profile, kb)
 
-    if stats.get("triples_new", 0) > 0 or stats.get("triples_existing", 0) > 0:
-        table.add_row("New Facts Added", f"[green]{stats.get('triples_new', 0)}[/green]")
-        table.add_row("Redundant Facts", f"[dim]{stats.get('triples_existing', 0)}[/dim]")
+    # =========================================================================
+    # SECTION 1: TOP PRIORITY
+    # =========================================================================
+    console.print("[bold cyan]## TOP PRIORITY[/bold cyan]")
+    console.print("[dim]Items you cannot skip today[/dim]")
+    console.print()
+
+    top_items = scored_articles[:3]  # Top 3 by score
+
+    if top_items:
+        for i, item in enumerate(top_items, 1):
+            article = item["article"]
+            insights = item.get("insights", [])
+
+            # Headline (our framing)
+            console.print(f"[bold]{i}. {article.title}[/bold]")
+
+            # Why this matters (personalized if possible)
+            why_matters = _explain_relevance(article, profile, item.get("relevance_reason", ""))
+            if why_matters:
+                console.print(f"   [yellow]Why it matters:[/yellow] {why_matters}")
+
+            # Key insight
+            if insights:
+                insight = insights[0]
+                # Handle both Insight objects and strings
+                insight_text = insight.content if hasattr(insight, 'content') else str(insight)
+                console.print(f"   [green]Key insight:[/green] {insight_text}")
+
+            # Signal tags - parse and display cleanly
+            if article.signal_tags:
+                try:
+                    import json
+                    tags = json.loads(article.signal_tags)
+                    tag_parts = []
+                    for key, val in tags.items():
+                        if key != "is_ad" and val:
+                            if isinstance(val, list):
+                                tag_parts.extend(val)
+                            elif val is True:
+                                tag_parts.append(key)
+                    console.print(f"   [dim]Signal: {', '.join(tag_parts)}[/dim]")
+                except (json.JSONDecodeError, TypeError):
+                    console.print(f"   [dim]Signal: {article.signal_tags}[/dim]")
+
+            # What we know - relevant facts from knowledge base
+            # Extract key terms from title and find related triples
+            title_words = [w for w in article.title.split() if len(w) > 4]
+            related_triples = []
+            for word in title_words[:3]:
+                triples = kb.query_triples_pattern(subject_pattern=f"%{word}%")
+                related_triples.extend(triples[:1])  # Max 1 per word
+                if len(related_triples) >= 2:
+                    break
+
+            if related_triples:
+                console.print(f"   [blue]What we know:[/blue]")
+                for t in related_triples[:2]:
+                    console.print(f"      - {t.subject} {t.predicate} {t.object}")
+
+            # Developing story?
+            if article.story_id and storage:
+                story = storage.get_story(article.story_id)
+                if story and len(story.article_ids) > 1:
+                    console.print(f"   [magenta]Developing story ({len(story.article_ids)} articles)[/magenta]")
+            elif article.story_id:
+                console.print(f"   [magenta]Developing story[/magenta]")
+
+            # Source
+            console.print(f"   [dim]{article.link}[/dim]")
+            console.print()
     else:
-        table.add_row("Knowledge Triples", str(stats["triples"]))
+        console.print("   [dim]No high-priority items this session.[/dim]")
+        console.print()
 
-    table.add_row("Connections Found", str(stats["connections"]))
+    # =========================================================================
+    # SECTION 2: YOUR INTEREST AREAS
+    # =========================================================================
+    console.print("[bold cyan]## YOUR INTEREST AREAS[/bold cyan]")
 
-    if stats.get("stories_matched", 0) > 0 or stats.get("stories_created", 0) > 0:
-        table.add_row("Stories Matched", str(stats.get("stories_matched", 0)))
-        table.add_row("New Stories Created", str(stats.get("stories_created", 0)))
+    # Get user's tracked topics
+    tracked_topics = profile.watching + profile.current_projects
+
+    if tracked_topics:
+        for topic in tracked_topics[:5]:  # Max 5 interest sections
+            matching = [item for item in scored_articles
+                       if _article_matches_topic(item["article"], topic)]
+
+            if matching:
+                console.print(f"\n[bold]{topic}[/bold]")
+                for item in matching[:3]:
+                    article = item["article"]
+                    console.print(f"  - {article.title[:60]}...")
+                    if item.get("insights"):
+                        insight = item['insights'][0]
+                        insight_text = insight.content if hasattr(insight, 'content') else str(insight)
+                        console.print(f"    [dim]{insight_text[:80]}...[/dim]")
+    else:
+        console.print("[dim]No tracked topics. Use 'rss context watch <topic>' to add interests.[/dim]")
+    console.print()
+
+    # =========================================================================
+    # SECTION 3: DISCOVERED CONNECTIONS
+    # =========================================================================
+    console.print("[bold cyan]## DISCOVERED CONNECTIONS[/bold cyan]")
+    console.print("[dim]Insights from combining multiple sources[/dim]")
+    console.print()
+
+    all_connections = []
+    for item in processed_articles:
+        for conn in item.get("connections", []):
+            all_connections.append((item["article"], conn))
+
+    if all_connections:
+        for article, conn in all_connections[:5]:
+            formatted = format_relationship(conn, kb)
+            console.print(f"  - [cyan]{article.title[:40]}...[/cyan]")
+            console.print(f"    {formatted}")
+    else:
+        console.print("   [dim]No cross-source connections found this session.[/dim]")
+    console.print()
+
+    # =========================================================================
+    # SECTION 4: KNOWLEDGE GRAPH UPDATES
+    # =========================================================================
+    console.print("[bold cyan]## KNOWLEDGE GRAPH UPDATES[/bold cyan]")
+    console.print("[dim]What we learned worth remembering[/dim]")
+    console.print()
+
+    # New facts/triples
+    new_facts = stats.get("triples_new", 0)
+    if new_facts > 0:
+        console.print(f"  [green]+{new_facts} new facts added[/green]")
+
+        # Show sample of new facts
+        for item in processed_articles[:3]:
+            triples = item.get("triples", [])
+            if triples:
+                for t in triples[:2]:
+                    if hasattr(t, 'subject'):
+                        console.print(f"    - {t.subject} -> {t.predicate} -> {t.object}")
+
+    # New insights
+    new_insights = stats.get("insights", 0)
+    if new_insights > 0:
+        console.print(f"  [green]+{new_insights} insights extracted[/green]")
+
+    # Redundant (already known)
+    redundant = stats.get("triples_existing", 0)
+    if redundant > 0:
+        console.print(f"  [dim]{redundant} facts already known (confirms existing knowledge)[/dim]")
+
+    console.print()
+
+    # =========================================================================
+    # SECTION 5: QUICK SCAN
+    # =========================================================================
+    console.print("[bold cyan]## QUICK SCAN[/bold cyan]")
+    console.print("[dim]Everything else, by relevance[/dim]")
+    console.print()
+
+    # Items not in top 3
+    remaining = scored_articles[3:10]  # Next 7
+    if remaining:
+        for item in remaining:
+            article = item["article"]
+            score = item.get("score", 0)
+            skippable = score < 0.3
+
+            prefix = "[dim]SKIP:[/dim] " if skippable else "  "
+            console.print(f"{prefix}{article.title[:70]}...")
+    else:
+        console.print("   [dim]No additional items.[/dim]")
+    console.print()
+
+    # =========================================================================
+    # SECTION 6: SESSION STATS
+    # =========================================================================
+    console.print("[bold cyan]## SESSION STATS[/bold cyan]")
+    console.print()
+
+    table = Table(show_header=False, box=None)
+    table.add_column("Metric", style="dim")
+    table.add_column("Value", justify="right")
+
+    table.add_row("Articles processed", str(stats["processed"]))
+    table.add_row("From feeds", str(stats.get("feeds_count", 0)))
+    table.add_row("Time", stats.get("time_range", "-"))
+    table.add_row("Insights extracted", str(stats["insights"]))
+    table.add_row("Facts added", str(stats.get("triples_new", stats.get("triples", 0))))
+    table.add_row("Connections found", str(stats["connections"]))
+    table.add_row("Stories updated", str(stats.get("stories_matched", 0) + stats.get("stories_created", 0)))
 
     if stats["errors"] > 0:
         table.add_row("Errors", f"[red]{stats['errors']}[/red]")
 
     console.print(table)
-    console.print()
 
-    # Show any errors from processing
-    all_errors = []
-    for item in processed_articles:
-        if item.get("errors"):
-            all_errors.extend([(item["article"].title, e) for e in item["errors"]])
-
-    if all_errors:
-        console.print("[bold red]Errors During Processing:[/bold red]")
-        for title, error in all_errors[:10]:
-            console.print(f"  [red]*[/red] {title[:40]}: {error}")
-        if len(all_errors) > 10:
-            console.print(f"  [dim]...and {len(all_errors) - 10} more[/dim]")
-        console.print()
-
-    # Top articles by insight count
-    if processed_articles:
-        console.print("[bold]Top Articles by Knowledge Extracted:[/bold]")
-        console.print()
-
-        sorted_articles = sorted(
-            processed_articles,
-            key=lambda x: len(x.get("insights", [])) + len(x.get("triples", [])),
-            reverse=True
-        )[:5]
-
-        for i, item in enumerate(sorted_articles, 1):
-            article = item["article"]
-            insight_count = len(item.get("insights", []))
-            triple_count = len(item.get("triples", []))
-            conn_count = len(item.get("connections", []))
-
-            console.print(f"  {i}. [cyan]{article.title}[/cyan]")
-            console.print(f"     [dim]{insight_count} insights, {triple_count} new facts, {conn_count} connections[/dim]")
-
-            if article.summary:
-                console.print(f"     {article.summary}")
-            console.print()
-
-    # Knowledge base stats
+    # Knowledge base totals
     kb_stats = kb.get_stats()
-    console.print(f"[dim]Knowledge base: {kb_stats['total_insights']} total insights, {kb_stats['total_entities']} entities[/dim]")
+    console.print()
+    console.print(f"[dim]Total knowledge: {kb_stats['total_insights']} insights, {kb_stats['total_entities']} entities[/dim]")
     console.print()
 
-    # Next steps
-    console.print("[bold]What's Next:[/bold]")
-    console.print("  - [cyan]rss perspectives[/cyan] - View multi-source perspectives on stories")
-    console.print("  - [cyan]rss stories list[/cyan] - View story clusters")
-    console.print("  - [cyan]rss query \"question\"[/cyan] - Query your knowledge base")
-    console.print()
+
+def _score_articles_for_briefing(
+    processed_articles: list,
+    profile: UserContextProfile,
+    kb: KnowledgeBase,
+) -> list:
+    """Score articles for priority ranking in the briefing.
+
+    Scoring factors:
+    - Signal strength (not ads/fluff)
+    - Match to user interests
+    - Novelty (not redundant)
+    - Cross-referencing (part of multi-source story)
+    """
+    scored = []
+
+    for item in processed_articles:
+        article = item["article"]
+        score = 0.5  # Base score
+        reason = ""
+
+        # Signal strength - boost non-fluff content
+        if article.signal_tags:
+            tags_lower = article.signal_tags.lower()
+            if "research" in tags_lower or "data-driven" in tags_lower:
+                score += 0.2
+                reason = "Research-backed"
+            if "primary" in tags_lower:
+                score += 0.1
+                reason = "Primary source"
+            if "noise" in tags_lower or "ad" in tags_lower:
+                score -= 0.3
+
+        # User interest match
+        tracked = profile.watching + profile.current_projects
+        for topic in tracked:
+            if topic.lower() in article.title.lower():
+                score += 0.3
+                reason = f"Matches your interest: {topic}"
+                break
+
+        # Novelty - more insights = more novel
+        insight_count = len(item.get("insights", []))
+        score += insight_count * 0.1
+
+        # Cross-referencing - part of a story
+        if article.story_id:
+            score += 0.15
+            if not reason:
+                reason = "Part of developing story"
+
+        # Connections found = high value
+        conn_count = len(item.get("connections", []))
+        score += conn_count * 0.1
+
+        item["score"] = min(score, 1.0)
+        item["relevance_reason"] = reason
+        scored.append(item)
+
+    # Sort by score descending
+    scored.sort(key=lambda x: x["score"], reverse=True)
+    return scored
+
+
+def _explain_relevance(article: Article, profile: UserContextProfile, reason: str) -> str:
+    """Generate personalized relevance explanation."""
+    if reason:
+        return reason
+
+    # Check against user interests
+    for topic in profile.watching:
+        if topic.lower() in article.title.lower():
+            return f"Matches your tracked topic: {topic}"
+
+    for project in profile.current_projects:
+        if project.lower() in article.title.lower():
+            return f"Related to your project: {project}"
+
+    return ""
+
+
+def _article_matches_topic(article: Article, topic: str) -> bool:
+    """Check if article matches a topic."""
+    topic_lower = topic.lower()
+    return (
+        topic_lower in article.title.lower() or
+        (article.trend_tags and topic_lower in article.trend_tags.lower()) or
+        (article.content and topic_lower in article.content.lower()[:500])
+    )

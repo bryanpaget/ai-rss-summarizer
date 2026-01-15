@@ -1,0 +1,467 @@
+"""Unified gateway interface for local LLM requests.
+
+ALL local LLM requests (text, embedding, vision) MUST go through this module.
+The gateway handles model loading, batching, and queue management automatically.
+
+Architecture principle: Submit requests to the gateway, gateway handles model switching.
+DO NOT make direct API calls to LM Studio/Ollama - use the gateway.
+
+For batched operations, submit all requests first (async), then collect responses.
+This allows the gateway's queue reorganization to batch by type efficiently.
+"""
+
+import json
+import os
+import subprocess
+import tempfile
+import time
+from dataclasses import dataclass
+from typing import Optional
+from pathlib import Path
+
+
+class GatewayError(Exception):
+    """Raised when gateway operations fail."""
+    pass
+
+
+class GatewayUnavailableError(GatewayError):
+    """Raised when gateway script is not available."""
+    pass
+
+
+@dataclass
+class GatewayResponse:
+    """Response from a gateway request."""
+    content: str  # For text: the generated text. For embedding: JSON string
+    request_type: str
+    response_path: str
+
+
+class LocalLLMGateway:
+    """Unified interface to the safe-model-load gateway.
+
+    All local LLM requests (text, embedding, vision) go through this gateway.
+    The gateway handles:
+    - Automatic model loading based on request type
+    - Queue management and batching by type
+    - Prevention of model switching during in-flight requests
+
+    Usage:
+        gateway = LocalLLMGateway()
+
+        # Single request (blocking)
+        response = gateway.request_text("Summarize this article...")
+
+        # Batch requests (submit all, then collect)
+        handles = []
+        for prompt in prompts:
+            handles.append(gateway.submit_text(prompt))  # Non-blocking
+        responses = gateway.collect_all(handles)  # Wait for all
+    """
+
+    # Git Bash path for Windows
+    GIT_BASH = "C:/Program Files/Git/usr/bin/bash.exe"
+
+    def __init__(self, timeout: int = 120):
+        """Initialize gateway interface.
+
+        Args:
+            timeout: Maximum seconds to wait for a response
+        """
+        self.timeout = timeout
+        self._gateway_path = self._find_gateway()
+
+    def _find_gateway(self) -> str:
+        """Find the gateway script path.
+
+        ONLY looks in project/scripts - NO FALLBACKS.
+        Fallbacks hide incompetence by making broken code appear to work.
+        If the project copy is missing, this MUST fail loudly.
+        """
+        # Project-local path ONLY (for portability - works on any machine)
+        project_root = Path(__file__).parent.parent
+        project_script = project_root / 'scripts' / 'safe-model-load.sh'
+
+        if project_script.exists():
+            return str(project_script)
+
+        # NO FALLBACK - fail loudly so the problem is visible
+        raise GatewayUnavailableError(
+            f"Gateway script not found at: {project_script}\n\n"
+            "This project requires scripts/safe-model-load.sh to exist.\n"
+            "The script MUST be in the project directory for portability.\n"
+            "NO FALLBACKS - if this file is missing, the project is broken.\n\n"
+            "To fix: Copy the gateway script to scripts/safe-model-load.sh"
+        )
+
+    def _win_to_msys_path(self, win_path: str) -> str:
+        """Convert Windows path to MSYS2 path for Git Bash."""
+        if os.name != 'nt':
+            return win_path
+        # C:\Users\... -> /c/Users/...
+        if len(win_path) >= 2 and win_path[1] == ':':
+            return '/' + win_path[0].lower() + win_path[2:].replace('\\', '/')
+        return win_path.replace('\\', '/')
+
+    def _msys_to_win_path(self, msys_path: str) -> str:
+        """Convert MSYS2 path back to Windows path."""
+        if os.name != 'nt':
+            return msys_path
+        # /c/Users/... -> C:\Users\...
+        if msys_path.startswith('/') and len(msys_path) >= 3 and msys_path[2] == '/':
+            return msys_path[1].upper() + ':' + msys_path[2:].replace('/', '\\')
+        return msys_path.replace('/', '\\')
+
+    def is_available(self) -> bool:
+        """Check if gateway is available and LM Studio is running."""
+        try:
+            bash_exe = self.GIT_BASH if os.name == 'nt' else 'bash'
+            gateway_path = self._win_to_msys_path(self._gateway_path)
+
+            result = subprocess.run(
+                [bash_exe, gateway_path, "status"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            return "LM Studio: Running" in result.stdout
+        except Exception:
+            return False
+
+    def _submit_request(
+        self,
+        request_type: str,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        temperature: Optional[float] = None,
+    ) -> str:
+        """Submit a request to the gateway and return response file path.
+
+        This is the core method - returns immediately with file path.
+        Caller must poll/wait for file to be written.
+
+        Args:
+            request_type: "text", "embedding", or "vision"
+            prompt: The prompt text
+            system_prompt: Optional system prompt (text/vision only)
+            temperature: Optional temperature override
+
+        Returns:
+            Path to response file (will be written when request completes)
+        """
+        # Write prompt to temp file to avoid shell escaping issues
+        with tempfile.NamedTemporaryFile(
+            mode='w', suffix='.txt', delete=False, encoding='utf-8'
+        ) as f:
+            f.write(prompt)
+            temp_path = f.name
+
+        try:
+            bash_exe = self.GIT_BASH if os.name == 'nt' else 'bash'
+            gateway_path = self._win_to_msys_path(self._gateway_path)
+            temp_path_msys = self._win_to_msys_path(temp_path)
+
+            cmd = [bash_exe, gateway_path, "request", request_type,
+                   "--prompt-file", temp_path_msys]
+
+            if system_prompt:
+                cmd.extend(["--system", system_prompt])
+            if temperature is not None:
+                cmd.extend(["--temperature", str(temperature)])
+
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=30,  # Just for submitting, not waiting for response
+            )
+
+            if result.returncode != 0:
+                raise GatewayError(f"Gateway submit failed: {result.stderr or result.stdout}")
+
+            # Gateway returns FILE=/path/to/response.json
+            stdout = result.stdout.strip()
+            if not stdout.startswith('FILE='):
+                raise GatewayError(f"Unexpected gateway output: {stdout}")
+
+            response_path_msys = stdout[5:]
+            return self._msys_to_win_path(response_path_msys)
+
+        finally:
+            # Clean up temp prompt file
+            try:
+                os.unlink(temp_path)
+            except Exception:
+                pass
+
+    def _wait_for_response(self, response_path: str) -> dict:
+        """Wait for response file and parse it.
+
+        Args:
+            response_path: Path to response file
+
+        Returns:
+            Parsed JSON response
+        """
+        start_time = time.time()
+
+        while time.time() - start_time < self.timeout:
+            if os.path.exists(response_path):
+                try:
+                    file_size = os.path.getsize(response_path)
+                    if file_size == 0:
+                        time.sleep(0.5)
+                        continue
+
+                    with open(response_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+
+                    if not content.strip():
+                        time.sleep(0.5)
+                        continue
+
+                    response = json.loads(content)
+
+                    # Clean up response file
+                    try:
+                        os.unlink(response_path)
+                    except Exception:
+                        pass
+
+                    if "error" in response:
+                        raise GatewayError(f"Gateway error: {response['error']}")
+
+                    return response
+
+                except json.JSONDecodeError:
+                    # File might still be being written
+                    time.sleep(0.5)
+                    continue
+
+            time.sleep(1)
+
+        raise GatewayError(f"Timeout waiting for gateway response after {self.timeout}s")
+
+    # =========================================================================
+    # TEXT REQUESTS
+    # =========================================================================
+
+    def request_text(
+        self,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        temperature: float = 0.3,
+    ) -> str:
+        """Make a text generation request (blocking).
+
+        Args:
+            prompt: The prompt text
+            system_prompt: Optional system prompt
+            temperature: Temperature for generation
+
+        Returns:
+            Generated text
+        """
+        response_path = self._submit_request(
+            "text", prompt, system_prompt, temperature
+        )
+        response = self._wait_for_response(response_path)
+
+        # Extract text from chat completion response
+        if "choices" in response and len(response["choices"]) > 0:
+            return response["choices"][0]["message"]["content"]
+
+        raise GatewayError(f"Unexpected text response format: {list(response.keys())}")
+
+    def submit_text(
+        self,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        temperature: float = 0.3,
+    ) -> str:
+        """Submit a text request without waiting (for batching).
+
+        Returns the response file path - use collect_text() to get result.
+        """
+        return self._submit_request("text", prompt, system_prompt, temperature)
+
+    def collect_text(self, response_path: str) -> str:
+        """Collect result from a submitted text request."""
+        response = self._wait_for_response(response_path)
+
+        if "choices" in response and len(response["choices"]) > 0:
+            return response["choices"][0]["message"]["content"]
+
+        raise GatewayError(f"Unexpected text response format: {list(response.keys())}")
+
+    # =========================================================================
+    # EMBEDDING REQUESTS
+    # =========================================================================
+
+    def request_embedding(self, text: str) -> list[float]:
+        """Make an embedding request (blocking).
+
+        Args:
+            text: Text to embed
+
+        Returns:
+            Embedding vector
+        """
+        response_path = self._submit_request("embedding", text)
+        response = self._wait_for_response(response_path)
+
+        # Extract embedding from response
+        if "data" in response and len(response["data"]) > 0:
+            return response["data"][0]["embedding"]
+        elif "embedding" in response:
+            return response["embedding"]
+
+        raise GatewayError(f"Unexpected embedding response format: {list(response.keys())}")
+
+    def submit_embedding(self, text: str) -> str:
+        """Submit an embedding request without waiting (for batching).
+
+        Returns the response file path - use collect_embedding() to get result.
+        """
+        return self._submit_request("embedding", text)
+
+    def collect_embedding(self, response_path: str) -> list[float]:
+        """Collect result from a submitted embedding request."""
+        response = self._wait_for_response(response_path)
+
+        if "data" in response and len(response["data"]) > 0:
+            return response["data"][0]["embedding"]
+        elif "embedding" in response:
+            return response["embedding"]
+
+        raise GatewayError(f"Unexpected embedding response format: {list(response.keys())}")
+
+    # =========================================================================
+    # BATCH OPERATIONS
+    # =========================================================================
+
+    def batch_text(
+        self,
+        prompts: list[str],
+        system_prompt: Optional[str] = None,
+        temperature: float = 0.3,
+    ) -> list[str]:
+        """Process multiple text requests in a batch.
+
+        Submits all requests first (allowing gateway to batch), then collects.
+
+        Args:
+            prompts: List of prompts
+            system_prompt: Optional system prompt (same for all)
+            temperature: Temperature for generation
+
+        Returns:
+            List of generated texts (same order as prompts)
+        """
+        if not prompts:
+            return []
+
+        # Submit all requests
+        handles = []
+        for prompt in prompts:
+            handle = self.submit_text(prompt, system_prompt, temperature)
+            handles.append(handle)
+
+        # Collect all responses
+        results = []
+        for handle in handles:
+            result = self.collect_text(handle)
+            results.append(result)
+
+        return results
+
+    def batch_embedding(self, texts: list[str]) -> list[list[float]]:
+        """Process multiple embedding requests in a batch.
+
+        Submits all requests first (allowing gateway to batch), then collects.
+
+        Args:
+            texts: List of texts to embed
+
+        Returns:
+            List of embedding vectors (same order as texts)
+        """
+        if not texts:
+            return []
+
+        # Submit all requests
+        handles = []
+        for text in texts:
+            handle = self.submit_embedding(text)
+            handles.append(handle)
+
+        # Collect all responses
+        results = []
+        for handle in handles:
+            result = self.collect_embedding(handle)
+            results.append(result)
+
+        return results
+
+    # =========================================================================
+    # CLEANUP OPERATIONS
+    # =========================================================================
+
+    def clear_queue(self) -> bool:
+        """Clear the gateway queue and stop processing.
+
+        Use this when cancelling work to prevent orphaned requests.
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            bash_exe = self.GIT_BASH if os.name == 'nt' else 'bash'
+            gateway_path = self._win_to_msys_path(self._gateway_path)
+
+            result = subprocess.run(
+                [bash_exe, gateway_path, "clear-queue"],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+            return result.returncode == 0
+        except Exception:
+            return False
+
+    def unload(self) -> bool:
+        """Unload all models to free VRAM.
+
+        Also clears the queue to prevent orphaned requests.
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            bash_exe = self.GIT_BASH if os.name == 'nt' else 'bash'
+            gateway_path = self._win_to_msys_path(self._gateway_path)
+
+            result = subprocess.run(
+                [bash_exe, gateway_path, "unload"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            return result.returncode == 0
+        except Exception:
+            return False
+
+
+# Module-level singleton for convenience
+_gateway: Optional[LocalLLMGateway] = None
+
+
+def get_gateway() -> LocalLLMGateway:
+    """Get or create the gateway singleton."""
+    global _gateway
+    if _gateway is None:
+        _gateway = LocalLLMGateway()
+    return _gateway

@@ -523,17 +523,33 @@ class LMStudioProvider(OpenAICompatibleProvider):
             return None
 
     def _make_request(self, prompt: str, max_tokens: int, is_summarize: bool = False) -> str:
-        """Make a request with auto-load retry on 'No models loaded' error."""
-        # Ensure text model is loaded (handles switching from embedding model)
+        """Make a request through the gateway.
+
+        The gateway handles:
+        - Model loading (automatically loads text model based on request type)
+        - Queue management and batching
+        - Model switching coordination
+
+        No need for ensure_text_model() - gateway handles it.
+        """
+        # Try to use the gateway (preferred path)
         try:
-            from .model_manager import ensure_text_model
-            ensure_text_model()
-        except ImportError:
-            pass  # model_manager not available, use existing auto-load
+            from .gateway import get_gateway, GatewayUnavailableError
+
+            gateway = get_gateway()
+            if gateway.is_available():
+                result = gateway.request_text(prompt, temperature=0.3)
+                # Record estimated usage (gateway doesn't provide token counts)
+                self._record_usage(prompt, result, "gateway")
+                return result.strip()
+
+        except (ImportError, GatewayUnavailableError):
+            pass  # Fall back to direct API call
         except Exception as e:
             import sys
-            print(f"Warning: model_manager.ensure_text_model() failed: {e}", file=sys.stderr)
+            print(f"Warning: Gateway request failed, falling back to direct API: {e}", file=sys.stderr)
 
+        # Fallback: Direct API call (for users without gateway)
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.api_key}",

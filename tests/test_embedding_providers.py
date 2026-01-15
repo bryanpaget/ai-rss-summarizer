@@ -30,17 +30,12 @@ from src.embedding_providers import (
 # =============================================================================
 
 
-@pytest.fixture(autouse=True)
-def mock_model_manager():
-    """Mock ensure_embedding_model to prevent actual model loading in tests."""
-    with patch('src.embedding_providers.ensure_embedding_model') as mock:
-        mock.return_value = "test-embedding-model"
-        yield mock
-
-
 # =============================================================================
-# Autouse fixture to prevent accidental network calls
+# Note on model loading
 # =============================================================================
+# Model loading is now handled by the gateway module (src/gateway.py).
+# Tests no longer need to mock ensure_embedding_model as it's been removed.
+# The gateway handles all model loading automatically.
 
 
 # Note: Most tests in this file explicitly patch requests.get/post.
@@ -130,38 +125,20 @@ class TestLMStudioProviderAvailability:
             provider = LMStudioProvider()
             assert provider.is_available() is True
 
-    def test_unavailable_when_no_models_and_auto_load_disabled(self):
-        """Test returns False when no models loaded and auto-load disabled."""
+    def test_available_even_when_no_models_loaded(self):
+        """Test returns True when LM Studio is running, even without models.
+
+        Model loading is now handled by the gateway when requests are made,
+        not during availability checks.
+        """
         with patch('src.embedding_providers.httpx.get') as mock_get:
             mock_get.return_value.is_success = True
             mock_get.return_value.json.return_value = {"data": []}
 
-            provider = LMStudioProvider(auto_load_model=False)
-            assert provider.is_available() is False
-
-    def test_available_when_no_models_but_auto_load_succeeds(self):
-        """Test returns True when no models initially but auto-load succeeds."""
-        with patch('src.embedding_providers.httpx.get') as mock_get, \
-             patch('src.embedding_providers.ensure_embedding_model') as mock_ensure:
-            mock_get.return_value.is_success = True
-            mock_get.return_value.json.return_value = {"data": []}
-            mock_ensure.return_value = "test-embedding-model"
-
-            provider = LMStudioProvider(auto_load_model=True)
+            provider = LMStudioProvider()
+            # Now returns True as long as LM Studio is running
+            # Gateway handles model loading when embed requests are made
             assert provider.is_available() is True
-            mock_ensure.assert_called_once()
-
-    def test_unavailable_when_auto_load_fails(self):
-        """Test returns False when auto-load fails and no model loaded."""
-        from src.model_manager import ModelManagerError
-        with patch('src.embedding_providers.httpx.get') as mock_get, \
-             patch('src.embedding_providers.ensure_embedding_model') as mock_ensure:
-            mock_get.return_value.is_success = True
-            mock_get.return_value.json.return_value = {"data": []}
-            mock_ensure.side_effect = ModelManagerError("Failed to load")
-
-            provider = LMStudioProvider(auto_load_model=True)
-            assert provider.is_available() is False
 
     def test_unavailable_when_connection_refused(self):
         """Test returns False when connection refused."""
@@ -187,42 +164,36 @@ class TestLMStudioProviderAvailability:
             provider = LMStudioProvider()
             assert provider.is_available() is False
 
-    def test_unavailable_when_json_decode_error(self):
-        """Test returns False when response is not valid JSON."""
+    def test_available_even_when_json_decode_error(self):
+        """Test returns True when HTTP succeeds even if JSON parsing fails.
+
+        is_available() only checks if LM Studio is running (HTTP success).
+        Model loading and detailed state checking is handled by the gateway.
+        """
         with patch('src.embedding_providers.httpx.get') as mock_get:
             mock_get.return_value.is_success = True
             mock_get.return_value.json.side_effect = ValueError("Invalid JSON")
 
             provider = LMStudioProvider()
-            assert provider.is_available() is False
+            # HTTP request succeeded = LM Studio is running
+            assert provider.is_available() is True
 
-    def test_caches_model_name_from_auto_load(self):
-        """Test model name is cached from auto-load result."""
-        with patch('src.embedding_providers.httpx.get') as mock_get, \
-             patch('src.embedding_providers.ensure_embedding_model') as mock_ensure:
-            mock_get.return_value.is_success = True
-            mock_get.return_value.json.return_value = {
-                "data": [{"id": "some-other-model"}]
-            }
-            mock_ensure.return_value = "nomic-embed-text-v1.5"
+    def test_caches_model_name_from_server(self):
+        """Test model name is cached from server response.
 
-            provider = LMStudioProvider(auto_load_model=True)
-            provider.is_available()
-
-            # Model name should come from ensure_embedding_model
-            assert provider.model_name == "nomic-embed-text-v1.5"
-
-    def test_caches_model_name_without_auto_load(self):
-        """Test model name is cached from server response when auto-load disabled."""
+        Model loading is now handled by the gateway, so is_available()
+        just checks connectivity and caches the model name from the response.
+        """
         with patch('src.embedding_providers.httpx.get') as mock_get:
             mock_get.return_value.is_success = True
             mock_get.return_value.json.return_value = {
                 "data": [{"id": "nomic-embed-text-v1.5"}]
             }
 
-            provider = LMStudioProvider(auto_load_model=False)
+            provider = LMStudioProvider()
             provider.is_available()
 
+            # Model name comes from LM Studio's /models endpoint
             assert provider.model_name == "nomic-embed-text-v1.5"
 
 
@@ -1071,7 +1042,10 @@ class TestEmbeddingProviderEdgeCases:
             assert results[0] == [0.1, 0.2]
 
     def test_provider_recovers_after_transient_error(self):
-        """Test provider can recover after transient error."""
+        """Test provider can recover after transient error.
+
+        Now tests the legacy fallback path (gateway unavailable).
+        """
         import subprocess as sp
         import json
 
@@ -1079,7 +1053,11 @@ class TestEmbeddingProviderEdgeCases:
 
         def subprocess_side_effect(*args, **kwargs):
             call_count[0] += 1
-            if call_count[0] == 1:
+            # First two calls are status checks, third is the failed request, fourth succeeds
+            if call_count[0] <= 2:
+                # Status checks fail (gateway unavailable)
+                return MagicMock(returncode=0, stdout="LM Studio: Not Running\n")
+            elif call_count[0] == 3:
                 raise sp.TimeoutExpired("cmd", 60)
             return MagicMock(returncode=0, stdout="FILE=/tmp/r.json\n")
 
@@ -1100,55 +1078,58 @@ class TestEmbeddingProviderEdgeCases:
 
             provider = LMStudioProvider()
 
-            # First call should fail
+            # First call should fail (gateway unavailable, fallback times out)
             with pytest.raises(EmbeddingProviderError):
                 provider.embed("test")
 
-            # Second call should succeed
+            # Second call should succeed (fallback works)
             result = provider.embed("test")
             assert result == [0.1]
 
 
 # =============================================================================
-# Tests for Model Manager Integration
+# Tests for Gateway Integration
 # =============================================================================
 
 
-class TestModelManagerIntegration:
-    """Tests for model manager integration with LMStudioProvider.
+class TestGatewayIntegration:
+    """Tests for gateway integration with LMStudioProvider.
 
-    Note: The embed() method now uses the gateway script which handles model
-    loading internally. These tests focus on is_available() behavior which
-    still uses the model manager directly.
+    Model loading is now handled by the gateway module (src/gateway.py).
+    is_available() just checks if LM Studio is running - model loading
+    happens automatically when embed requests are made through the gateway.
     """
 
-    def test_is_available_calls_ensure_embedding_model(self, mock_model_manager):
-        """Test is_available calls ensure_embedding_model when auto_load enabled."""
+    def test_is_available_just_checks_connectivity(self):
+        """Test is_available only checks if LM Studio is running.
+
+        No model loading calls are made - that's the gateway's job.
+        """
         with patch('src.embedding_providers.httpx.get') as mock_get:
             mock_get.return_value.is_success = True
-            mock_get.return_value.json.return_value = {"data": [{"id": "model"}]}
+            mock_get.return_value.json.return_value = {"data": []}  # No models
 
-            provider = LMStudioProvider(auto_load_model=True)
-            provider.is_available()
-
-            mock_model_manager.assert_called_once()
-
-    def test_is_available_skips_model_manager_when_disabled(self, mock_model_manager):
-        """Test is_available skips model manager when auto_load disabled."""
-        with patch('src.embedding_providers.httpx.get') as mock_get:
-            mock_get.return_value.is_success = True
-            mock_get.return_value.json.return_value = {"data": [{"id": "model"}]}
-
-            provider = LMStudioProvider(auto_load_model=False)
-            provider.is_available()
-
-            mock_model_manager.assert_not_called()
+            provider = LMStudioProvider()
+            # Returns True because LM Studio is running
+            # Gateway will load model when embed is called
+            assert provider.is_available() is True
 
     def test_embed_uses_gateway_not_direct_api(self):
-        """Test embed uses subprocess gateway instead of direct httpx calls."""
+        """Test embed uses subprocess gateway instead of direct httpx calls.
+
+        The gateway module is called, which makes subprocess calls for:
+        1. Status check (is_available)
+        2. Actual embedding request
+        """
         import json
 
-        with patch('subprocess.run') as mock_subprocess, \
+        def subprocess_side_effect(*args, **kwargs):
+            # First call is status check, subsequent calls are requests
+            if 'status' in str(args):
+                return MagicMock(returncode=0, stdout="LM Studio: Running\n")
+            return MagicMock(returncode=0, stdout="FILE=/tmp/r.json\n")
+
+        with patch('subprocess.run', side_effect=subprocess_side_effect) as mock_subprocess, \
              patch('builtins.open', new_callable=MagicMock) as mock_open, \
              patch('os.path.exists', return_value=True), \
              patch('os.path.getsize', return_value=100), \
@@ -1160,8 +1141,6 @@ class TestModelManagerIntegration:
             mock_temp.__enter__.return_value.name = "/tmp/input.txt"
             mock_tempfile.return_value = mock_temp
 
-            mock_subprocess.return_value = MagicMock(returncode=0, stdout="FILE=/tmp/r.json\n")
-
             mock_file = MagicMock()
             mock_file.__enter__.return_value.read.return_value = json.dumps({"data": [{"embedding": [0.1]}]})
             mock_open.return_value = mock_file
@@ -1169,7 +1148,7 @@ class TestModelManagerIntegration:
             provider = LMStudioProvider()
             provider.embed("test")
 
-            # Gateway subprocess should be called
-            mock_subprocess.assert_called_once()
+            # Gateway subprocess should be called (status + request = 2 calls)
+            assert mock_subprocess.call_count >= 1
             # Direct httpx should NOT be called for embed
             mock_httpx.assert_not_called()

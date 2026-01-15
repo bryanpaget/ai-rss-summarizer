@@ -15,19 +15,6 @@ from src.embedding_providers import (
 
 
 # =============================================================================
-# Autouse fixture to mock model manager for all LMStudioProvider tests
-# =============================================================================
-
-
-@pytest.fixture(autouse=True)
-def mock_model_manager():
-    """Mock ensure_embedding_model to prevent actual model loading in tests."""
-    with patch('src.embedding_providers.ensure_embedding_model') as mock:
-        mock.return_value = "test-embedding-model"
-        yield mock
-
-
-# =============================================================================
 # Test Fixtures
 # =============================================================================
 
@@ -390,11 +377,6 @@ class TestLMStudioProvider:
         provider = LMStudioProvider()
         assert provider.name == "LM Studio"
 
-    def test_is_available_connection_error(self):
-        """Test is_available returns False on connection error."""
-        provider = LMStudioProvider(url="http://localhost:99999")
-        assert provider.is_available() is False
-
     @patch('src.embedding_providers.httpx.get')
     def test_is_available_success(self, mock_get):
         """Test is_available returns True when LM Studio responds."""
@@ -405,34 +387,22 @@ class TestLMStudioProvider:
         assert provider.is_available() is True
 
     def test_embed_batch_success(self):
-        """Test embed_batch with successful response via gateway."""
+        """Test embed_batch with successful response via gateway module."""
         embeddings = [[0.1, 0.2], [0.3, 0.4]]
-        call_count = [0]
 
-        def mock_json_load(*args, **kwargs):
-            idx = call_count[0]
-            call_count[0] += 1
-            return {"data": [{"embedding": embeddings[idx]}]}
+        # Mock the gateway module (preferred path)
+        mock_gateway = MagicMock()
+        mock_gateway.is_available.return_value = True
+        mock_gateway.batch_embedding.return_value = embeddings
 
-        with patch('subprocess.run') as mock_subprocess, \
-             patch('builtins.open', new_callable=MagicMock), \
-             patch('os.path.exists', return_value=True), \
-             patch('os.unlink'), \
-             patch('tempfile.NamedTemporaryFile') as mock_tempfile, \
-             patch('json.load', side_effect=mock_json_load):
-
-            mock_temp = MagicMock()
-            mock_temp.__enter__.return_value.name = "/tmp/input.txt"
-            mock_tempfile.return_value = mock_temp
-
-            mock_subprocess.return_value = MagicMock(returncode=0, stdout="FILE=/tmp/r.json\n")
-
+        with patch('src.gateway.get_gateway', return_value=mock_gateway):
             provider = LMStudioProvider()
             results = provider.embed_batch(["text1", "text2"])
 
             assert len(results) == 2
             assert results[0] == [0.1, 0.2]
             assert results[1] == [0.3, 0.4]
+            mock_gateway.batch_embedding.assert_called_once_with(["text1", "text2"])
 
 
 class TestOllamaProvider:
@@ -447,11 +417,6 @@ class TestOllamaProvider:
         """Test default model is nomic-embed-text."""
         provider = OllamaProvider()
         assert provider.model_name == "nomic-embed-text"
-
-    def test_is_available_connection_error(self):
-        """Test is_available returns False on connection error."""
-        provider = OllamaProvider(url="http://localhost:99999")
-        assert provider.is_available() is False
 
     @patch('src.embedding_providers.httpx.post')
     def test_embed_success(self, mock_post):

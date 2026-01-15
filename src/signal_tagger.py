@@ -482,17 +482,23 @@ Return ONLY a JSON object in this exact format (no markdown, no explanation):
 
         elif hasattr(self.provider, "base_url"):
             # OpenAI-compatible provider (LM Studio, Ollama, etc.)
-            import httpx
 
-            # If using LM Studio, ensure text model is loaded
-            # (embedding operations may have switched to embedding model)
+            # For LM Studio, use the gateway (handles model switching automatically)
             if "localhost:1234" in self.provider.base_url:
                 try:
-                    from .model_manager import ensure_text_model
-                    ensure_text_model()
+                    from .gateway import get_gateway, GatewayUnavailableError
+
+                    gateway = get_gateway()
+                    if gateway.is_available():
+                        return gateway.request_text(prompt, temperature=0.3)
+                except (ImportError, GatewayUnavailableError):
+                    pass  # Fall back to direct API
                 except Exception as e:
                     import sys
-                    print(f"Warning: Could not ensure text model: {e}", file=sys.stderr)
+                    print(f"Warning: Gateway failed, falling back to direct API: {e}", file=sys.stderr)
+
+            # Fallback: Direct API call
+            import httpx
 
             headers = {
                 "Content-Type": "application/json",

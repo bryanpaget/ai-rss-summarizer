@@ -68,3 +68,11 @@ target-version = "py39"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+asyncio_default_fixture_loop_scope = "function"
+filterwarnings = [
+    "error",
+    # FAISS SWIG internal types lack __module__ - upstream issue in SWIG, not fixable by us
+    # These types (SwigPyPacked, SwigPyObject, swigvarlink) are internal plumbing we never use
+    # Approved for suppression: 2026-01-15
+    "ignore:builtin type Swig:DeprecationWarning",
+]

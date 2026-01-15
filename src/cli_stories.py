@@ -146,6 +146,118 @@ def list_stories(
     console.print(table)
 
 
+@app.command(name="fix-titles")
+def fix_titles(
+    db_path: str = typer.Option(
+        "articles.db",
+        "--db", "-d",
+        help="Path to database file",
+    ),
+    kb_path: str = typer.Option(
+        "knowledge.db",
+        "--kb", "-k",
+        help="Path to knowledge database",
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Show what would be fixed without making changes",
+    ),
+    limit: int = typer.Option(
+        0,
+        "--limit", "-n",
+        help="Maximum number of titles to fix (0 = unlimited)",
+    ),
+):
+    """
+    Fix stories with bad/broken titles.
+
+    Finds stories where the LLM returned garbage (like "Here are a few concise
+    story titles...") and regenerates proper titles.
+
+    Example:
+        rss stories fix-titles              # Fix bad titles
+        rss stories fix-titles --dry-run    # Preview what would change
+    """
+    from .clustering import StoryClusterer
+    from .llm_providers import get_provider
+
+    storage = get_storage(db_path)
+    kb = KnowledgeBase(kb_path)
+
+    # Find stories with bad titles
+    all_stories = storage.get_all_stories(limit=1000)
+    bad_patterns = ["here are a few", "here is a", "concise story title", "focus on"]
+
+    bad_stories = []
+    for story in all_stories:
+        title_lower = story.title.lower()
+        if any(pattern in title_lower for pattern in bad_patterns):
+            bad_stories.append(story)
+
+    if not bad_stories:
+        console.print("[green]All story titles look good![/green]")
+        return
+
+    total_bad = len(bad_stories)
+    if limit > 0:
+        bad_stories = bad_stories[:limit]
+
+    console.print(f"[bold]Found {total_bad} stories with bad titles[/bold]")
+    if limit > 0 and total_bad > limit:
+        console.print(f"[dim]Processing {limit} (use --limit 0 for all)[/dim]")
+    console.print()
+
+    if dry_run:
+        console.print("[yellow]DRY RUN - no changes will be made[/yellow]\n")
+        for story in bad_stories[:20]:
+            console.print(f"  Would fix: {story.title[:60]}...")
+        if len(bad_stories) > 20:
+            console.print(f"  ...and {len(bad_stories) - 20} more")
+        return
+
+    # Initialize LLM for title generation
+    try:
+        provider = get_provider()
+        clustering = StoryClusterer(storage, provider, kb)
+    except Exception as e:
+        console.print(f"[red]Failed to initialize LLM: {e}[/red]")
+        raise typer.Exit(1)
+
+    fixed = 0
+    errors = []
+
+    for i, story in enumerate(bad_stories, 1):
+        # Get first article in story to regenerate title from
+        if not story.article_ids:
+            errors.append(f"Story {story.id}: no articles")
+            continue
+
+        article = storage.get_article(story.article_ids[0])
+        if not article:
+            errors.append(f"Story {story.id}: article not found")
+            continue
+
+        try:
+            new_title = clustering._generate_story_title(article)
+            if new_title and new_title != story.title:
+                # Update in database
+                storage.update_story_title(story.id, new_title)
+                console.print(f"  [{i}/{len(bad_stories)}] {new_title[:50]}...")
+                fixed += 1
+            else:
+                console.print(f"  [{i}/{len(bad_stories)}] [dim]kept: {article.title[:50]}...[/dim]")
+        except Exception as e:
+            errors.append(f"{story.id}: {e}")
+
+    console.print()
+    console.print(f"[green]Fixed {fixed} story titles[/green]")
+    if errors:
+        console.print(f"[yellow]Errors: {len(errors)}[/yellow]")
+        for err in errors[:5]:
+            console.print(f"  [dim]{err}[/dim]")
+
+
 @app.command(name="stats")
 def stats(
     db_path: str = typer.Option(

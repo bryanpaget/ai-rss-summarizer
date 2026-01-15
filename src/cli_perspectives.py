@@ -25,6 +25,11 @@ def add_perspective_commands(app: typer.Typer):
             "--limit", "-n",
             help="Number of stories to show (if no story_id)",
         ),
+        update_clusters: bool = typer.Option(
+            False,
+            "--update", "-u",
+            help="Update story clusters before showing (can be slow)",
+        ),
         db_path: str = typer.Option(
             "articles.db",
             "--db", "-d",
@@ -55,13 +60,14 @@ def add_perspective_commands(app: typer.Typer):
         storage = Storage(db_path)
         add_perspective_methods(storage)
 
-        # Update clusters first
-        console.print("[dim]Updating story clusters...[/dim]")
-        cluster_stats = update_story_clusters(storage)
-        console.print(
-            f"[dim]Clustered {cluster_stats['processed']} articles into "
-            f"{cluster_stats['new_clusters']} new stories[/dim]\n"
-        )
+        # Update clusters only if requested (can be slow)
+        if update_clusters:
+            console.print("[dim]Updating story clusters...[/dim]")
+            cluster_stats = update_story_clusters(storage)
+            console.print(
+                f"[dim]Clustered {cluster_stats['processed']} articles into "
+                f"{cluster_stats['new_clusters']} new stories[/dim]\n"
+            )
 
         # Get configuration
         config = get_user_perspective_config(storage)
@@ -106,9 +112,9 @@ def add_perspective_commands(app: typer.Typer):
                 perspective = perspectives[category]
                 cat_info = PERSPECTIVE_CATEGORIES[category]
 
-                # Confidence bar
+                # Confidence bar (ASCII safe for Windows)
                 conf_width = int(perspective.confidence * 16)
-                conf_bar = "[green]" + "█" * conf_width + "░" * (16 - conf_width) + "[/green]"
+                conf_bar = "[green]" + "#" * conf_width + "-" * (16 - conf_width) + "[/green]"
 
                 console.print(f"\n[bold cyan][{cat_info['name']}][/bold cyan] {conf_bar}")
                 console.print(perspective.content)
@@ -145,7 +151,7 @@ def add_perspective_commands(app: typer.Typer):
                         cat_info = PERSPECTIVE_CATEGORIES[first_cat]
 
                         conf_width = int(perspective.confidence * 8)
-                        conf_bar = "█" * conf_width + "░" * (8 - conf_width)
+                        conf_bar = "#" * conf_width + "-" * (8 - conf_width)
 
                         console.print(f"[cyan][{cat_info['name']}][/cyan] {conf_bar}")
                         # Full content - wraps naturally

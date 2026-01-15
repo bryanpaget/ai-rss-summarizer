@@ -17,18 +17,26 @@ class PerspectiveStorage:
     def __init__(self, storage: Storage):
         self.storage = storage
 
-    def get_story_clusters(self) -> list[dict]:
-        """Get all story clusters (alias for get_all_stories)."""
-        stories = self.storage.get_all_stories()
-        return [
-            {
-                'id': s.id,
-                'title': s.title,
-                'created_at': s.created_at,
-                'updated_at': s.last_updated
-            }
-            for s in stories
-        ]
+    def get_story_clusters(self, min_articles: int = 1) -> list[dict]:
+        """Get story clusters sorted by article count (most articles first).
+
+        Args:
+            min_articles: Minimum number of articles to include (default 1)
+        """
+        stories = self.storage.get_all_stories(limit=500)
+        result = []
+        for s in stories:
+            if len(s.article_ids) >= min_articles:
+                result.append({
+                    'id': s.id,
+                    'title': s.title,
+                    'created_at': s.created_at,
+                    'updated_at': s.last_updated,
+                    'article_count': len(s.article_ids)
+                })
+        # Sort by article count descending
+        result.sort(key=lambda x: x['article_count'], reverse=True)
+        return result
 
     def get_story_cluster(self, cluster_id: str) -> Optional[dict]:
         """Get a specific story cluster."""

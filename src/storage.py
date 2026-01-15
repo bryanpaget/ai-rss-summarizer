@@ -630,6 +630,15 @@ class Storage:
             )
             conn.commit()
 
+    def update_story_title(self, story_id: str, title: str) -> None:
+        """Update just the title of a story."""
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE stories SET title = ? WHERE id = ?",
+                (title, story_id),
+            )
+            conn.commit()
+
     def _row_to_story(self, row: sqlite3.Row) -> Story:
         """Convert a database row to a Story object."""
         return Story(

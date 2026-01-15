@@ -7,9 +7,8 @@ from typing import Optional, TYPE_CHECKING
 
 from .storage import Storage
 from .emergence import detect_emerging_trends, format_emerging_trend
-
-if TYPE_CHECKING:
-    from .embeddings import EmbeddingService
+from .knowledge import KnowledgeBase
+from .embeddings import EmbeddingService
 
 logger = logging.getLogger(__name__)
 
@@ -140,6 +139,10 @@ def analyze_trends(
     if storage is None:
         storage = Storage()
 
+    # Initialize embedding service for trend categorization
+    kb = KnowledgeBase()
+    embedding_service = EmbeddingService(kb)
+
     articles = storage.get_articles(limit=limit)
 
     now = datetime.now()
@@ -155,7 +158,7 @@ def analyze_trends(
     for article in articles:
         # Get or compute trend tags
         if not article.trend_tags:
-            tags = analyze_article(article)
+            tags = analyze_article(article, embedding_service=embedding_service)
             storage.update_trends(article.id, tags)
         else:
             tags = article.trend_tags

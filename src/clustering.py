@@ -315,17 +315,25 @@ Respond with JSON:
 
     def _generate_story_title(self, article: Article) -> str:
         """Generate a story title from the article."""
-        prompt = f"""Generate a concise story title for this article.
-Focus on the main topic/event, not specific details.
+        prompt = f"""You are a headline writer. Write ONE short headline (3-8 words) that captures the main topic.
 
-Article Title: {article.title}
+Article: {article.title}
 
-Story Title:"""
+Headline:"""
 
         try:
-            title = self.llm.generate(prompt, max_tokens=50).strip()
-            # Clean up the title
+            title = self.llm.generate(prompt, max_tokens=30).strip()
+            # Clean up the title - remove quotes, newlines, markdown, common prefixes
             title = title.replace('"', '').replace('\n', ' ')
+            title = title.replace('**', '').replace('*', '').replace('`', '')  # Strip markdown
+            title = title.strip()
+            # Remove common LLM response patterns
+            for prefix in ["Here is", "Here's", "The headline is", "Headline:"]:
+                if title.lower().startswith(prefix.lower()):
+                    title = title[len(prefix):].strip()
+            # If still garbage, use fallback
+            if len(title) < 3 or len(title) > 100 or "few" in title.lower():
+                return article.title
             return title
         except Exception:
             # Fallback: use article title

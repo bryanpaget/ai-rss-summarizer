@@ -1,0 +1,9 @@
+{
+  "text_model": "google/gemma-3n-e4b",
+  "vision_model": "qwen/qwen3-vl-8b",
+  "embedding_model": "Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf",
+  "ttl_seconds": 300,
+  "text_temperature": 0.7,
+  "vision_temperature": 0.0,
+  "_comment": "Configure your LM Studio model paths here. Run 'lms ls' to see available models."
+}

@@ -5306,13 +5306,14 @@ class TestStatisticsIntegration:
             )
             knowledge_base.save_entity(entity)
 
-        # Add 200 triples
+        # Add 200 triples with unique (subject, predicate, object) combinations
+        # Use i directly to ensure uniqueness across all 200 iterations
         for i in range(200):
             triple = Triple(
                 id=f"trip-{i:03d}",
-                subject=f"Entity{i % 50}",
+                subject=f"Subject{i}",  # Unique per iteration
                 predicate=["created", "uses", "competes", "acquired"][i % 4],
-                object=f"Entity{(i + 1) % 50}",
+                object=f"Object{i}",  # Unique per iteration
                 subject_type="entity",
                 object_type="entity",
             )

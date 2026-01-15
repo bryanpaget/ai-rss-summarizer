@@ -66,7 +66,7 @@ def validate_feed(url: str, timeout: float = 10.0) -> tuple[bool, Optional[FeedI
             latest_items.append({
                 'title': entry.get('title', 'Untitled'),
                 'link': entry.get('link', ''),
-                'date': entry.get('published', entry.get('updated', '')),
+                'date': entry.get('published') or entry.get('updated') or '',
             })
 
         info = FeedInfo(
