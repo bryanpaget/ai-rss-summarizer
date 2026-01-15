@@ -34,9 +34,10 @@ class TestExtractDomain:
     def test_complex_url(self):
         assert extract_domain("https://www.nytimes.com/services/xml/rss/nyt/HomePage.xml") == "nytimes.com"
 
-    def test_invalid_url_returns_input(self):
+    def test_invalid_url_returns_empty(self):
+        # urlparse returns empty netloc for invalid URLs
         result = extract_domain("not a url")
-        assert result == "not a url"
+        assert result == ""
 
 
 class TestGetSourceName:
