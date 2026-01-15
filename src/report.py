@@ -120,6 +120,7 @@ def _run_verification_step(
     articles: list[Article],
     embedding_service: EmbeddingService,
     max_per_step: int = 0,
+    min_content_length: int = 0,
 ) -> dict:
     """
     Step 1: Verify data completeness and report gaps.
