@@ -52,11 +52,12 @@ _cleanup_registered = False
 
 
 def _cleanup_gateway():
-    """Clean up gateway on exit to prevent orphaned requests."""
+    """Clean up gateway on exit - clear queue and unload models."""
     try:
         from .gateway import get_gateway
         gateway = get_gateway()
         gateway.clear_queue()
+        gateway.unload()  # Free VRAM
     except Exception:
         pass  # Best effort cleanup
 
