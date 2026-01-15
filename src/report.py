@@ -1079,6 +1079,7 @@ def generate_report(
         "triples": 0,
         "triples_new": 0,
         "triples_existing": 0,
+        "cluster_triples": 0,  # Triples from cluster analysis
         "connections": 0,
         "stories_matched": 0,
         "stories_created": 0,
