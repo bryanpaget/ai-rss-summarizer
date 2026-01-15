@@ -481,8 +481,15 @@ class KnowledgeBase:
         self,
         insight_id: Optional[str] = None,
         relationship_type: Optional[str] = None,
+        since: Optional[datetime] = None,
     ) -> list[Relationship]:
-        """Get relationships, optionally filtered by insight or type."""
+        """Get relationships, optionally filtered by insight, type, or time.
+
+        Args:
+            insight_id: Filter by source or target insight
+            relationship_type: Filter by relationship type
+            since: Only return relationships detected after this time
+        """
         query = "SELECT * FROM knowledge_relationships WHERE 1=1"
         params: list = []
 
@@ -493,6 +500,10 @@ class KnowledgeBase:
         if relationship_type:
             query += " AND relationship_type = ?"
             params.append(relationship_type)
+
+        if since:
+            query += " AND detected_at >= ?"
+            params.append(since.isoformat())
 
         query += " ORDER BY detected_at DESC"
 
