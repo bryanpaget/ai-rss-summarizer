@@ -1126,10 +1126,13 @@ def generate_report(
 
     MIN_CONTENT_LENGTH = 100
 
-    articles = storage.get_unanalyzed_articles(exclude_spam=True)
+    # Filter short articles at DB level - they'll never be long enough, no need to see them
+    articles = storage.get_unanalyzed_articles(exclude_spam=True, min_content_length=MIN_CONTENT_LENGTH)
 
     if not articles and new_article_ids:
         articles = storage.get_articles_by_ids(new_article_ids)
+        # Also filter new articles by content length
+        articles = [a for a in articles if a.content and len(a.content) >= MIN_CONTENT_LENGTH]
 
     total_unanalyzed = len(articles)
 
