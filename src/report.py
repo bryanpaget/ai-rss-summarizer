@@ -643,8 +643,216 @@ def _run_embedding_phase(
 
 
 # =============================================================================
-# STEP 4.5: BATCHED CONNECTION DETECTION
+# STEP 4.5: CLUSTER-BASED CONNECTION DETECTION
 # =============================================================================
+
+def _cluster_insights_by_similarity(
+    insights: list,
+    embedding_service: EmbeddingService,
+    similarity_threshold: float = 0.75,
+) -> list[list]:
+    """Cluster insights by embedding similarity using FAISS.
+
+    Uses a greedy clustering approach:
+    1. Pick first unassigned insight
+    2. Find all similar insights above threshold
+    3. Group them as a cluster
+    4. Repeat with remaining unassigned
+
+    Args:
+        insights: List of Insight objects to cluster
+        embedding_service: EmbeddingService for similarity search
+        similarity_threshold: Minimum similarity to be in same cluster
+
+    Returns:
+        List of clusters, where each cluster is a list of (insight, embedding) tuples
+    """
+    # Get embeddings for all insights
+    insight_embeddings = []
+    for ins in insights:
+        emb = embedding_service.get_embedding(ins.id, "insight")
+        if emb:
+            insight_embeddings.append((ins, emb))
+
+    if not insight_embeddings:
+        return []
+
+    clusters = []
+    assigned = set()
+
+    for ins, emb in insight_embeddings:
+        if ins.id in assigned:
+            continue
+
+        # Start new cluster with this insight
+        cluster = [(ins, emb)]
+        assigned.add(ins.id)
+
+        # Find similar insights via FAISS
+        similar_results = embedding_service.find_similar(
+            query_vector=emb,
+            target_type="insight",
+            threshold=similarity_threshold,
+            limit=50,
+        )
+
+        # Add similar unassigned insights to this cluster
+        for target_id, similarity in similar_results:
+            if target_id in assigned or target_id == ins.id:
+                continue
+
+            # Find the insight in our list
+            for other_ins, other_emb in insight_embeddings:
+                if other_ins.id == target_id and other_ins.id not in assigned:
+                    cluster.append((other_ins, other_emb))
+                    assigned.add(other_ins.id)
+                    break
+
+        if len(cluster) >= 2:  # Only keep clusters with 2+ insights
+            clusters.append(cluster)
+
+    return clusters
+
+
+def _analyze_cluster_for_triples(
+    cluster: list,
+    provider,
+    kb: KnowledgeBase,
+) -> tuple[list, list]:
+    """Analyze a cluster of similar insights and extract theme/relationship triples.
+
+    Args:
+        cluster: List of (insight, embedding) tuples
+        provider: LLM provider
+        kb: Knowledge base to save triples to
+
+    Returns:
+        Tuple of (new_triples, connections_found)
+    """
+    import json
+    import uuid
+    from datetime import datetime
+    from .knowledge import Triple, Relationship
+    from .schema import extract_json_from_response
+
+    if len(cluster) < 2:
+        return [], []
+
+    # Build cluster content for prompt
+    insights_text = ""
+    for i, (ins, _) in enumerate(cluster):
+        insights_text += f"\n{i+1}. [{ins.insight_type}] {ins.content}"
+
+    prompt = f"""Analyze this cluster of semantically similar insights and extract structured knowledge.
+
+INSIGHTS IN CLUSTER:{insights_text}
+
+Extract:
+1. THEME: The overarching topic connecting these insights (1-3 words)
+2. SUBCATEGORIES: Specific aspects or subtopics within the theme
+3. RELATIONSHIPS: How insights relate to each other as subject-predicate-object triples
+
+Return as JSON:
+{{
+  "theme": "Main Theme",
+  "subcategories": ["subtopic1", "subtopic2"],
+  "triples": [
+    {{"subject": "Theme or insight concept", "predicate": "contains|relates_to|implies|contradicts|supports", "object": "Related concept or subcategory"}},
+    {{"subject": "Insight 1 concept", "predicate": "confirms|refines|extends|contradicts", "object": "Insight 2 concept"}}
+  ],
+  "insight_relationships": [
+    {{"source_index": 1, "target_index": 2, "relationship": "confirms|contradicts|refines|extends"}}
+  ]
+}}
+
+Return ONLY valid JSON."""
+
+    try:
+        response = provider.generate(prompt, max_tokens=800)
+        json_str = extract_json_from_response(response)
+        data = json.loads(json_str)
+
+        new_triples = []
+        connections = []
+
+        theme = data.get("theme", "")
+        subcategories = data.get("subcategories", [])
+
+        # Create triples for theme -> subcategory relationships
+        if theme and subcategories:
+            for subcat in subcategories[:5]:  # Limit to 5 subcategories
+                triple = Triple(
+                    id=str(uuid.uuid4()),
+                    subject=theme,
+                    predicate="has_aspect",
+                    object=subcat,
+                    subject_type="concept",
+                    object_type="concept",
+                    confidence="medium",
+                )
+                if kb.save_triple(triple):
+                    new_triples.append(triple)
+
+        # Create triples from the extracted relationships
+        for t_data in data.get("triples", []):
+            if not isinstance(t_data, dict):
+                continue
+            subject = t_data.get("subject", "")
+            predicate = t_data.get("predicate", "")
+            obj = t_data.get("object", "")
+
+            if subject and predicate and obj:
+                triple = Triple(
+                    id=str(uuid.uuid4()),
+                    subject=subject,
+                    predicate=predicate,
+                    object=obj,
+                    subject_type="concept",
+                    object_type="concept",
+                    confidence="medium",
+                )
+                if kb.save_triple(triple):
+                    new_triples.append(triple)
+
+        # Create insight-to-insight relationships
+        for rel_data in data.get("insight_relationships", []):
+            if not isinstance(rel_data, dict):
+                continue
+
+            src_idx = rel_data.get("source_index", 0) - 1  # 1-indexed in prompt
+            tgt_idx = rel_data.get("target_index", 0) - 1
+            rel_type = rel_data.get("relationship", "").lower()
+
+            if src_idx < 0 or tgt_idx < 0 or src_idx >= len(cluster) or tgt_idx >= len(cluster):
+                continue
+            if rel_type not in {"confirms", "contradicts", "refines", "extends"}:
+                continue
+
+            src_ins, _ = cluster[src_idx]
+            tgt_ins, _ = cluster[tgt_idx]
+
+            relationship = Relationship(
+                id=str(uuid.uuid4()),
+                source_insight_id=src_ins.id,
+                target_insight_id=tgt_ins.id,
+                relationship_type=rel_type,
+                strength=0.8,  # Cluster members are similar by definition
+                detected_at=datetime.now(),
+            )
+            kb.save_relationship(relationship)
+            connections.append(relationship)
+
+        return new_triples, connections
+
+    except json.JSONDecodeError as e:
+        import sys
+        print(f"JSON parsing failed for cluster analysis: {e}", file=sys.stderr)
+        return [], []
+    except Exception as e:
+        import sys
+        print(f"Cluster analysis failed: {e}", file=sys.stderr)
+        return [], []
+
 
 def _run_connection_detection(
     processed_articles: list[dict],
@@ -654,36 +862,33 @@ def _run_connection_detection(
     embedding_service: EmbeddingService,
 ) -> None:
     """
-    Detect connections between newly extracted insights and existing knowledge.
+    Detect connections using cluster-based analysis.
 
-    BATCHED to prevent model switching:
-    1. Embed all new insights (embedding model)
-    2. Find all candidates via FAISS (no model - just math)
-    3. Classify all relationships (text model)
+    ARCHITECTURE:
+    1. Embed all new insights (EMBEDDING MODEL - batched)
+    2. Cluster insights by similarity (NO MODEL - FAISS math)
+    3. Analyze each cluster for themes/relationships (TEXT MODEL - O(clusters) calls)
+
+    This is O(clusters) LLM calls instead of O(N) - much more efficient.
+    Output goes directly to knowledge graph as queryable triples.
 
     Args:
         processed_articles: List of dicts from LLM phase, each with "insights" list
         kb: Knowledge base
-        provider: LLM provider for relationship classification
+        provider: LLM provider for cluster analysis
         stats: Statistics dict to update
         embedding_service: Embedding service
     """
-    import json
-    import uuid
-    from datetime import datetime
-    from .knowledge import Relationship
-    from .schema import extract_json_from_response
-
-    # Collect all insights that need connection detection
+    # Collect all insights from this session
     all_insights = []
     for item in processed_articles:
         for ins in item.get("insights", []):
-            all_insights.append((item, ins))
+            all_insights.append(ins)
 
     if not all_insights:
         return
 
-    console.print("[bold]Step 4.5:[/bold] Detecting connections...")
+    console.print("[bold]Step 4.5:[/bold] Detecting connections (cluster-based)...")
 
     # =========================================================================
     # PHASE 1: Batch embed all new insights (EMBEDDING MODEL)
@@ -691,7 +896,7 @@ def _run_connection_detection(
     console.print(f"  [dim]Embedding {len(all_insights)} new insights...[/dim]")
 
     insights_to_embed = []
-    for item, ins in all_insights:
+    for ins in all_insights:
         existing = embedding_service.get_embedding(ins.id, "insight")
         if not existing:
             insights_to_embed.append(ins)
@@ -709,117 +914,54 @@ def _run_connection_detection(
         console.print(f"  [dim]All insights already embedded[/dim]")
 
     # =========================================================================
-    # PHASE 2: Find all candidates via FAISS (NO MODEL - just vector math)
+    # PHASE 2: Cluster insights by similarity (NO MODEL - FAISS only)
     # =========================================================================
-    console.print(f"  [dim]Finding similar insights via FAISS...[/dim]")
+    console.print(f"  [dim]Clustering insights by similarity...[/dim]")
 
-    # For each insight, find candidates
-    all_candidates = []  # List of (item, insight, [(existing_insight, similarity), ...])
+    # Get ALL insights with embeddings for clustering (not just new ones)
+    all_kb_insights = kb.get_insights(limit=500)
+    clusters = _cluster_insights_by_similarity(
+        all_kb_insights,
+        embedding_service,
+        similarity_threshold=0.75,
+    )
 
-    for item, ins in all_insights:
-        embedding = embedding_service.get_embedding(ins.id, "insight")
-        if not embedding:
-            continue
-
-        similar_results = embedding_service.find_similar(
-            query_vector=embedding,
-            target_type="insight",
-            threshold=0.70,
-            limit=50,
-        )
-
-        if not similar_results:
-            continue
-
-        candidates = []
-        for target_id, similarity in similar_results:
-            if target_id == ins.id:
-                continue
-            existing = kb.get_insight(target_id)
-            if existing:
-                candidates.append((existing, similarity))
-
-        if candidates:
-            # Limit to top 10 for LLM classification
-            all_candidates.append((item, ins, candidates[:10]))
-
-    if not all_candidates:
-        console.print(f"  [dim]No similar insights found[/dim]")
+    if not clusters:
+        console.print(f"  [dim]No insight clusters found[/dim]")
         console.print()
         return
 
-    # =========================================================================
-    # PHASE 3: Batch classify all relationships (TEXT MODEL)
-    # =========================================================================
-    console.print(f"  [dim]Classifying {len(all_candidates)} insight groups...[/dim]")
+    console.print(f"  [green]Found {len(clusters)} clusters[/green]")
 
+    # =========================================================================
+    # PHASE 3: Analyze each cluster (TEXT MODEL - O(clusters) calls)
+    # =========================================================================
+    console.print(f"  [dim]Analyzing clusters for themes and relationships...[/dim]")
+
+    total_triples = 0
     total_connections = 0
 
-    for item, ins, candidates in all_candidates:
-        # Build prompt for this insight's candidates
-        pairs_text = ""
-        for i, (existing, similarity) in enumerate(candidates):
-            pairs_text += f"\nPair {i+1} (similarity: {similarity:.2f}):\n"
-            pairs_text += f'- Existing: "{existing.content}"\n'
-            pairs_text += f'- New: "{ins.content}"\n'
+    for i, cluster in enumerate(clusters):
+        console.print(f"    [dim]Cluster {i+1}/{len(clusters)} ({len(cluster)} insights)...[/dim]", end="")
 
-        prompt = f"""Classify the relationships between these insight pairs.
-{pairs_text}
-For each pair, determine the relationship from the NEW insight to the EXISTING insight:
-- confirms: New says essentially the same thing as existing
-- contradicts: New says the opposite of existing
-- refines: New adds nuance or detail to existing
-- extends: New builds on existing with new information
-- none: They are about similar topics but unrelated
+        new_triples, connections = _analyze_cluster_for_triples(cluster, provider, kb)
 
-Return a JSON array with the relationship for each pair in order:
-["confirms", "none", "extends", ...]
+        if new_triples or connections:
+            console.print(f" [green]+{len(new_triples)} triples, {len(connections)} connections[/green]")
+            total_triples += len(new_triples)
+            total_connections += len(connections)
 
-Return ONLY the JSON array, no other text."""
+            # Show sample triples
+            for t in new_triples[:2]:
+                console.print(f"      [cyan]{t.subject}[/cyan] -> {t.predicate} -> [cyan]{t.object}[/cyan]")
+        else:
+            console.print(f" [dim]no new knowledge[/dim]")
 
-        try:
-            response = provider.generate(prompt, max_tokens=200)
-            json_str = extract_json_from_response(response)
-            relationship_types = json.loads(json_str)
+        # Update stats
+        stats["connections"] += len(connections)
 
-            if not isinstance(relationship_types, list):
-                relationship_types = [relationship_types]
-
-            # Create relationships for valid classifications
-            valid_types = {"confirms", "contradicts", "refines", "extends"}
-
-            if "connections" not in item:
-                item["connections"] = []
-
-            for i, (existing, similarity) in enumerate(candidates):
-                if i >= len(relationship_types):
-                    break
-
-                rel_type = str(relationship_types[i]).lower().strip()
-                if rel_type not in valid_types:
-                    continue
-
-                relationship = Relationship(
-                    id=str(uuid.uuid4()),
-                    source_insight_id=ins.id,
-                    target_insight_id=existing.id,
-                    relationship_type=rel_type,
-                    strength=similarity,
-                    detected_at=datetime.now(),
-                )
-
-                item["connections"].append(relationship)
-                total_connections += 1
-                stats["connections"] += 1
-
-                formatted = format_relationship(relationship, kb)
-                console.print(f"    [cyan]->[/cyan] {formatted}")
-
-        except Exception as e:
-            console.print(f"    [red]ERROR: Classification failed: {e}[/red]")
-            stats["errors"] += 1
-
-    console.print(f"  [green]Found {total_connections} connections[/green]")
+    console.print(f"  [green]Added {total_triples} triples to knowledge graph[/green]")
+    console.print(f"  [green]Found {total_connections} insight connections[/green]")
     console.print()
 
 
