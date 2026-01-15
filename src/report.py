@@ -1358,19 +1358,13 @@ def _show_final_report(
                 except (json.JSONDecodeError, TypeError):
                     console.print(f"   [dim]Signal: {article.signal_tags}[/dim]")
 
-            # What we know - relevant facts from knowledge base
-            # Extract key terms from title and find related triples
-            title_words = [w for w in article.title.split() if len(w) > 4]
-            related_triples = []
-            for word in title_words[:3]:
-                triples = kb.query_triples_pattern(subject_pattern=f"%{word}%")
-                related_triples.extend(triples[:1])  # Max 1 per word
-                if len(related_triples) >= 2:
-                    break
+            # What we know - facts extracted FROM this specific article
+            # This shows actual facts we learned from THIS article, not random KB matches
+            article_triples = kb.get_triples_by_article(article.id, limit=3)
 
-            if related_triples:
+            if article_triples:
                 console.print(f"   [blue]What we know:[/blue]")
-                for t in related_triples[:2]:
+                for t in article_triples:
                     console.print(f"      - {t.subject} {t.predicate} {t.object}")
 
             # Developing story?
