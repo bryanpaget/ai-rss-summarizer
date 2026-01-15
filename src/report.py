@@ -1134,11 +1134,7 @@ def generate_report(
         # Also filter new articles by content length
         articles = [a for a in articles if a.content and len(a.content) >= MIN_CONTENT_LENGTH]
 
-    total_unanalyzed = len(articles)
-
-    # Filter by content length
-    articles = [a for a in articles if a.content and len(a.content) >= MIN_CONTENT_LENGTH]
-    skipped_for_content = total_unanalyzed - len(articles)
+    # Short articles already filtered at DB level - no noise about them
 
     # Filter spam
     articles, spam_articles = filter_articles(articles, storage, threshold=0.7)
@@ -1147,17 +1143,14 @@ def generate_report(
     # Cleanup old spam
     deleted_spam = cleanup_old_spam(storage, days=30)
 
-    # Report filtering
-    filter_msgs = []
-    if skipped_for_content > 0:
-        filter_msgs.append(f"{skipped_for_content} short")
-    if skipped_as_spam > 0:
-        filter_msgs.append(f"{skipped_as_spam} spam")
-    if deleted_spam > 0:
-        filter_msgs.append(f"{deleted_spam} old spam deleted")
-
-    if filter_msgs:
-        console.print(f"  [dim]Found {total_unanalyzed}, processing {len(articles)} ({', '.join(filter_msgs)})[/dim]")
+    # Report filtering - only actionable info
+    if skipped_as_spam > 0 or deleted_spam > 0:
+        filter_msgs = []
+        if skipped_as_spam > 0:
+            filter_msgs.append(f"{skipped_as_spam} spam")
+        if deleted_spam > 0:
+            filter_msgs.append(f"{deleted_spam} old spam deleted")
+        console.print(f"  [dim]Processing {len(articles)} articles ({', '.join(filter_msgs)})[/dim]")
     else:
         console.print(f"  [dim]Processing {len(articles)} articles[/dim]")
 
