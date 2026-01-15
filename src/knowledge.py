@@ -1245,6 +1245,54 @@ class TripleExtractionResult:
         return len(self.new_triples)
 
 
+def _correct_inverted_predicate(subject: str, predicate: str, obj: str) -> tuple[str, str, str]:
+    """Correct inverted "_by" predicates.
+
+    Problem: LLM sometimes generates "Elon Musk -> founded_by -> X" when it should be
+    "X -> founded_by -> Elon Musk" (meaning X was founded by Elon Musk).
+
+    Solution: For "_by" predicates where subject looks like a person (capitalized name),
+    swap subject/object to correct the direction.
+
+    Args:
+        subject: Triple subject
+        predicate: Triple predicate
+        obj: Triple object
+
+    Returns:
+        Tuple of (corrected_subject, corrected_predicate, corrected_object)
+    """
+    # Predicates that imply the subject is the recipient of an action by the object
+    passive_predicates = {
+        "founded_by", "created_by", "developed_by", "invented_by",
+        "acquired_by", "owned_by", "led_by", "managed_by", "directed_by",
+        "written_by", "designed_by", "built_by", "made_by"
+    }
+
+    predicate_lower = predicate.lower().replace(" ", "_")
+
+    if predicate_lower in passive_predicates:
+        # Check if subject looks like a person (capitalized words, no obvious company markers)
+        subject_words = subject.split()
+        looks_like_person = (
+            len(subject_words) <= 4 and  # Names usually 1-4 words
+            all(w[0].isupper() for w in subject_words if w) and  # All words capitalized
+            not any(marker in subject.lower() for marker in ["inc", "corp", "ltd", "llc", "co.", "company"])
+        )
+
+        # Check if object looks like a company/product (often contains lowercase or markers)
+        looks_like_company = any(
+            marker in obj.lower()
+            for marker in ["inc", "corp", "ltd", "llc", "co.", "company", "technologies", "systems"]
+        ) or (obj[0].isupper() and len(obj.split()) == 1)  # Single capitalized word often a product/company
+
+        # If subject looks like person acting on a company, swap them
+        if looks_like_person and (looks_like_company or not subject_words):
+            return obj, predicate, subject
+
+    return subject, predicate, obj
+
+
 def _semantic_chunk(text: str, llm_provider, article_title: str = "") -> list[str]:
     """
     Split text into semantically meaningful chunks using LLM.
