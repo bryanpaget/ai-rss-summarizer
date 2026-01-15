@@ -1361,12 +1361,10 @@ def _find_similar_triple(
     embedding_service: Optional["EmbeddingService"] = None,
     similarity_threshold: float = 0.75,
 ) -> Optional[Triple]:
-    """Check if an exact matching triple already exists.
+    """Check if a matching triple already exists (case-insensitive).
 
-    IMPORTANT: This function now only checks for EXACT matches.
-    Semantic deduplication (e.g., "USA" vs "United States") is deferred
-    to the graph cleanup operation which runs separately and doesn't
-    block ingestion.
+    Checks for both exact matches and case-insensitive matches to prevent
+    duplicates like "McConaughey trademarked" vs "MCCONAUGHEY trademarked".
 
     Args:
         triple: Triple to check for duplicates
@@ -1377,8 +1375,7 @@ def _find_similar_triple(
     Returns:
         Matching triple if found, None otherwise
     """
-    # Exact match on subject-predicate-object only
-    # This is O(1) with the database index, no embedding calls needed
+    # First try exact match (fast, uses index)
     existing = knowledge_base.get_triples(
         subject=triple.subject,
         predicate=triple.predicate,
@@ -1388,8 +1385,16 @@ def _find_similar_triple(
     if existing:
         return existing[0]
 
-    # No embedding-based dedup here - that's handled by cleanup operation
-    # See Issue 8 in PIPELINE_ISSUES_TRACKING.md
+    # Try case-insensitive match via pattern query
+    # This catches "McConaughey" vs "MCCONAUGHEY" duplicates
+    similar = knowledge_base.query_triples_pattern(
+        subject_pattern=triple.subject,
+        predicate_pattern=triple.predicate,
+    )
+    for t in similar:
+        if t.object.lower() == triple.object.lower():
+            return t
+
     return None
 
 
