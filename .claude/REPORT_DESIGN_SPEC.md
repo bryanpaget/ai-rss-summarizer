@@ -88,8 +88,10 @@ Sorted by relevance score descending. Genuinely skippable items marked as such.
 - From feeds
 - Time range
 - New insights extracted
-- New triples added
+- New triples added (from articles)
+- Graph triples (from cluster analysis)
 - Connections discovered
+- Stories updated
 
 ---
 
