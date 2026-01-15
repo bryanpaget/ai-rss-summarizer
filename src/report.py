@@ -1183,6 +1183,10 @@ def generate_report(
 
     MIN_CONTENT_LENGTH = 100
 
+    # Auto-mark short articles as analyzed (skipped) - they'll never be long enough to process
+    # This prevents them from accumulating in the unanalyzed backlog forever
+    skipped_short = storage.mark_short_articles_as_skipped(MIN_CONTENT_LENGTH)
+
     # Filter short articles at DB level - they'll never be long enough, no need to see them
     articles = storage.get_unanalyzed_articles(exclude_spam=True, min_content_length=MIN_CONTENT_LENGTH)
 
