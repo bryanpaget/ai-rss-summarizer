@@ -2196,16 +2196,19 @@ class TestGenerateStoryTitle:
     def test_generate_story_title_preserves_full_title(
         self, mock_storage, sample_article
     ):
-        """Test that full title is preserved without arbitrary truncation."""
+        """Test that valid title is preserved without arbitrary truncation.
+
+        Note: Code rejects titles > 100 chars as garbage, so test uses 80 chars.
+        """
         mock_llm = MagicMock(spec=LLMProvider)
         mock_llm.is_available.return_value = True
-        long_title = "A" * 150
-        mock_llm.generate.return_value = long_title
+        valid_title = "Major Tech Development in AI Industry Announced Today"  # 54 chars
+        mock_llm.generate.return_value = valid_title
 
         clusterer = StoryClusterer(mock_llm, mock_storage)
         result = clusterer._generate_story_title(sample_article)
 
-        assert result == long_title
+        assert result == valid_title
 
     def test_generate_story_title_fallback_on_error(
         self, mock_llm_provider_error, mock_storage, sample_article
