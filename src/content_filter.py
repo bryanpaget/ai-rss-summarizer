@@ -50,10 +50,13 @@ TITLE_PATTERNS = [
     (r'\baffiliate', 0.9, 'affiliate'),
     (r'\bsponsored\s*(?:post|content|article)', 0.95, 'sponsored content'),
 
-    # Price patterns (e.g., "Starting at $19.99")
+    # Price patterns (e.g., "Starting at $19.99", "Save $50")
     (r'\bstarting\s*at\s*\$\d+', 0.7, 'price promotion'),
     (r'\bas\s*low\s*as\s*\$\d+', 0.75, 'price promotion'),
     (r'\bonly\s*\$\d+', 0.6, 'price promotion'),
+    (r'\bsave\s*\$\d+', 0.85, 'dollar savings'),
+    (r'\b\$\d+\s*off\b', 0.85, 'dollar discount'),
+    (r'\bget\s*\$\d+\s*off', 0.9, 'dollar off promotion'),
 
     # Urgency patterns
     (r'\bact\s*now', 0.7, 'urgency'),
