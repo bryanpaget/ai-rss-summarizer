@@ -84,6 +84,11 @@ class TestTimingPlugin:
         if not self.results:
             return
 
+        # Check for early stopping (e.g., -x flag)
+        collected_count = len(session.items) if hasattr(session, 'items') else 0
+        ran_count = len(self.results)
+        stopped_early = collected_count > 0 and ran_count < collected_count
+
         # Ensure report directory exists
         REPORT_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
