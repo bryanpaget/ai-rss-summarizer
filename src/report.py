@@ -1430,7 +1430,7 @@ def _show_final_report(
     if all_connections:
         for article, conn in all_connections[:5]:
             formatted = format_relationship(conn, kb)
-            console.print(f"  - [cyan]{article.title[:40]}...[/cyan]")
+            console.print(f"  - [cyan]{article.title}[/cyan]")
             console.print(f"    {formatted}")
     elif stats.get("connections", 0) > 0:
         # Cluster-based connections were found - query KB for recent ones
