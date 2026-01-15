@@ -877,6 +877,21 @@ def generate_report(
         console.print("[yellow]No articles to process.[/yellow]")
         return stats
 
+    # Warn about large processing jobs and suggest limit option
+    LARGE_BATCH_THRESHOLD = 20
+    if len(articles) > LARGE_BATCH_THRESHOLD and max_per_step == 0:
+        estimated_minutes = len(articles) * 0.75  # ~45 sec per article avg
+        if estimated_minutes > 60:
+            time_estimate = f"{estimated_minutes / 60:.1f} hours"
+        else:
+            time_estimate = f"{int(estimated_minutes)} minutes"
+
+        console.print()
+        console.print(f"[yellow]Warning: {len(articles)} articles to process (estimated {time_estimate})[/yellow]")
+        console.print("[yellow]Tip: Use 'rss report -m 5' to limit to 5 articles per run[/yellow]")
+        console.print("[yellow]     Run multiple times to process incrementally[/yellow]")
+        console.print()
+
     console.print()
 
     # Apply max_per_step limit to articles if set
