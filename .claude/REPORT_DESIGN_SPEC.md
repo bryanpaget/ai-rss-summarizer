@@ -1,8 +1,8 @@
 # Report Design Specification
 
-**Status:** IMPLEMENTED (2026-01-15)
+**Status:** IMPLEMENTED (2026-01-15), Updated with cluster-based connection detection
 
-Implementation: `src/report.py:_show_final_report()` (lines 909-1135)
+Implementation: `src/report.py:_show_final_report()` (lines 1225-1470)
 
 ---
 
