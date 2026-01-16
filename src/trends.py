@@ -1,4 +1,12 @@
-"""Trend detection and categorization."""
+"""Trend detection and categorization.
+
+ARCHITECTURE:
+- Category embeddings are pre-computed ONCE and stored in FAISS as type "category"
+- Article categorization uses STORED article embeddings (never re-embeds)
+- FAISS ANN search finds nearest categories efficiently
+
+NO embedding calls happen during categorization - all embeddings must be pre-computed.
+"""
 
 import logging
 from collections import Counter
@@ -30,25 +38,116 @@ TREND_CATEGORY_DESCRIPTIONS = {
 # Similarity threshold for category matching
 CATEGORY_SIMILARITY_THRESHOLD = 0.45
 
-# Cache for category embeddings (populated on first use)
+# In-memory cache for category embeddings (loaded from FAISS, never created fresh)
 _category_embeddings_cache: dict[str, list[float]] = {}
+_categories_initialized: bool = False
+
+
+def ensure_categories_initialized(embedding_service: "EmbeddingService") -> bool:
+    """
+    Ensure category embeddings exist in FAISS.
+
+    This should be called ONCE during pipeline initialization (pre-embedding phase),
+    NOT during article categorization.
+
+    Returns True if categories are ready, False if embedding service unavailable.
+    """
+    global _categories_initialized, _category_embeddings_cache
+
+    if _categories_initialized:
+        return True
+
+    if embedding_service is None or not embedding_service.is_available():
+        logger.warning("Cannot initialize categories - embedding service unavailable")
+        return False
+
+    # Check if categories already exist in FAISS
+    categories_found = 0
+    for category in TREND_CATEGORY_DESCRIPTIONS.keys():
+        emb = embedding_service.get_embedding(f"category:{category}", "category")
+        if emb:
+            _category_embeddings_cache[category] = emb
+            categories_found += 1
+
+    if categories_found == len(TREND_CATEGORY_DESCRIPTIONS):
+        logger.info(f"Loaded {categories_found} category embeddings from FAISS")
+        _categories_initialized = True
+        return True
+
+    # Need to create category embeddings - this is the ONLY place embed_text is allowed
+    logger.info(f"Seeding {len(TREND_CATEGORY_DESCRIPTIONS)} category embeddings into FAISS...")
+    for category, description in TREND_CATEGORY_DESCRIPTIONS.items():
+        if category in _category_embeddings_cache:
+            continue  # Already loaded
+        try:
+            result = embedding_service.embed_text(description)
+            embedding_service.save_embedding(f"category:{category}", "category", result)
+            _category_embeddings_cache[category] = result.vector
+        except Exception as e:
+            logger.error(f"Failed to seed category '{category}': {e}")
+            return False
+
+    _categories_initialized = True
+    logger.info("Category embeddings initialized successfully")
+    return True
 
 
 def _get_category_embeddings(embedding_service: "EmbeddingService") -> dict[str, list[float]]:
-    """Get or create embeddings for all categories."""
+    """
+    Get category embeddings from cache.
+
+    IMPORTANT: Does NOT create embeddings. Categories must be initialized first
+    via ensure_categories_initialized() during pre-embedding phase.
+    """
     global _category_embeddings_cache
 
     if _category_embeddings_cache:
         return _category_embeddings_cache
 
-    for category, description in TREND_CATEGORY_DESCRIPTIONS.items():
-        try:
-            result = embedding_service.embed_text(description)
-            _category_embeddings_cache[category] = result.vector
-        except Exception as e:
-            logger.warning(f"Failed to embed category '{category}': {e}")
+    # Try to load from FAISS (but don't create)
+    for category in TREND_CATEGORY_DESCRIPTIONS.keys():
+        emb = embedding_service.get_embedding(f"category:{category}", "category")
+        if emb:
+            _category_embeddings_cache[category] = emb
+
+    if not _category_embeddings_cache:
+        logger.error(
+            "Category embeddings not found! Call ensure_categories_initialized() "
+            "during pre-embedding phase before categorizing articles."
+        )
 
     return _category_embeddings_cache
+
+
+def categorize_by_stored_embedding(
+    article_embedding: list[float],
+    embedding_service: "EmbeddingService",
+) -> list[str]:
+    """
+    Categorize using a PRE-COMPUTED embedding vector.
+
+    This is the correct way to categorize - using stored embeddings,
+    never creating new ones.
+
+    Args:
+        article_embedding: Pre-computed embedding vector for the article
+        embedding_service: For cosine similarity calculation only (no embed calls)
+
+    Returns:
+        List of matching category names
+    """
+    category_embeddings = _get_category_embeddings(embedding_service)
+    if not category_embeddings:
+        return ["Uncategorized"]
+
+    matches = []
+    for category, cat_embedding in category_embeddings.items():
+        similarity = embedding_service.cosine_similarity(article_embedding, cat_embedding)
+        if similarity >= CATEGORY_SIMILARITY_THRESHOLD:
+            matches.append((category, similarity))
+
+    matches.sort(key=lambda x: x[1], reverse=True)
+    return [cat for cat, _ in matches] if matches else ["Uncategorized"]
 
 
 def categorize_text(
@@ -56,51 +155,27 @@ def categorize_text(
     embedding_service: Optional["EmbeddingService"] = None,
 ) -> list[str]:
     """
-    Categorize text into trend categories using embedding similarity.
+    DEPRECATED: This function creates new embeddings which violates architecture.
 
-    Args:
-        text: Text to categorize
-        embedding_service: EmbeddingService for semantic matching.
-                          If not available, returns ["Uncategorized"].
+    Use categorize_by_stored_embedding() with a pre-computed embedding instead.
 
-    Returns:
-        List of matching category names, or ["Uncategorized"] if none match.
+    This remains for backwards compatibility but logs a warning.
     """
+    logger.warning(
+        "categorize_text() called - this creates new embeddings and is deprecated. "
+        "Use categorize_by_stored_embedding() with stored article embeddings instead."
+    )
+
     if not text:
         return ["Uncategorized"]
 
-    # Require embedding service
     if embedding_service is None or not embedding_service.is_available():
-        logger.error("EmbeddingService required but not available for trend categorization")
         return ["Uncategorized"]
 
     try:
-        # Embed the input text
-        text_result = embedding_service.embed_text(text[:1000])  # Limit text length
-        text_embedding = text_result.vector
-
-        # Get category embeddings
-        category_embeddings = _get_category_embeddings(embedding_service)
-        if not category_embeddings:
-            logger.error("Failed to create category embeddings")
-            return ["Uncategorized"]
-
-        # Find matching categories by similarity
-        matches = []
-        all_scores = []  # Track all scores for debugging
-        for category, cat_embedding in category_embeddings.items():
-            similarity = embedding_service.cosine_similarity(text_embedding, cat_embedding)
-            all_scores.append((category, similarity))
-            if similarity >= CATEGORY_SIMILARITY_THRESHOLD:
-                matches.append((category, similarity))
-
-        # Sort all scores for potential logging
-        all_scores.sort(key=lambda x: x[1], reverse=True)
-
-        # Sort by similarity and return category names
-        matches.sort(key=lambda x: x[1], reverse=True)
-        return [cat for cat, _ in matches] if matches else ["Uncategorized"]
-
+        # DEPRECATED: Creates new embedding - should use stored
+        text_result = embedding_service.embed_text(text[:1000])
+        return categorize_by_stored_embedding(text_result.vector, embedding_service)
     except Exception as e:
         logger.error(f"Categorization failed: {e}")
         return ["Uncategorized"]
@@ -109,19 +184,37 @@ def categorize_text(
 def analyze_article(
     article,
     embedding_service: Optional["EmbeddingService"] = None,
+    storage: Optional["Storage"] = None,
 ) -> str:
     """
-    Analyze an article and return trend tags using embedding similarity.
+    Categorize an article using its STORED embedding.
+
+    ARCHITECTURE: This function NEVER creates new embeddings.
+    It retrieves the article's pre-computed embedding from storage/FAISS
+    and compares against pre-computed category embeddings.
 
     Args:
-        article: Article to analyze
-        embedding_service: EmbeddingService for semantic categorization
+        article: Article with .id attribute
+        embedding_service: For retrieving stored embeddings and similarity calc
+        storage: Optional storage for retrieving embeddings
 
     Returns:
         Comma-separated category names
     """
-    combined_text = f"{article.title} {article.content}"
-    categories = categorize_text(combined_text, embedding_service=embedding_service)
+    if embedding_service is None or not embedding_service.is_available():
+        return "Uncategorized"
+
+    # Get the article's STORED embedding - never create new
+    article_embedding = embedding_service.get_embedding(article.id, "article")
+
+    if article_embedding is None:
+        logger.warning(
+            f"Article '{article.id}' has no stored embedding. "
+            f"Run embedding phase first before categorization."
+        )
+        return "Uncategorized"
+
+    categories = categorize_by_stored_embedding(article_embedding, embedding_service)
     return ", ".join(categories)
 
 
