@@ -1473,9 +1473,9 @@ def generate_report(
     # Track total pipeline time
     pipeline_start = time.time()
 
-    # Step 1: Verification (Self-Healing)
+    # Step 1: Verification (Self-Healing) - Corpus State Snapshot
     step_start = time.time()
-    gaps = _run_verification_step(storage, kb, articles, embedding_service, limit, MIN_CONTENT_LENGTH)
+    gaps = _run_verification_step(storage, kb, articles, embedding_service, limit, MIN_CONTENT_LENGTH, new_article_ids)
     console.print(f"  [dim]Step 1 completed in {time.time() - step_start:.1f}s[/dim]\n")
 
     # Step 2: Pre-embed existing stories/insights
