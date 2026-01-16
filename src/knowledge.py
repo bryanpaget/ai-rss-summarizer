@@ -2109,7 +2109,8 @@ Mention which insights support your answer."""
 class CombinedExtractionOutput:
     """Output from combined extraction operation."""
     insights: list[Insight]
-    triples: list[Triple]
+    new_triples: list[Triple]  # Triples newly saved to KB
+    existing_triples: list[Triple]  # Triples that already existed
     signal_tags: list[dict]  # {"tag": str, "confidence": float}
     summary: str
     is_ad: bool
