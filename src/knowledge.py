@@ -1997,7 +1997,7 @@ Instructions:
 1. Divide the content into semantically coherent chunks (by topic/section)
 2. For EACH chunk, extract:
    - Insights (key learnings, facts, claims)
-   - Triples (subject-predicate-object relationships)
+   - Triples (subject-predicate-object relationships where subjects and objects are PROPER NOUNS only - specific named people, companies, places, organizations. NEVER use generic nouns like 'woman', 'man', 'article', 'analysis'.)
 3. For the ENTIRE article, provide:
    - Signal tags (topics, themes, categories)
    - Whether this appears to be an advertisement/sponsored content
