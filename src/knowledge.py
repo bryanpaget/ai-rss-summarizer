@@ -362,12 +362,19 @@ class KnowledgeBase:
 
     def get_insights(
         self,
-        limit: int = 50,
+        limit: Optional[int] = None,
         insight_type: Optional[str] = None,
         confidence: Optional[str] = None,
         article_id: Optional[str] = None,
     ) -> list[Insight]:
-        """Get insights with optional filtering."""
+        """Get insights with optional filtering.
+
+        Args:
+            limit: Maximum number of insights to return. None means no limit.
+            insight_type: Filter by insight type.
+            confidence: Filter by confidence level.
+            article_id: Filter by source article.
+        """
         query = "SELECT * FROM knowledge_insights WHERE 1=1"
         params: list = []
 
@@ -383,8 +390,10 @@ class KnowledgeBase:
             query += " AND article_id = ?"
             params.append(article_id)
 
-        query += " ORDER BY extracted_at DESC LIMIT ?"
-        params.append(limit)
+        query += " ORDER BY extracted_at DESC"
+        if limit is not None:
+            query += " LIMIT ?"
+            params.append(limit)
 
         with self._connect() as conn:
             rows = conn.execute(query, params).fetchall()
