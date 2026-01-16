@@ -183,7 +183,7 @@ def _run_verification_step(
             gaps["stories_missing_embeddings"] += 1
 
     # Check insight embeddings
-    insights = kb.get_insights(limit=500)
+    insights = kb.get_insights(limit=10000)
     for insight in insights:
         if not embedding_service.get_embedding(insight.id, "insight"):
             gaps["insights_missing_embeddings"] += 1
@@ -291,7 +291,7 @@ def _run_pre_embedding_phase(
         console.print(f"  [green]Using {provider_info.get('provider', 'unknown')}[/green]")
 
     # Embed insights first (these are what detect_connections compares against)
-    insights = kb.get_insights(limit=500)
+    insights = kb.get_insights(limit=10000)
     insights_needing_embedding = [i for i in insights if not embedding_service.get_embedding(i.id, "insight")]
 
     BATCH_SIZE = 10
@@ -1021,7 +1021,7 @@ def _run_connection_detection(
     console.print(f"  [dim]Clustering insights by similarity...[/dim]")
 
     # Cluster ALL historical insights (fast FAISS math)
-    all_kb_insights = kb.get_insights(limit=500)
+    all_kb_insights = kb.get_insights(limit=10000)
     clusters = _cluster_insights_by_similarity(
         all_kb_insights,
         embedding_service,
