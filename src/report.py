@@ -391,6 +391,9 @@ def _run_llm_phase(
     console.print()
 
     for idx, article in enumerate(articles):
+        if limit > 0 and idx >= limit:
+            console.print(f"  [dim]Stopped at {limit} articles (limit reached)[/dim]")
+            break
         article_start = time.time()
         insights = []
         triples = []
