@@ -109,6 +109,7 @@ def categorize_text(
         return [cat for cat, _ in matches] if matches else ["Uncategorized"]
 
     except Exception as e:
+        print(f"DEBUG TRENDS: Exception: {e}", file=sys.stderr)
         logger.error(f"Categorization failed: {e}")
         return ["Uncategorized"]
 
