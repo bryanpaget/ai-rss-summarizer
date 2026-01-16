@@ -724,6 +724,13 @@ def process_article_clustering(
         "news_items_extracted": 0,
     }
 
+    # Check if article is promotional/spam - don't create stories for spam
+    filter_result = is_promotional_content(article)
+    if filter_result.is_promotional:
+        stats["skipped_spam"] = True
+        stats["spam_reason"] = filter_result.reason
+        return stats
+
     try:
         # Level 1: Cluster article into story (uses embeddings, not LLM calls)
         clusterer = StoryClusterer(llm_provider, storage, kb)
