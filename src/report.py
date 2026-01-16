@@ -316,7 +316,7 @@ def _run_pre_embedding_phase(
         console.print("  [dim]All insights already have embeddings[/dim]")
 
     # Embed stories
-    stories = storage.get_active_stories(limit=200)
+    stories = storage.get_active_stories(limit=500)
     stories_needing_embedding = [s for s in stories if not embedding_service.get_embedding(s.id, "story")]
 
     if stories_needing_embedding:
@@ -667,7 +667,7 @@ def _run_embedding_phase(
         console.print(f"  [green]Tagged {tagged} articles with trends[/green]")
 
     # Any new stories created during LLM phase need embeddings
-    stories = storage.get_active_stories(limit=200)
+    stories = storage.get_active_stories(limit=500)
     stories_needing_embedding = [s for s in stories if not embedding_service.get_embedding(s.id, "story")]
 
     if stories_needing_embedding:
