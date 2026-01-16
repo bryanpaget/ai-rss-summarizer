@@ -138,6 +138,12 @@ These invariants are enforced by `tests/test_pipeline_architecture.py`:
 - Replaces the old pattern of 3+ separate calls per article
 - If you see separate insight/triple extraction calls, that's a regression
 
+**Trend tagging (ENFORCED):**
+- `test_trend_tagging_no_new_embeddings` - Fails if trend tagging calls `embed_text()`
+- Category embeddings are seeded ONCE during pre-embedding phase via `ensure_categories_initialized()`
+- `analyze_article()` uses STORED article embedding via `get_embedding()`, never creates new
+- If you see `embed_text()` during trend tagging, that's a violation
+
 ## Problem Solving Principles
 
 ### Bandaids vs Root Cause
