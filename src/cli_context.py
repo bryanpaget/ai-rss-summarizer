@@ -605,20 +605,33 @@ def _run_tree_wizard() -> tuple[list, list]:
             choices.append("─" * 30)
             choices.append("← Back to Subjects")
 
+            # Use last_choice to keep cursor position
+            default_choice = choices[0]
+            if 'last_feed_choice' in dir() and last_feed_choice:
+                # Find matching choice (accounting for changed checkbox)
+                for c in choices:
+                    if c[4:] == last_feed_choice[4:]:  # Compare names, not checkmarks
+                        default_choice = c
+                        break
+
             choice = questionary.select(
                 "Toggle selection:",
                 choices=choices,
+                default=default_choice,
             ).ask()
 
             if choice is None:
                 level = "subjects"
+                last_feed_choice = None
                 continue
 
             if choice.startswith("─"):
                 continue
             elif choice.startswith("← Back"):
                 level = "subjects"
+                last_feed_choice = None
             elif choice.startswith("["):
+                last_feed_choice = choice  # Remember position
                 # Toggle feed - also auto-add subject as topic
                 feed_name = choice[4:]  # Remove "[✓] " or "[ ] "
                 feed_data = next((f for f in feeds if f["name"] == feed_name), None)
