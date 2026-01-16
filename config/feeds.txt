@@ -17,3 +17,12 @@ https://techcrunch.com/category/artificial-intelligence/feed/
 https://www.wired.com/feed/category/science/latest/rss
 https://www.nasa.gov/rss/breaking_news.rss
 https://www.space.com/home/feed/site.xml
+
+https://rss.slashdot.org/Slashdot/slashdotDevelopers
+https://feeds.dzone.com/home
+https://www.theatlantic.com/feed/channel/politics/
+https://www.vox.com/rss/politics/index.xml
+https://fivethirtyeight.com/features/feed/
+https://www.politico.com/rss/politicopulse.xml
+https://thehill.com/rss/syndication/all
+https://www.realclearpolitics.com/index.xml
