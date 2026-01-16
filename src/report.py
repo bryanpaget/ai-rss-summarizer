@@ -973,12 +973,9 @@ def _run_connection_detection(
     # =========================================================================
     console.print(f"  [dim]Clustering insights by similarity...[/dim]")
 
-    # Get insights with embeddings for clustering
-    # Apply limit to insights if limit is set
-    insight_limit = limit * 10 if limit > 0 else 500
-    all_kb_insights = kb.get_insights(limit=insight_limit)
+    # Only cluster THIS SESSION's insights - limit is enforced upstream by limiting articles
     clusters = _cluster_insights_by_similarity(
-        all_kb_insights,
+        all_insights,
         embedding_service,
         similarity_threshold=0.75,
     )
@@ -988,13 +985,7 @@ def _run_connection_detection(
         console.print()
         return
 
-    # Apply limit to clusters if limit is set
-    total_clusters = len(clusters)
-    if limit > 0 and len(clusters) > limit:
-        clusters = clusters[:limit]
-        console.print(f"  [green]Found {total_clusters} clusters, analyzing {len(clusters)} (limited by -m)[/green]")
-    else:
-        console.print(f"  [green]Found {len(clusters)} clusters[/green]")
+    console.print(f"  [green]Found {len(clusters)} clusters[/green]")
 
     # =========================================================================
     # PHASE 3: Analyze each cluster (TEXT MODEL - O(clusters) calls)
