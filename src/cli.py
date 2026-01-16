@@ -472,6 +472,11 @@ def report(
         "--skip-summarized/--reprocess",
         help="Skip already-summarized articles",
     ),
+    setup: bool = typer.Option(
+        False,
+        "--setup",
+        help="Force the setup wizard to run (re-configure interests/feeds)",
+    ),
     db_path: str = typer.Option(
         "articles.db",
         "--db", "-d",
@@ -496,6 +501,7 @@ def report(
         rss report              # Process ALL new articles (no limit)
         rss report -n 3         # Limit to 3 items per step (fast test)
         rss report --reprocess  # Re-analyze already-summarized articles
+        rss report --setup      # Force setup wizard to run
     """
     require_setup()
     from .report import generate_report
@@ -505,6 +511,7 @@ def report(
         db_path=db_path,
         kb_path=kb_path,
         limit=limit,  # UNIFIED: applies to ALL steps
+        force_setup=setup,
     )
 
 
