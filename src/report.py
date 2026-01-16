@@ -1054,39 +1054,27 @@ def _run_connection_detection(
             insights_to_embed.append(ins)
 
     if insights_to_embed:
-        total = len(insights_to_embed)
-        BATCH_SIZE = 10
-        num_batches = (total + BATCH_SIZE - 1) // BATCH_SIZE
-        embedded_count = 0
-        errors = 0
+        progress = BatchProgress(len(insights_to_embed), batch_size=10, label="insights")
+        console.print(f"  Embedding {progress.total_items} new insights in {progress.num_batches} batches...")
 
-        console.print(f"  Embedding {total} new insights in {num_batches} batches...")
-
-        for batch_num in range(num_batches):
-            start_idx = batch_num * BATCH_SIZE
-            end_idx = min(start_idx + BATCH_SIZE, total)
-            batch = insights_to_embed[start_idx:end_idx]
-
-            console.print(f"    [dim]Batch {batch_num + 1}/{num_batches} ({len(batch)} items)...[/dim]", end="")
+        for batch_num, batch in progress.iterate(insights_to_embed):
+            progress.start_batch()
+            batch_success = 0
             batch_errors = 0
 
             for ins in batch:
                 try:
                     result = embedding_service.embed_text(ins.content)
                     embedding_service.save_embedding(ins.id, "insight", result)
-                    embedded_count += 1
+                    batch_success += 1
                 except Exception as e:
                     console.print(f"\n      [red]Embedding failed: {e}[/red]")
                     stats["errors"] += 1
-                    errors += 1
                     batch_errors += 1
 
-            if batch_errors == 0:
-                console.print(f" [green]done[/green]")
-            else:
-                console.print(f" [yellow]done ({batch_errors} errors)[/yellow]")
+            progress.end_batch(batch_success, batch_errors)
 
-        console.print(f"  [green]Embedded {embedded_count} insights[/green]")
+        progress.summary(f"Embedded {progress.total_processed} insights")
     else:
         console.print(f"  [dim]All {len(all_insights)} insights already embedded[/dim]")
 
