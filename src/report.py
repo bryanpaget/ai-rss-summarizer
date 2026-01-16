@@ -1201,20 +1201,35 @@ def generate_report(
     console.print(Panel(f"[bold]Generating Report[/bold]\n[dim]Using {provider.name}[/dim]", style="blue"))
     console.print()
 
-    # Check if user has set up interests - warn prominently if not
+    # Check if user has set up interests - auto-launch setup wizard if not
     context_store = UserContextStore()
     profile = context_store.load_profile()
     if not profile.watching and not profile.current_projects:
         console.print(Panel(
-            "[yellow]No interests configured![/yellow]\n\n"
-            "Your briefing will be generic without personalization.\n"
-            "Set up interests for better results:\n\n"
-            "  rss context watch \"AI\"     - Track a topic\n"
-            "  rss context add project X  - Track a project",
-            title="[bold]Setup Recommended[/bold]",
+            "[yellow]No interests configured yet![/yellow]\n\n"
+            "Let's set up your interests for personalized briefings.",
+            title="[bold]First-Time Setup[/bold]",
             style="yellow"
         ))
         console.print()
+
+        # Try to run interactive setup wizard
+        try:
+            from .cli_context import setup_wizard, QUESTIONARY_AVAILABLE
+            if QUESTIONARY_AVAILABLE:
+                setup_wizard()
+                # Reload profile after wizard completes
+                profile = context_store.load_profile()
+                console.print()
+            else:
+                console.print("[dim]Install questionary for interactive setup: pip install questionary[/dim]")
+                console.print("[dim]Or use: rss context watch \"AI\" to add topics manually[/dim]")
+                console.print()
+        except (ImportError, Exception) as e:
+            # Fall back to manual instructions if wizard fails
+            console.print("[dim]Set up interests with: rss context setup[/dim]")
+            console.print("[dim]Or: rss context watch \"AI\"[/dim]")
+            console.print()
 
     # Fetch latest articles
     console.print("[bold]Fetching:[/bold] Latest articles...")
