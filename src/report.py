@@ -661,17 +661,42 @@ def _run_embedding_phase(
     # This belongs in embedding phase because it uses embeddings
     needs_trends = [a for a in articles if not a.trend_tags]
     if needs_trends:
-        console.print(f"  Tagging {len(needs_trends)} articles with trend categories...")
+        total = len(needs_trends)
+        console.print(f"  Tagging {total} articles with trend categories...")
         tagged = 0
-        for article in needs_trends:
-            try:
-                tags = analyze_article(article, embedding_service=embedding_service)
-                storage.update_trends(article.id, tags)
-                article.trend_tags = tags
-                tagged += 1
-            except Exception as e:
-                console.print(f"    [red]ERROR tagging {article.title[:30]}: {e}[/red]")
-                stats["errors"] += 1
+        errors = 0
+
+        # Process in batches with progress output
+        TREND_BATCH_SIZE = 10
+        num_batches = (total + TREND_BATCH_SIZE - 1) // TREND_BATCH_SIZE
+
+        for batch_num in range(num_batches):
+            start_idx = batch_num * TREND_BATCH_SIZE
+            end_idx = min(start_idx + TREND_BATCH_SIZE, total)
+            batch = needs_trends[start_idx:end_idx]
+
+            console.print(f"    [dim]Batch {batch_num + 1}/{num_batches} ({len(batch)} items)...[/dim]", end="")
+            batch_tagged = 0
+            batch_errors = 0
+
+            for article in batch:
+                try:
+                    tags = analyze_article(article, embedding_service=embedding_service)
+                    storage.update_trends(article.id, tags)
+                    article.trend_tags = tags
+                    tagged += 1
+                    batch_tagged += 1
+                except Exception as e:
+                    console.print(f"\n      [red]ERROR tagging {article.title[:30]}: {e}[/red]")
+                    stats["errors"] += 1
+                    errors += 1
+                    batch_errors += 1
+
+            if batch_errors == 0:
+                console.print(f" [green]done ({batch_tagged} tagged)[/green]")
+            else:
+                console.print(f" [yellow]done ({batch_tagged} tagged, {batch_errors} errors)[/yellow]")
+
         console.print(f"  [green]Tagged {tagged} articles with trends[/green]")
 
     # Any new stories created during LLM phase need embeddings
