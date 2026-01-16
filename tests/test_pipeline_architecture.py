@@ -456,3 +456,155 @@ class TestPipelineArchitecture:
                 f"Should be 0 - must use stored embeddings via get_embedding() instead.\n"
                 f"Callers: {[c['caller'] for c in embed_text_calls]}"
             )
+
+
+# =============================================================================
+# SILENT LOOP PREVENTION TEST
+# =============================================================================
+
+
+class TestBatchProgressOutput:
+    """
+    Tests that operations processing >10 items show batch progress output.
+
+    The user should NEVER see a long hang with no output. Any operation
+    processing more than 10 items MUST output batch progress markers.
+    """
+
+    def test_embedding_phase_batch_progress(self, capsys):
+        """
+        TEST: Embedding phase with >10 items must show batch progress.
+
+        When embedding many items, output must include batch markers like:
+        "Batch 1/N" to show progress, not just start and end messages.
+        """
+        from io import StringIO
+        from unittest.mock import patch, MagicMock
+
+        # Collect all console.print calls
+        print_calls = []
+
+        def capture_print(*args, **kwargs):
+            msg = " ".join(str(a) for a in args)
+            print_calls.append(msg)
+            # Also print to stdout for test visibility
+            print(f"CAPTURED: {msg}")
+
+        # Create mock console that captures output
+        mock_console = MagicMock()
+        mock_console.print = capture_print
+
+        # Create many test articles (more than BATCH_SIZE of 10)
+        NUM_ITEMS = 15
+        articles = [create_test_article(f"batch-test-{i}") for i in range(NUM_ITEMS)]
+
+        # Mock the embedding phase components
+        mock_embedding_service = MagicMock()
+        mock_embedding_service.is_available.return_value = True
+        mock_embedding_service.get_embedding.return_value = None  # Not yet embedded
+        mock_embedding_service.embed_text.return_value = MagicMock(vector=[0.1] * 384)
+        mock_embedding_service.save_embedding.return_value = None
+
+        mock_storage = MagicMock()
+        mock_storage.get_articles.return_value = articles
+
+        # Import and run embedding phase with mock console
+        with patch('src.report.console', mock_console):
+            from src.report import _run_embedding_phase
+
+            _run_embedding_phase(
+                articles=articles,
+                storage=mock_storage,
+                embedding_service=mock_embedding_service,
+            )
+
+        # Print captured calls for visibility
+        print("\n" + "=" * 80)
+        print("CAPTURED CONSOLE OUTPUT:")
+        print("=" * 80)
+        for call in print_calls:
+            print(f"  {call}")
+        print("=" * 80)
+
+        # Check for batch progress markers
+        batch_markers_found = any("Batch" in call for call in print_calls)
+
+        if not batch_markers_found and NUM_ITEMS > 10:
+            pytest.fail(
+                f"VIOLATION: Embedding phase processed {NUM_ITEMS} items "
+                f"without batch progress output.\n"
+                f"Operations over 10 items MUST show 'Batch X/Y' progress markers.\n"
+                f"Output captured: {print_calls}"
+            )
+
+    def test_trend_tagging_batch_progress(self, capsys):
+        """
+        TEST: Trend tagging with >10 items must show batch progress.
+
+        When tagging many articles with trends, output must include
+        batch progress markers, not just silence.
+        """
+        from unittest.mock import patch, MagicMock
+
+        # Collect all console.print calls
+        print_calls = []
+
+        def capture_print(*args, **kwargs):
+            msg = " ".join(str(a) for a in args)
+            print_calls.append(msg)
+            print(f"CAPTURED: {msg}")
+
+        mock_console = MagicMock()
+        mock_console.print = capture_print
+
+        # Create many test articles needing trend tags
+        NUM_ITEMS = 15
+        articles = [create_test_article(f"trend-batch-{i}") for i in range(NUM_ITEMS)]
+        for article in articles:
+            article.trend_tags = None  # Needs tagging
+
+        # Mock services
+        mock_embedding_service = MagicMock()
+        mock_embedding_service.is_available.return_value = True
+        mock_embedding_service.get_embedding.return_value = [0.1] * 384  # Has embedding
+        mock_embedding_service.cosine_similarity.return_value = 0.6
+
+        mock_storage = MagicMock()
+        mock_storage.update_trends.return_value = None
+
+        mock_kb = MagicMock()
+        mock_kb.get_insights.return_value = []
+
+        # Run the embedding phase (which includes trend tagging)
+        with patch('src.report.console', mock_console):
+            with patch('src.trends._category_embeddings_cache', {
+                "AI": [0.1] * 384,
+                "Technology": [0.2] * 384,
+            }):
+                with patch('src.trends._categories_initialized', True):
+                    from src.report import _run_embedding_phase
+
+                    _run_embedding_phase(
+                        articles=articles,
+                        storage=mock_storage,
+                        embedding_service=mock_embedding_service,
+                    )
+
+        # Print captured output
+        print("\n" + "=" * 80)
+        print("CAPTURED CONSOLE OUTPUT:")
+        print("=" * 80)
+        for call in print_calls:
+            print(f"  {call}")
+        print("=" * 80)
+
+        # If articles need trend tagging, batch markers should appear
+        needs_trends_calls = [c for c in print_calls if "trend" in c.lower()]
+        batch_in_trends = any("Batch" in c for c in print_calls if "trend" in c.lower() or "Batch" in c)
+
+        if NUM_ITEMS > 10 and needs_trends_calls and not batch_in_trends:
+            pytest.fail(
+                f"VIOLATION: Trend tagging processed items without batch progress output.\n"
+                f"Operations over 10 items MUST show 'Batch X/Y' progress markers.\n"
+                f"Trend-related output: {needs_trends_calls}"
+            )
