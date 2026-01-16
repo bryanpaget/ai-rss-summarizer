@@ -309,8 +309,12 @@ class Storage:
         if unsummarized_only:
             query += " AND summary IS NULL"
 
-        query += " ORDER BY published DESC LIMIT ? OFFSET ?"
-        params.extend([limit, offset])
+        query += " ORDER BY published DESC"
+
+        # Only add LIMIT if specified (None means no limit)
+        if limit is not None:
+            query += " LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
 
         with self._connect() as conn:
             rows = conn.execute(query, params).fetchall()
