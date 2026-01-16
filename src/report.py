@@ -67,6 +67,102 @@ def _cosine_similarity(vec1: list[float], vec2: list[float]) -> float:
     return dot_product / (mag1 * mag2)
 
 
+class BatchProgress:
+    """
+    Helper for batch processing with timing and ETA prediction.
+
+    Usage:
+        progress = BatchProgress(total_items=100, batch_size=10, label="articles")
+        for batch_num, batch in progress.iterate(items):
+            progress.start_batch()
+            # ... process batch ...
+            progress.end_batch(success_count, error_count)
+        progress.summary()
+    """
+
+    def __init__(self, total_items: int, batch_size: int = 10, label: str = "items"):
+        self.total_items = total_items
+        self.batch_size = batch_size
+        self.label = label
+        self.num_batches = (total_items + batch_size - 1) // batch_size
+        self.batch_times: list[float] = []
+        self.current_batch_start: float = 0
+        self.current_batch_num: int = 0
+        self.total_processed: int = 0
+        self.total_errors: int = 0
+
+    def _format_duration(self, seconds: float) -> str:
+        """Format seconds into human-readable duration."""
+        if seconds < 60:
+            return f"{seconds:.1f}s"
+        elif seconds < 3600:
+            mins = int(seconds // 60)
+            secs = seconds % 60
+            return f"{mins}m {secs:.0f}s"
+        else:
+            hours = int(seconds // 3600)
+            mins = int((seconds % 3600) // 60)
+            return f"{hours}h {mins}m"
+
+    def _get_eta(self) -> str:
+        """Calculate estimated time remaining based on average batch time."""
+        if not self.batch_times:
+            return ""
+        avg_time = sum(self.batch_times) / len(self.batch_times)
+        remaining_batches = self.num_batches - self.current_batch_num
+        eta_seconds = avg_time * remaining_batches
+        if eta_seconds < 1:
+            return ""
+        return f"~{self._format_duration(eta_seconds)} remaining"
+
+    def iterate(self, items: list):
+        """Yield (batch_num, batch) tuples for iteration."""
+        for batch_num in range(self.num_batches):
+            start_idx = batch_num * self.batch_size
+            end_idx = min(start_idx + self.batch_size, self.total_items)
+            batch = items[start_idx:end_idx]
+            self.current_batch_num = batch_num + 1
+            yield batch_num, batch
+
+    def start_batch(self):
+        """Call before processing a batch."""
+        self.current_batch_start = time.time()
+        eta = self._get_eta()
+        eta_str = f" [{eta}]" if eta else ""
+        console.print(
+            f"    [dim]Batch {self.current_batch_num}/{self.num_batches}{eta_str}...[/dim]",
+            end=""
+        )
+
+    def end_batch(self, success_count: int = 0, error_count: int = 0, stopped: bool = False):
+        """Call after processing a batch. Returns the batch duration."""
+        duration = time.time() - self.current_batch_start
+        self.batch_times.append(duration)
+        self.total_processed += success_count
+        self.total_errors += error_count
+
+        duration_str = f"({self._format_duration(duration)})"
+
+        if stopped:
+            console.print(f" [dim]stopped {duration_str}[/dim]")
+        elif error_count == 0:
+            console.print(f" [green]done[/green] [dim]{duration_str}[/dim]")
+        else:
+            console.print(f" [yellow]done ({error_count} errors)[/yellow] [dim]{duration_str}[/dim]")
+
+        return duration
+
+    def summary(self, custom_message: str = None):
+        """Print final summary with total time."""
+        total_time = sum(self.batch_times)
+        if custom_message:
+            console.print(f"  [green]{custom_message}[/green] [dim]({self._format_duration(total_time)} total)[/dim]")
+        elif self.total_errors == 0:
+            console.print(f"  [green]Processed {self.total_processed} {self.label}[/green] [dim]({self._format_duration(total_time)} total)[/dim]")
+        else:
+            console.print(f"  [yellow]Processed {self.total_processed} {self.label} ({self.total_errors} errors)[/yellow] [dim]({self._format_duration(total_time)} total)[/dim]")
+
+
 # =============================================================================
 # CLEANUP HANDLING - Prevent orphaned gateway requests on cancel
 # =============================================================================
