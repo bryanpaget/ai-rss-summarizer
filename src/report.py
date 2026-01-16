@@ -177,7 +177,7 @@ def _run_verification_step(
             gaps["articles_needing_embedding"].append(article)
 
     # Check story embeddings (using shared service)
-    stories = storage.get_active_stories()
+    stories = storage.get_active_stories(limit=10000)
     for story in stories:
         if not embedding_service.get_embedding(story.id, "story"):
             gaps["stories_missing_embeddings"] += 1
@@ -341,7 +341,7 @@ def _run_pre_embedding_phase(
         console.print("  [dim]All insights already have embeddings[/dim]")
 
     # Embed stories
-    stories = storage.get_active_stories()
+    stories = storage.get_active_stories(limit=10000)
     stories_needing_embedding = [s for s in stories if not embedding_service.get_embedding(s.id, "story")]
 
     if stories_needing_embedding:
@@ -692,7 +692,7 @@ def _run_embedding_phase(
         console.print(f"  [green]Tagged {tagged} articles with trends[/green]")
 
     # Any new stories created during LLM phase need embeddings
-    stories = storage.get_active_stories()
+    stories = storage.get_active_stories(limit=10000)
     stories_needing_embedding = [s for s in stories if not embedding_service.get_embedding(s.id, "story")]
 
     if stories_needing_embedding:
