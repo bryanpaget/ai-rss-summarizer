@@ -209,48 +209,23 @@ def _run_verification_step(
     if total_gaps > 0:
         console.print(f"  [yellow]Found {total_gaps} gaps from previous runs:[/yellow]")
 
-        # Check if all article gaps are the same count (meaning same articles missing everything)
-        article_gaps = [
-            gaps["articles_missing_summary"],
-            gaps["articles_missing_trends"],
-            gaps["articles_missing_signals"],
-            gaps["articles_missing_embeddings"],
-        ]
-        all_same = len(set(article_gaps)) == 1 and article_gaps[0] > 0
+        def show_gap(label: str, total: int, samples: list = None) -> None:
+            if total > 0:
+                if limit > 0 and total > limit:
+                    console.print(f"    - {total} {label} [dim](processing {limit})[/dim]")
+                else:
+                    console.print(f"    - {total} {label}")
+                # Show unique examples (tracked via shown_titles set during collection)
+                if samples:
+                    for title in samples[:3]:
+                        console.print(f"        [dim]e.g. {title}[/dim]")
 
-        if all_same:
-            # Consolidate display - same articles missing everything
-            count = article_gaps[0]
-            if limit > 0 and count > limit:
-                console.print(f"    - {count} unprocessed articles (summaries, trends, signals, embeddings) [dim](processing {limit})[/dim]")
-            else:
-                console.print(f"    - {count} unprocessed articles (summaries, trends, signals, embeddings)")
-            # Show examples once
-            samples = gaps.get("sample_missing_summary", [])
-            for title in samples[:3]:
-                console.print(f"        [dim]e.g. {title}[/dim]")
-        else:
-            # Different counts - show individually
-            def show_gap(label: str, total: int, samples: list = None) -> None:
-                if total > 0:
-                    if limit > 0 and total > limit:
-                        console.print(f"    - {total} {label} [dim](processing {limit})[/dim]")
-                    else:
-                        console.print(f"    - {total} {label}")
-                    if samples:
-                        for title in samples[:3]:
-                            console.print(f"        [dim]e.g. {title}[/dim]")
-
-            show_gap("articles missing summaries", gaps["articles_missing_summary"], gaps.get("sample_missing_summary"))
-            show_gap("articles missing trend tags", gaps["articles_missing_trends"], gaps.get("sample_missing_trends"))
-            show_gap("articles missing signal tags", gaps["articles_missing_signals"], gaps.get("sample_missing_signals"))
-            show_gap("articles missing embeddings", gaps["articles_missing_embeddings"], gaps.get("sample_missing_embeddings"))
-
-        # Always show story/insight gaps separately
-        if gaps["stories_missing_embeddings"] > 0:
-            console.print(f"    - {gaps['stories_missing_embeddings']} stories missing embeddings")
-        if gaps["insights_missing_embeddings"] > 0:
-            console.print(f"    - {gaps['insights_missing_embeddings']} insights missing embeddings")
+        show_gap("articles missing summaries", gaps["articles_missing_summary"], gaps.get("sample_missing_summary"))
+        show_gap("articles missing trend tags", gaps["articles_missing_trends"], gaps.get("sample_missing_trends"))
+        show_gap("articles missing signal tags", gaps["articles_missing_signals"], gaps.get("sample_missing_signals"))
+        show_gap("articles missing embeddings", gaps["articles_missing_embeddings"], gaps.get("sample_missing_embeddings"))
+        show_gap("stories missing embeddings", gaps["stories_missing_embeddings"])
+        show_gap("insights missing embeddings", gaps["insights_missing_embeddings"])
 
         if limit > 0:
             console.print(f"  [dim]Limited to {limit} items per step[/dim]")
