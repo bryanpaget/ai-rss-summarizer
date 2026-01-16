@@ -13,8 +13,6 @@ https://rss.nytimes.com/services/xml/rss/nyt/World.xml
 # Science
 https://www.sciencedaily.com/rss/all.xml
 
-https://example.com/feed1.xml
-https://example.com/feed2.xml
 https://techcrunch.com/category/artificial-intelligence/feed/
 https://www.wired.com/feed/category/science/latest/rss
 https://www.nasa.gov/rss/breaking_news.rss
