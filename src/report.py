@@ -119,7 +119,7 @@ def _run_verification_step(
     kb: KnowledgeBase,
     articles: list[Article],
     embedding_service: EmbeddingService,
-    max_per_step: int = 0,
+    limit: int = 0,
     min_content_length: int = 0,
 ) -> dict:
     """
@@ -204,8 +204,8 @@ def _run_verification_step(
 
         def show_gap(label: str, total: int, samples: list = None) -> None:
             if total > 0:
-                if max_per_step > 0 and total > max_per_step:
-                    console.print(f"    - {total} {label} [dim](processing {max_per_step})[/dim]")
+                if limit > 0 and total > limit:
+                    console.print(f"    - {total} {label} [dim](processing {limit})[/dim]")
                 else:
                     console.print(f"    - {total} {label}")
                 # Show sample titles for visibility
@@ -220,8 +220,8 @@ def _run_verification_step(
         show_gap("stories missing embeddings", gaps["stories_missing_embeddings"])
         show_gap("insights missing embeddings", gaps["insights_missing_embeddings"])
 
-        if max_per_step > 0:
-            console.print(f"  [dim]Limited to {max_per_step} items per step[/dim]")
+        if limit > 0:
+            console.print(f"  [dim]Limited to {limit} items per step[/dim]")
         else:
             console.print("  [dim]These will be filled during processing[/dim]")
     else:
@@ -240,7 +240,7 @@ def _run_pre_embedding_phase(
     kb: KnowledgeBase,
     embedding_service: EmbeddingService,
     stats: dict,
-    max_per_step: int = 0,
+    limit: int = 0,
 ) -> None:
     """
     Step 2: Pre-embed existing stories and insights.
@@ -269,8 +269,8 @@ def _run_pre_embedding_phase(
     # Embed insights first (these are what detect_connections compares against)
     insights = kb.get_insights(limit=500)
     insights_needing_embedding = [i for i in insights if not embedding_service.get_embedding(i.id, "insight")]
-    if max_per_step > 0:
-        insights_needing_embedding = insights_needing_embedding[:max_per_step]
+    if limit > 0:
+        insights_needing_embedding = insights_needing_embedding[:limit]
 
     BATCH_SIZE = 10
 
@@ -314,8 +314,8 @@ def _run_pre_embedding_phase(
     # Embed stories
     stories = storage.get_active_stories(limit=200)
     stories_needing_embedding = [s for s in stories if not embedding_service.get_embedding(s.id, "story")]
-    if max_per_step > 0:
-        stories_needing_embedding = stories_needing_embedding[:max_per_step]
+    if limit > 0:
+        stories_needing_embedding = stories_needing_embedding[:limit]
 
     if stories_needing_embedding:
         total = len(stories_needing_embedding)
@@ -368,7 +368,7 @@ def _run_llm_phase(
     provider,
     stats: dict,
     embedding_service: EmbeddingService,
-    max_per_step: int = 0,
+    limit: int = 0,
 ) -> list[dict]:
     """
     Step 3: LLM processing for all articles.
@@ -584,7 +584,7 @@ def _run_embedding_phase(
     kb: KnowledgeBase,
     stats: dict,
     embedding_service: EmbeddingService,
-    max_per_step: int = 0,
+    limit: int = 0,
 ) -> int:
     """
     Step 4: Generate embeddings for new articles using semantic cards.
@@ -652,8 +652,8 @@ def _run_embedding_phase(
     # Any new stories created during LLM phase need embeddings
     stories = storage.get_active_stories(limit=200)
     stories_needing_embedding = [s for s in stories if not embedding_service.get_embedding(s.id, "story")]
-    if max_per_step > 0:
-        stories_needing_embedding = stories_needing_embedding[:max_per_step]
+    if limit > 0:
+        stories_needing_embedding = stories_needing_embedding[:limit]
 
     if stories_needing_embedding:
         total = len(stories_needing_embedding)
@@ -914,7 +914,7 @@ def _run_connection_detection(
     provider,
     stats: dict,
     embedding_service: EmbeddingService,
-    max_per_step: int = 0,
+    limit: int = 0,
 ) -> None:
     """
     Detect connections using cluster-based analysis.
@@ -974,8 +974,8 @@ def _run_connection_detection(
     console.print(f"  [dim]Clustering insights by similarity...[/dim]")
 
     # Get insights with embeddings for clustering
-    # Apply limit to insights if max_per_step is set
-    insight_limit = max_per_step * 10 if max_per_step > 0 else 500
+    # Apply limit to insights if limit is set
+    insight_limit = limit * 10 if limit > 0 else 500
     all_kb_insights = kb.get_insights(limit=insight_limit)
     clusters = _cluster_insights_by_similarity(
         all_kb_insights,
@@ -988,10 +988,10 @@ def _run_connection_detection(
         console.print()
         return
 
-    # Apply limit to clusters if max_per_step is set
+    # Apply limit to clusters if limit is set
     total_clusters = len(clusters)
-    if max_per_step > 0 and len(clusters) > max_per_step:
-        clusters = clusters[:max_per_step]
+    if limit > 0 and len(clusters) > limit:
+        clusters = clusters[:limit]
         console.print(f"  [green]Found {total_clusters} clusters, analyzing {len(clusters)} (limited by -m)[/green]")
     else:
         console.print(f"  [green]Found {len(clusters)} clusters[/green]")
@@ -1040,7 +1040,7 @@ def _run_story_matching(
     provider,
     stats: dict,
     embedding_service: EmbeddingService,
-    max_per_step: int = 0,
+    limit: int = 0,
 ) -> None:
     """
     Step 5: Match articles to stories using embeddings.
@@ -1245,7 +1245,7 @@ def generate_report(
 
     # Warn about large processing jobs and suggest limit option
     LARGE_BATCH_THRESHOLD = 20
-    if len(articles) > LARGE_BATCH_THRESHOLD and max_per_step == 0:
+    if len(articles) > LARGE_BATCH_THRESHOLD and limit == 0:
         console.print()
         console.print(f"[yellow]Warning: {len(articles)} articles to process - this could take a while[/yellow]")
         console.print("[yellow]Tip: Use 'rss report -m 5' to process 5 articles before generating the briefing[/yellow]")
@@ -1254,42 +1254,42 @@ def generate_report(
 
     console.print()
 
-    # Apply max_per_step limit to articles if set
-    if max_per_step > 0:
-        articles = articles[:max_per_step]
+    # Apply limit limit to articles if set
+    if limit > 0:
+        articles = articles[:limit]
 
     # Track total pipeline time
     pipeline_start = time.time()
 
     # Step 1: Verification (Self-Healing)
     step_start = time.time()
-    gaps = _run_verification_step(storage, kb, articles, embedding_service, max_per_step, MIN_CONTENT_LENGTH)
+    gaps = _run_verification_step(storage, kb, articles, embedding_service, limit, MIN_CONTENT_LENGTH)
     console.print(f"  [dim]Step 1 completed in {time.time() - step_start:.1f}s[/dim]\n")
 
     # Step 2: Pre-embed existing stories/insights
     # This MUST happen before LLM phase so detect_connections has embeddings to compare against
     step_start = time.time()
-    _run_pre_embedding_phase(storage, kb, embedding_service, stats, max_per_step)
+    _run_pre_embedding_phase(storage, kb, embedding_service, stats, limit)
     console.print(f"  [dim]Step 2 completed in {time.time() - step_start:.1f}s[/dim]\n")
 
     # Step 3: LLM Phase (now has embeddings to compare against)
     step_start = time.time()
-    processed_articles = _run_llm_phase(articles, storage, kb, provider, stats, embedding_service, max_per_step)
+    processed_articles = _run_llm_phase(articles, storage, kb, provider, stats, embedding_service, limit)
     console.print(f"  [dim]Step 3 completed in {time.time() - step_start:.1f}s[/dim]\n")
 
     # Step 4: Embedding Phase (for new articles)
     step_start = time.time()
-    _run_embedding_phase(articles, storage, kb, stats, embedding_service, max_per_step)
+    _run_embedding_phase(articles, storage, kb, stats, embedding_service, limit)
     console.print(f"  [dim]Step 4 completed in {time.time() - step_start:.1f}s[/dim]\n")
 
     # Step 4.5: Batched Connection Detection (AFTER embeddings, no model switching)
     step_start = time.time()
-    _run_connection_detection(processed_articles, kb, provider, stats, embedding_service, max_per_step)
+    _run_connection_detection(processed_articles, kb, provider, stats, embedding_service, limit)
     console.print(f"  [dim]Step 4.5 completed in {time.time() - step_start:.1f}s[/dim]\n")
 
     # Step 5: Story Matching
     step_start = time.time()
-    _run_story_matching(articles, storage, kb, provider, stats, embedding_service, max_per_step)
+    _run_story_matching(articles, storage, kb, provider, stats, embedding_service, limit)
     console.print(f"  [dim]Step 5 completed in {time.time() - step_start:.1f}s[/dim]\n")
 
     # Show total pipeline time
