@@ -464,20 +464,8 @@ def _run_llm_phase(
         console.print("  [dim]- Tagging...[/dim]")
         tag_output = []
 
-        # Trend tags (embedding-based categorization)
-        if not article.trend_tags:
-            try:
-                tags = analyze_article(article, embedding_service=embedding_service)
-                storage.update_trends(article.id, tags)
-                article.trend_tags = tags
-                if tags:
-                    tag_list = [t.strip() for t in tags.split(",")]
-                    tag_output.append(f"trends: {', '.join(tag_list)}")
-            except Exception as e:
-                error_msg = f"Trend tagging failed: {e}"
-                article_errors.append(error_msg)
-                console.print(f"    [red]ERROR: {error_msg}[/red]")
-                stats["errors"] += 1
+        # NOTE: Trend tags (embedding-based) moved to _run_embedding_phase
+        # to avoid model switching during LLM phase
 
         # Signal tags (LLM-based)
         if not article.signal_tags:
