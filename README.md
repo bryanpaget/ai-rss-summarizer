@@ -247,6 +247,22 @@ pip install -e ".[dev]"
 pytest
 ```
 
+### Architectural Tests
+
+The pipeline enforces strict phase isolation to prevent model switching:
+
+```bash
+# Run architectural tests
+pytest tests/test_pipeline_architecture.py -v -s
+```
+
+These tests enforce:
+- **LLM phase has 0 embedding calls** - embedding-based categorization moved to embedding phase
+- **LLM phase has 0 model switches** - no LLM->EMBED->LLM patterns
+- **1 LLM call per article** - consolidated extraction (insights + triples in one call)
+
+Tests always print the full call log showing which function made each call, making violations easy to diagnose.
+
 ### Code Style
 
 ```bash
