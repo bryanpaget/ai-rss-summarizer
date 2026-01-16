@@ -1134,7 +1134,12 @@ def extract_insights_from_article(
     constitution_context = get_constitution_context()
 
     # Prepare extraction prompt
-    prompt = f"""{constitution_context}Extract ALL key learnings from this article. The number of insights depends on content density.
+    # CRITICAL: Constitution is for HOW to analyze, not WHAT to extract
+    prompt = f"""{constitution_context}
+=== ARTICLE TO ANALYZE ===
+Extract insights from ONLY the article content below. Do NOT include the analysis principles above as insights - they are instructions for HOW to analyze, not content to extract.
+
+Extract ALL key learnings from this article. The number of insights depends on content density.
 
 For each insight, provide:
 1. The insight text (one clear sentence)
