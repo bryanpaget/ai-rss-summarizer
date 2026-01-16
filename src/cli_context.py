@@ -782,18 +782,25 @@ def setup_wizard():
         profile.watching = list(set(profile.watching + selected_topics))
         store.save_profile(profile)
 
+    # Actually add feeds to config
+    feeds_added = 0
+    if selected_feeds:
+        feeds_added = _add_feeds_to_config(selected_feeds)
+
     # Show final success
     console.print()
     console.print(Panel("[bold green]Setup Complete![/bold green]", style="green"))
+    console.print()
 
-    if selected_feeds:
-        console.print()
-        console.print("[yellow]To subscribe to your selected feeds, run:[/yellow]")
-        for feed in selected_feeds:
-            console.print(f"  rss feed add \"{feed['url']}\"")
+    if selected_topics:
+        console.print(f"[green]Added {len(selected_topics)} topic(s) to your interests[/green]")
+    if feeds_added:
+        console.print(f"[green]Added {feeds_added} feed(s) to your subscriptions[/green]")
+    if selected_feeds and feeds_added < len(selected_feeds):
+        console.print(f"[dim]({len(selected_feeds) - feeds_added} feed(s) already existed)[/dim]")
 
     console.print()
-    console.print("[dim]Your briefings will now be personalized based on these interests.[/dim]")
+    console.print("[dim]Your briefings will now be personalized. Run 'rss report' to see them.[/dim]")
     _show_cli_help()
 
 
