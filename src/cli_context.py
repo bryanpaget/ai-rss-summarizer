@@ -1,6 +1,7 @@
 """CLI commands for user context management."""
 
 import uuid
+from pathlib import Path
 from typing import Optional
 
 import typer
@@ -16,6 +17,34 @@ except ImportError:
 
 from .knowledge import KnowledgeBase, UserContext
 from .user_context import UserContextStore
+
+
+def _add_feeds_to_config(feeds: list, feeds_file: str = "config/feeds.txt") -> int:
+    """Add feeds to the config file. Returns count of newly added feeds."""
+    feeds_path = Path(feeds_file)
+
+    # Create file if it doesn't exist
+    if not feeds_path.exists():
+        feeds_path.parent.mkdir(parents=True, exist_ok=True)
+        feeds_path.touch()
+
+    # Load existing feeds
+    existing = set()
+    if feeds_path.exists():
+        with open(feeds_path) as f:
+            existing = {line.strip() for line in f if line.strip() and not line.startswith("#")}
+
+    # Add new feeds
+    added = 0
+    with open(feeds_path, "a") as f:
+        for feed in feeds:
+            url = feed["url"]
+            if url not in existing:
+                f.write(f"\n{url}")
+                existing.add(url)
+                added += 1
+
+    return added
 
 app = typer.Typer(
     name="context",
