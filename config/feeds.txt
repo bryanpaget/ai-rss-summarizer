@@ -26,3 +26,7 @@ https://fivethirtyeight.com/features/feed/
 https://www.politico.com/rss/politicopulse.xml
 https://thehill.com/rss/syndication/all
 https://www.realclearpolitics.com/index.xml
+https://www.pcgamer.com/rss
+https://www.rockpapershotgun.com/feed
+https://www.simplyrecipes.com/rss
+https://www.seriouseats.com/rss
