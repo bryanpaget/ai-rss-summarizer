@@ -973,9 +973,10 @@ def _run_connection_detection(
     # =========================================================================
     console.print(f"  [dim]Clustering insights by similarity...[/dim]")
 
-    # Only cluster THIS SESSION's insights - limit is enforced upstream by limiting articles
+    # Cluster ALL historical insights (fast FAISS math)
+    all_kb_insights = kb.get_insights(limit=500)
     clusters = _cluster_insights_by_similarity(
-        all_insights,
+        all_kb_insights,
         embedding_service,
         similarity_threshold=0.75,
     )
@@ -985,7 +986,13 @@ def _run_connection_detection(
         console.print()
         return
 
-    console.print(f"  [green]Found {len(clusters)} clusters[/green]")
+    # Limit how many clusters we ANALYZE (the expensive LLM part)
+    total_clusters = len(clusters)
+    if limit > 0 and total_clusters > limit:
+        clusters = clusters[:limit]
+        console.print(f"  [green]Found {total_clusters} clusters, analyzing {limit}[/green]")
+    else:
+        console.print(f"  [green]Found {total_clusters} clusters[/green]")
 
     # =========================================================================
     # PHASE 3: Analyze each cluster (TEXT MODEL - O(clusters) calls)
