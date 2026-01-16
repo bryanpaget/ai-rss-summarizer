@@ -210,12 +210,12 @@ def _register_cleanup():
 # =============================================================================
 
 def _make_progress_bar(completed: int, total: int, width: int = 20) -> str:
-    """Create a text-based progress bar."""
+    """Create a text-based progress bar using ASCII characters for Windows compatibility."""
     if total == 0:
-        return "[dim]" + "░" * width + "[/dim]"
+        return "[dim]" + "-" * width + "[/dim]"
     ratio = min(completed / total, 1.0)
     filled = int(ratio * width)
-    return "[green]" + "█" * filled + "[/green][dim]" + "░" * (width - filled) + "[/dim]"
+    return "[green]" + "#" * filled + "[/green][dim]" + "-" * (width - filled) + "[/dim]"
 
 
 def _run_verification_step(
