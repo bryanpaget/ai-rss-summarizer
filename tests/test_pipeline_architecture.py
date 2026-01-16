@@ -1,20 +1,22 @@
 """Tests for pipeline architecture invariants.
 
 SIMPLE APPROACH:
-1. Global tracker logs every LLM and embedding call
+1. Global tracker logs every LLM and embedding call WITH CALLER INFO
 2. Run the full pipeline
-3. Parse the log and validate:
+3. ALWAYS print the log (pass or fail) for visibility
+4. Validate:
    - Model switches should be 2-3 MAX (embed -> llm -> embed)
    - No back-and-forth within a logical phase
 """
 
 import pytest
+import inspect
 from unittest.mock import MagicMock, patch
 from datetime import datetime
 
 
 # =============================================================================
-# Global Call Logger
+# Global Call Logger with Caller Tracking
 # =============================================================================
 
 
@@ -22,9 +24,12 @@ class PipelineCallLogger:
     """
     Global logger for all LLM and embedding calls.
 
-    Logs format: [(timestamp, call_type, method_name, context), ...]
-
-    At end of test, parse to validate architectural rules.
+    Each log entry includes:
+    - timestamp
+    - call_type (LLM or EMBED)
+    - method_name
+    - caller function name and file
+    - context (first N chars of input)
     """
 
     def __init__(self):
@@ -32,14 +37,32 @@ class PipelineCallLogger:
         self.enabled = True
 
     def log(self, call_type: str, method: str, context: str = ""):
-        """Log a call. call_type is 'LLM' or 'EMBED'."""
-        if self.enabled:
-            self.calls.append({
-                "time": datetime.now().isoformat(),
-                "type": call_type,
-                "method": method,
-                "context": context,
-            })
+        """Log a call with caller info."""
+        if not self.enabled:
+            return
+
+        # Get caller info - walk up stack to find non-mock caller
+        caller_info = "unknown"
+        for frame_info in inspect.stack():
+            # Skip mock internals, this file, and standard library
+            filename = frame_info.filename
+            if "unittest" in filename or "mock" in filename:
+                continue
+            if "test_pipeline_architecture" in filename:
+                continue
+            if "site-packages" in filename:
+                continue
+            # Found a real caller
+            caller_info = f"{frame_info.function}() in {filename.split('/')[-1].split(chr(92))[-1]}:{frame_info.lineno}"
+            break
+
+        self.calls.append({
+            "time": datetime.now().strftime("%H:%M:%S.%f")[:-3],
+            "type": call_type,
+            "method": method,
+            "caller": caller_info,
+            "context": context[:60] + "..." if len(context) > 60 else context,
+        })
 
     def clear(self):
         """Clear all logged calls."""
@@ -50,29 +73,16 @@ class PipelineCallLogger:
         return [c["type"] for c in self.calls]
 
     def count_switches(self) -> int:
-        """
-        Count number of model switches (LLM->EMBED or EMBED->LLM transitions).
-
-        A healthy pipeline has exactly 2 switches:
-        - EMBED (pre-embed phase)
-        - -> LLM (llm phase)
-        - -> EMBED (post-embed phase)
-        """
+        """Count model switches (LLM->EMBED or EMBED->LLM transitions)."""
         seq = self.get_sequence()
         if len(seq) < 2:
             return 0
-
-        switches = 0
-        for i in range(1, len(seq)):
-            if seq[i] != seq[i-1]:
-                switches += 1
-        return switches
+        return sum(1 for i in range(1, len(seq)) if seq[i] != seq[i-1])
 
     def get_switch_points(self) -> list[dict]:
         """Get details about where switches happen."""
         seq = self.get_sequence()
         switch_points = []
-
         for i in range(1, len(seq)):
             if seq[i] != seq[i-1]:
                 switch_points.append({
@@ -92,86 +102,74 @@ class PipelineCallLogger:
         return counts
 
     def get_full_report(self) -> str:
-        """Generate human-readable report."""
-        lines = ["=" * 60]
-        lines.append("PIPELINE CALL LOG REPORT")
-        lines.append("=" * 60)
+        """Generate human-readable report - ALWAYS CALL THIS."""
+        lines = []
+        lines.append("")
+        lines.append("=" * 80)
+        lines.append("PIPELINE CALL LOG")
+        lines.append("=" * 80)
 
         counts = self.count_by_type()
-        lines.append(f"Total LLM calls: {counts['LLM']}")
-        lines.append(f"Total EMBED calls: {counts['EMBED']}")
-        lines.append(f"Total switches: {self.count_switches()}")
+        switches = self.count_switches()
+        lines.append(f"SUMMARY: {counts['LLM']} LLM calls, {counts['EMBED']} EMBED calls, {switches} switches")
         lines.append("")
 
+        # Call sequence with callers
         lines.append("CALL SEQUENCE:")
+        lines.append("-" * 80)
         for i, c in enumerate(self.calls):
-            lines.append(f"  {i+1:3d}. [{c['type']:5s}] {c['method']} - {c['context']}")
+            type_marker = f"[{c['type']:5s}]"
+            lines.append(f"{i+1:3d}. {type_marker} {c['method']:15s} <- {c['caller']}")
+            if c['context']:
+                lines.append(f"     Context: {c['context']}")
 
-        lines.append("")
-        lines.append("SWITCH POINTS:")
-        for sp in self.get_switch_points():
-            lines.append(f"  Position {sp['position']}: {sp['from']} -> {sp['to']}")
-            lines.append(f"    Before: {sp['from_call']['method']}")
-            lines.append(f"    After:  {sp['to_call']['method']}")
+        # Switch points
+        if switches > 0:
+            lines.append("")
+            lines.append("SWITCH POINTS (model changes):")
+            lines.append("-" * 80)
+            for sp in self.get_switch_points():
+                lines.append(f"  #{sp['position']}: {sp['from']} -> {sp['to']}")
+                lines.append(f"       Before: {sp['from_call']['method']} <- {sp['from_call']['caller']}")
+                lines.append(f"       After:  {sp['to_call']['method']} <- {sp['to_call']['caller']}")
 
-        lines.append("=" * 60)
+        lines.append("=" * 80)
         return "\n".join(lines)
 
 
-# Global instance
-_logger = PipelineCallLogger()
-
-
-def get_logger() -> PipelineCallLogger:
-    """Get the global pipeline call logger."""
-    return _logger
-
-
-# =============================================================================
-# Instrumented Mocks
-# =============================================================================
-
-
 def create_logging_provider(logger: PipelineCallLogger):
-    """Create an LLM provider that logs all calls."""
+    """Create an LLM provider that logs all calls with caller info."""
     provider = MagicMock()
     provider.name = "LoggingProvider"
 
     def log_summarize(prompt, max_length=None):
-        # Extract context from prompt
-        context = prompt[:80].replace("\n", " ") + "..."
-        logger.log("LLM", "summarize", context)
-        # Return valid JSON
+        logger.log("LLM", "summarize", prompt[:100].replace("\n", " "))
         return '[{"content": "Test insight", "type": "technical", "confidence": "high", "reason": "test", "entities": []}]'
 
     def log_generate(prompt, max_tokens=None):
-        context = prompt[:80].replace("\n", " ") + "..."
-        logger.log("LLM", "generate", context)
-        # Handle different prompt types
+        logger.log("LLM", "generate", prompt[:100].replace("\n", " "))
         if "chunk" in prompt.lower() or "divide" in prompt.lower():
             return '["chunk text here"]'
         return '[]'
 
     provider.summarize.side_effect = log_summarize
     provider.generate.side_effect = log_generate
-
     return provider
 
 
 def create_logging_embedding_service(logger: PipelineCallLogger):
-    """Create an embedding service that logs all calls."""
+    """Create an embedding service that logs all calls with caller info."""
     service = MagicMock()
 
     def log_embed_text(text):
-        context = (text[:50] + "...") if len(text) > 50 else text
-        logger.log("EMBED", "embed_text", context)
+        logger.log("EMBED", "embed_text", text[:80].replace("\n", " "))
         result = MagicMock()
         result.vector = [0.1] * 384
         return result
 
     def log_embed_story(story):
-        context = f"story:{story.id}" if hasattr(story, 'id') else str(story)[:30]
-        logger.log("EMBED", "embed_story", context)
+        ctx = f"story:{story.id}" if hasattr(story, 'id') else str(story)[:30]
+        logger.log("EMBED", "embed_story", ctx)
         result = MagicMock()
         result.vector = [0.1] * 384
         return result
@@ -180,11 +178,10 @@ def create_logging_embedding_service(logger: PipelineCallLogger):
     service.embed_story.side_effect = log_embed_story
     service.is_available.return_value = True
     service.get_provider_info.return_value = {"provider": "logging", "model": "test"}
-    service.get_embedding.return_value = None  # No cached embeddings
+    service.get_embedding.return_value = None
     service.save_embedding.return_value = None
     service.cosine_similarity.return_value = 0.5
     service.find_similar.return_value = []
-
     return service
 
 
@@ -193,7 +190,7 @@ def create_test_article(article_id: str = "test-1"):
     article = MagicMock()
     article.id = article_id
     article.title = f"Test Article {article_id}"
-    article.content = "This is test content. " * 20  # ~400 chars
+    article.content = "This is test content about AI and technology. " * 15
     article.summary = None
     article.trend_tags = None
     article.signal_tags = None
@@ -204,37 +201,32 @@ def create_test_article(article_id: str = "test-1"):
 
 
 # =============================================================================
-# ARCHITECTURE TESTS
+# ARCHITECTURE TESTS - Always print logs for visibility
 # =============================================================================
 
 
-class TestPipelineModelSwitching:
-    """Test that pipeline doesn't switch models excessively."""
+class TestPipelineArchitecture:
+    """
+    Tests for pipeline architectural invariants.
 
-    def test_max_two_switches_in_full_pipeline(self):
+    These tests ALWAYS print the call log so you can see exactly what happened.
+    """
+
+    def test_llm_phase_model_switches(self, capsys):
         """
-        RULE: Full pipeline should have at most 2-3 model switches.
+        TEST: LLM phase should have 0 model switches.
 
-        Expected pattern:
-        - Phase 2 (pre-embed): EMBED calls
-        - Phase 3 (LLM): LLM calls
-        - Phase 4 (embed): EMBED calls
-
-        That's 2 switches: EMBED->LLM and LLM->EMBED
-
-        This test WILL FAIL if current code interleaves calls.
+        If there are switches, embedding calls are happening during LLM phase.
+        ALWAYS prints the call log for visibility.
         """
         from src.report import _run_llm_phase
-        from src.knowledge import TripleExtractionResult
 
-        # Fresh logger
         logger = PipelineCallLogger()
         logger.clear()
 
         provider = create_logging_provider(logger)
         embedding_service = create_logging_embedding_service(logger)
 
-        # Setup mocks
         mock_kb = MagicMock()
         mock_kb.get_insights.return_value = []
         mock_kb.get_triples.return_value = []
@@ -260,10 +252,8 @@ class TestPipelineModelSwitching:
             "connections": 0, "errors": 0,
         }
 
-        # Run LLM phase with real function calls (not mocked)
         with patch('src.report.SignalTagger') as mock_tagger_class:
             mock_tagger_class.return_value = mock_tagger
-
             _run_llm_phase(
                 articles=articles,
                 storage=mock_storage,
@@ -274,27 +264,26 @@ class TestPipelineModelSwitching:
                 limit=0,
             )
 
-        # VALIDATE
-        switches = logger.count_switches()
+        # ALWAYS print the log
+        report = logger.get_full_report()
+        print(report)
 
-        # LLM phase should have 0 switches (all LLM or all nothing)
-        # If there are switches, embeddings are being called during LLM phase
+        # Validate
+        switches = logger.count_switches()
         if switches > 0:
-            report = logger.get_full_report()
             pytest.fail(
-                f"ARCHITECTURE VIOLATION: LLM phase had {switches} model switches!\n"
-                f"LLM phase should have ZERO switches (no embedding calls).\n\n"
-                f"{report}"
+                f"VIOLATION: LLM phase had {switches} model switches. "
+                f"Should be 0 (no embedding calls during LLM phase)."
             )
 
-    def test_llm_phase_no_embedding_calls(self):
+    def test_llm_phase_embedding_count(self, capsys):
         """
-        RULE: LLM phase must make ZERO embedding calls.
+        TEST: LLM phase must make ZERO embedding calls.
 
-        This test WILL FAIL because analyze_article() uses embeddings.
+        Current code VIOLATES this via analyze_article() which uses embeddings.
+        ALWAYS prints the call log for visibility.
         """
         from src.report import _run_llm_phase
-        from src.knowledge import TripleExtractionResult
 
         logger = PipelineCallLogger()
         logger.clear()
@@ -329,7 +318,6 @@ class TestPipelineModelSwitching:
 
         with patch('src.report.SignalTagger') as mock_tagger_class:
             mock_tagger_class.return_value = mock_tagger
-
             _run_llm_phase(
                 articles=articles,
                 storage=mock_storage,
@@ -340,32 +328,32 @@ class TestPipelineModelSwitching:
                 limit=0,
             )
 
-        # COUNT EMBEDDING CALLS
+        # ALWAYS print the log
+        report = logger.get_full_report()
+        print(report)
+
+        # Validate
         counts = logger.count_by_type()
         embed_calls = counts.get("EMBED", 0)
-
         if embed_calls > 0:
-            report = logger.get_full_report()
             pytest.fail(
-                f"ARCHITECTURE VIOLATION: LLM phase made {embed_calls} embedding calls!\n"
-                f"Expected: 0 embedding calls during LLM phase.\n\n"
-                f"{report}"
+                f"VIOLATION: LLM phase made {embed_calls} embedding calls. "
+                f"Should be 0."
             )
 
-    def test_one_llm_call_per_article(self):
+    def test_llm_calls_per_article(self, capsys):
         """
-        RULE: Each article should trigger exactly 1 consolidated LLM call.
+        TEST: Each article should trigger exactly 1 LLM call.
 
-        This test WILL FAIL because current code does:
-        - insights extraction (1 call)
-        - semantic chunking (1 call)
-        - triple extraction per chunk (N calls)
-        - signal tagging (1 call, mocked in this test)
+        Current code VIOLATES this with multiple calls per article:
+        - insights extraction
+        - semantic chunking
+        - triple extraction per chunk
+        - etc.
 
-        Should be: 1 call that returns summary + insights + triples + tags
+        ALWAYS prints the call log for visibility.
         """
         from src.report import _run_llm_phase
-        from src.knowledge import TripleExtractionResult
 
         logger = PipelineCallLogger()
         logger.clear()
@@ -401,7 +389,6 @@ class TestPipelineModelSwitching:
 
         with patch('src.report.SignalTagger') as mock_tagger_class:
             mock_tagger_class.return_value = mock_tagger
-
             _run_llm_phase(
                 articles=articles,
                 storage=mock_storage,
@@ -412,17 +399,18 @@ class TestPipelineModelSwitching:
                 limit=0,
             )
 
-        # COUNT LLM CALLS
+        # ALWAYS print the log
+        report = logger.get_full_report()
+        print(report)
+
+        # Validate
         counts = logger.count_by_type()
         llm_calls = counts.get("LLM", 0)
-        expected_calls = NUM_ARTICLES  # 1 per article
+        expected = NUM_ARTICLES
 
-        if llm_calls != expected_calls:
-            calls_per_article = llm_calls / NUM_ARTICLES
-            report = logger.get_full_report()
+        if llm_calls != expected:
+            per_article = llm_calls / NUM_ARTICLES if NUM_ARTICLES > 0 else 0
             pytest.fail(
-                f"ARCHITECTURE VIOLATION: Expected {expected_calls} LLM calls "
-                f"({NUM_ARTICLES} articles x 1 call each).\n"
-                f"Got {llm_calls} calls ({calls_per_article:.1f} per article).\n\n"
-                f"{report}"
+                f"VIOLATION: Expected {expected} LLM calls ({NUM_ARTICLES} articles x 1). "
+                f"Got {llm_calls} ({per_article:.1f} per article)."
             )
