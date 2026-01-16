@@ -2,12 +2,16 @@
   "role": null,
   "current_projects": [],
   "watching": [
-    "US Federal",
     "Analysis",
-    "AI & Machine Learning",
+    "United States",
+    "PC Gaming",
+    "Asia & Middle East",
+    "Europe",
+    "Global Headlines",
     "Recipes",
+    "AI & Machine Learning",
     "Software Development",
-    "PC Gaming"
+    "US Federal"
   ],
   "ignore": [],
   "pinned": [],
@@ -15,7 +19,7 @@
   "diversity_factor": 0.15,
   "personalization_strength": 0.8,
   "created_at": "2026-01-15T19:29:09.908659",
-  "last_updated": "2026-01-15T22:56:44.724872",
+  "last_updated": "2026-01-15T23:19:56.048898",
   "last_feedback_prompt": null,
   "_version": 1
 }

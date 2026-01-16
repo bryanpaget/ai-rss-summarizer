@@ -30,3 +30,15 @@ https://www.pcgamer.com/rss
 https://www.rockpapershotgun.com/feed
 https://www.simplyrecipes.com/rss
 https://www.seriouseats.com/rss
+https://feeds.bbci.co.uk/news/world/rss.xml
+https://www.aljazeera.com/xml/rss/all.xml
+https://www.theguardian.com/world/rss
+https://www.theatlantic.com/feed/channel/world/
+https://rss.nytimes.com/services/xml/rss/nyt/US.xml
+https://feeds.npr.org/1001/rss.xml
+https://www.aljazeera.com/xml/rss/middle-east.xml
+https://feeds.bbci.co.uk/news/world/asia/rss.xml
+https://www.scmp.com/rss/91/feed
+https://feeds.bbci.co.uk/news/world/europe/rss.xml
+https://rss.dw.com/rdf/rss-en-all
+https://www.thelocal.com/feed/
