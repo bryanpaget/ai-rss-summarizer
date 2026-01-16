@@ -1215,9 +1215,9 @@ def generate_report(
 
         # Try to run interactive setup wizard
         try:
-            from .cli_context import setup_wizard, QUESTIONARY_AVAILABLE
+            from .cli_context import run_setup_wizard_inline, QUESTIONARY_AVAILABLE
             if QUESTIONARY_AVAILABLE:
-                setup_wizard()
+                run_setup_wizard_inline(context_store)
                 # Reload profile after wizard completes
                 profile = context_store.load_profile()
                 console.print()
