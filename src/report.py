@@ -1148,6 +1148,7 @@ def generate_report(
     kb_path: str = "knowledge.db",
     feeds_file: str = "config/feeds.txt",
     limit: int = 0,  # UNIVERSAL limit for ALL steps (0=unlimited)
+    force_setup: bool = False,  # Force setup wizard to run
 ) -> dict:
     """
     Generate a comprehensive report with self-healing pipeline.
