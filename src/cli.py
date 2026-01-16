@@ -501,11 +501,10 @@ def report(
     from .report import generate_report
 
     generate_report(
-        limit=limit,
         skip_summarized=skip_summarized,
         db_path=db_path,
         kb_path=kb_path,
-        max_per_step=limit,  # UNIFIED: limit applies to ALL steps
+        limit=limit,  # UNIFIED: applies to ALL steps
     )
 
 
