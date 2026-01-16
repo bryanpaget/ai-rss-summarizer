@@ -255,8 +255,12 @@ def _run_pre_embedding_phase(
     This MUST run BEFORE the LLM phase so that detect_connections
     has embeddings to compare against when finding relationships.
 
+    Also initializes category embeddings for trend tagging (done once, stored in FAISS).
+
     NOTE: Model loading is handled by the gateway - no ensure_*_model() calls needed.
     """
+    from .trends import ensure_categories_initialized
+
     console.print("[bold]Step 2:[/bold] Pre-embedding existing content...")
 
     # Check if embedding service is available
@@ -272,6 +276,13 @@ def _run_pre_embedding_phase(
         console.print(f"  [green]Using {provider_info.get('provider', 'unknown')} ({model_name})[/green]")
     else:
         console.print(f"  [green]Using {provider_info.get('provider', 'unknown')}[/green]")
+
+    # Initialize category embeddings (seeded once, then loaded from FAISS)
+    console.print("  [dim]Initializing trend categories...[/dim]", end="")
+    if ensure_categories_initialized(embedding_service):
+        console.print(" [green]ready[/green]")
+    else:
+        console.print(" [yellow]failed (trend tagging will be limited)[/yellow]")
 
     # Embed insights first (these are what detect_connections compares against)
     insights = kb.get_insights()
