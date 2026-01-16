@@ -260,7 +260,11 @@ def _run_pre_embedding_phase(
         return
 
     provider_info = embedding_service.get_provider_info()
-    console.print(f"  [green]Using {provider_info.get('provider', 'unknown')} ({provider_info.get('model', 'unknown')})[/green]")
+    model_name = provider_info.get('model', '')
+    if model_name and model_name != 'unknown':
+        console.print(f"  [green]Using {provider_info.get('provider', 'unknown')} ({model_name})[/green]")
+    else:
+        console.print(f"  [green]Using {provider_info.get('provider', 'unknown')}[/green]")
 
     # Embed insights first (these are what detect_connections compares against)
     insights = kb.get_insights(limit=500)
