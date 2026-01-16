@@ -206,8 +206,17 @@ def _register_cleanup():
 
 
 # =============================================================================
-# STEP 1: VERIFICATION (Self-Healing)
+# STEP 1: VERIFICATION (Self-Healing) - Corpus State Snapshot
 # =============================================================================
+
+def _make_progress_bar(completed: int, total: int, width: int = 20) -> str:
+    """Create a text-based progress bar."""
+    if total == 0:
+        return "[dim]" + "░" * width + "[/dim]"
+    ratio = min(completed / total, 1.0)
+    filled = int(ratio * width)
+    return "[green]" + "█" * filled + "[/green][dim]" + "░" * (width - filled) + "[/dim]"
+
 
 def _run_verification_step(
     storage: Storage,
@@ -216,13 +225,20 @@ def _run_verification_step(
     embedding_service: EmbeddingService,
     limit: int = 0,
     min_content_length: int = 0,
+    new_article_ids: list[str] = None,
 ) -> dict:
     """
-    Step 1: Verify data completeness and report gaps.
+    Step 1: Corpus state snapshot with gap detection.
 
-    Detects missing data from interrupted runs so we can fill gaps.
-    Returns dict with counts of what needs to be done.
+    Shows:
+    - Total corpus state with completion percentages
+    - Separates NEW articles (just fetched) from EXISTING gaps (from previous runs)
+    - Progress bars for visual clarity
     """
+    if new_article_ids is None:
+        new_article_ids = []
+    new_ids_set = set(new_article_ids)
+
     gaps = {
         "articles_missing_summary": 0,
         "articles_missing_trends": 0,
@@ -230,105 +246,155 @@ def _run_verification_step(
         "articles_missing_embeddings": 0,
         "stories_missing_embeddings": 0,
         "insights_missing_embeddings": 0,
-        "articles_needing_llm": [],  # Articles that need LLM processing
-        "articles_needing_embedding": [],  # Articles that need embedding
-        # Sample titles for visibility
-        "sample_missing_summary": [],
-        "sample_missing_trends": [],
-        "sample_missing_signals": [],
-        "sample_missing_embeddings": [],
+        "articles_needing_llm": [],
+        "articles_needing_embedding": [],
+        # Separate new vs existing
+        "new_count": len(new_article_ids),
+        "existing_gaps_summary": 0,
+        "existing_gaps_trends": 0,
+        "existing_gaps_signals": 0,
+        "existing_gaps_embeddings": 0,
     }
 
-    console.print("[bold]Step 1:[/bold] Verifying data completeness...")
+    console.print("[bold]Step 1:[/bold] Corpus State Snapshot")
+    console.print()
 
-    # Count TRUE backlog from DB (not just the limited articles list)
-    # Use same min_content_length filter as processing so gaps only count processable items
-    all_unanalyzed = storage.get_unanalyzed_articles(exclude_spam=True, min_content_length=min_content_length)
+    # Get corpus-wide stats
+    # Total articles (all, including analyzed)
+    all_articles = storage.get_articles(limit=None)
+    total_corpus = len(all_articles)
 
-    # Track which titles have been shown as examples to avoid repeats
-    shown_titles: set[str] = set()
+    # Count excluded (suspected ads)
+    excluded_count = storage.count_spam_articles() if hasattr(storage, 'count_spam_articles') else 0
 
-    for article in all_unanalyzed:
-        if not article.summary:
-            gaps["articles_missing_summary"] += 1
-            if len(gaps["sample_missing_summary"]) < 3 and article.title not in shown_titles:
-                gaps["sample_missing_summary"].append(article.title)
-                shown_titles.add(article.title)
-        if not article.trend_tags:
-            gaps["articles_missing_trends"] += 1
-            if len(gaps["sample_missing_trends"]) < 3 and article.title not in shown_titles:
-                gaps["sample_missing_trends"].append(article.title)
-                shown_titles.add(article.title)
-        if not article.signal_tags:
-            gaps["articles_missing_signals"] += 1
-            if len(gaps["sample_missing_signals"]) < 3 and article.title not in shown_titles:
-                gaps["sample_missing_signals"].append(article.title)
-                shown_titles.add(article.title)
-        if storage.get_embedding(article.id) is None:
-            gaps["articles_missing_embeddings"] += 1
-            if len(gaps["sample_missing_embeddings"]) < 3 and article.title not in shown_titles:
-                gaps["sample_missing_embeddings"].append(article.title)
-                shown_titles.add(article.title)
+    # Count per-step completion for EXISTING articles (not new this session)
+    existing_articles = [a for a in all_articles if a.id not in new_ids_set]
+    existing_count = len(existing_articles)
 
-    # Track what will actually be processed (from limited list)
-    for article in articles:
-        needs_llm = not article.summary or not article.trend_tags or not article.signal_tags
-        needs_embedding = storage.get_embedding(article.id) is None
+    # Completion counts for existing corpus
+    existing_with_summary = sum(1 for a in existing_articles if a.summary)
+    existing_with_trends = sum(1 for a in existing_articles if a.trend_tags)
+    existing_with_signals = sum(1 for a in existing_articles if a.signal_tags)
+    existing_with_embeddings = sum(1 for a in existing_articles if storage.get_embedding(a.id) is not None)
 
-        if needs_llm:
-            gaps["articles_needing_llm"].append(article)
-        if needs_embedding:
-            gaps["articles_needing_embedding"].append(article)
+    # Fully processed = has all 4 things
+    fully_processed = sum(
+        1 for a in existing_articles
+        if a.summary and a.trend_tags and a.signal_tags and storage.get_embedding(a.id) is not None
+    )
 
-    # Check story embeddings (using shared service)
+    # Calculate gaps for EXISTING articles only (not new)
+    gaps["existing_gaps_summary"] = existing_count - existing_with_summary
+    gaps["existing_gaps_trends"] = existing_count - existing_with_trends
+    gaps["existing_gaps_signals"] = existing_count - existing_with_signals
+    gaps["existing_gaps_embeddings"] = existing_count - existing_with_embeddings
+
+    # For backward compatibility, set total gap counts
+    gaps["articles_missing_summary"] = gaps["existing_gaps_summary"]
+    gaps["articles_missing_trends"] = gaps["existing_gaps_trends"]
+    gaps["articles_missing_signals"] = gaps["existing_gaps_signals"]
+    gaps["articles_missing_embeddings"] = gaps["existing_gaps_embeddings"]
+
+    # Check story/insight embeddings
     stories = storage.get_active_stories()
     for story in stories:
         if not embedding_service.get_embedding(story.id, "story"):
             gaps["stories_missing_embeddings"] += 1
 
-    # Check insight embeddings
     insights = kb.get_insights()
     for insight in insights:
         if not embedding_service.get_embedding(insight.id, "insight"):
             gaps["insights_missing_embeddings"] += 1
 
-    # Report findings
-    total_gaps = (
-        gaps["articles_missing_summary"] +
-        gaps["articles_missing_trends"] +
-        gaps["articles_missing_signals"] +
-        gaps["articles_missing_embeddings"] +
-        gaps["stories_missing_embeddings"] +
-        gaps["insights_missing_embeddings"]
+    # Track what will actually be processed (from limited list)
+    for article in articles:
+        needs_llm = not article.summary or not article.trend_tags or not article.signal_tags
+        needs_embedding = storage.get_embedding(article.id) is None
+        if needs_llm:
+            gaps["articles_needing_llm"].append(article)
+        if needs_embedding:
+            gaps["articles_needing_embedding"].append(article)
+
+    # ==========================================================================
+    # Display corpus state snapshot
+    # ==========================================================================
+
+    # Header with total and excluded note
+    excluded_note = ""
+    if excluded_count > 0:
+        excluded_note = f" [dim](excludes {excluded_count} suspected ads - run 'rss ads' to review)[/dim]"
+    console.print(f"  [bold]EXISTING CORPUS[/bold] ({existing_count} articles){excluded_note}")
+
+    # Fully processed percentage
+    if existing_count > 0:
+        fully_pct = (fully_processed / existing_count) * 100
+        console.print(f"    Fully processed: {fully_processed:,} ({fully_pct:.0f}%)")
+    else:
+        console.print(f"    Fully processed: 0")
+
+    console.print()
+
+    # Per-step completion with aligned progress bars
+    console.print("    [bold]Per-step completion:[/bold]")
+
+    def show_step_progress(label: str, completed: int, total: int) -> None:
+        if total == 0:
+            pct_str = "  -"
+            count_str = "0/0"
+        else:
+            pct = (completed / total) * 100
+            pct_str = f"{pct:3.0f}%"
+            count_str = f"{completed:,}/{total:,}"
+        bar = _make_progress_bar(completed, total)
+        # Align: label (12 chars), bar (20 chars), count, percentage
+        console.print(f"      {label:<12} {bar}  {count_str:>13}  ({pct_str})")
+
+    show_step_progress("Summaries", existing_with_summary, existing_count)
+    show_step_progress("Trend tags", existing_with_trends, existing_count)
+    show_step_progress("Signal tags", existing_with_signals, existing_count)
+    show_step_progress("Embeddings", existing_with_embeddings, existing_count)
+
+    # Show gaps from previous runs (if any)
+    total_existing_gaps = (
+        gaps["existing_gaps_summary"] +
+        gaps["existing_gaps_trends"] +
+        gaps["existing_gaps_signals"] +
+        gaps["existing_gaps_embeddings"]
     )
 
-    if total_gaps > 0:
-        console.print(f"  [yellow]Found {total_gaps} gaps from previous runs:[/yellow]")
+    if total_existing_gaps > 0:
+        console.print()
+        console.print(f"    [yellow]Gaps to fill (from previous runs):[/yellow]")
+        if gaps["existing_gaps_summary"] > 0:
+            console.print(f"      - {gaps['existing_gaps_summary']} missing summaries")
+        if gaps["existing_gaps_trends"] > 0:
+            console.print(f"      - {gaps['existing_gaps_trends']} missing trend tags")
+        if gaps["existing_gaps_signals"] > 0:
+            console.print(f"      - {gaps['existing_gaps_signals']} missing signal tags")
+        if gaps["existing_gaps_embeddings"] > 0:
+            console.print(f"      - {gaps['existing_gaps_embeddings']} missing embeddings")
+        if gaps["stories_missing_embeddings"] > 0:
+            console.print(f"      - {gaps['stories_missing_embeddings']} stories missing embeddings")
+        if gaps["insights_missing_embeddings"] > 0:
+            console.print(f"      - {gaps['insights_missing_embeddings']} insights missing embeddings")
 
-        def show_gap(label: str, total: int, samples: list = None) -> None:
-            if total > 0:
-                if limit > 0 and total > limit:
-                    console.print(f"    - {total} {label} [dim](processing {limit})[/dim]")
-                else:
-                    console.print(f"    - {total} {label}")
-                # Show unique examples (tracked via shown_titles set during collection)
-                if samples:
-                    for title in samples[:3]:
-                        console.print(f"        [dim]e.g. {title}[/dim]")
-
-        show_gap("articles missing summaries", gaps["articles_missing_summary"], gaps.get("sample_missing_summary"))
-        show_gap("articles missing trend tags", gaps["articles_missing_trends"], gaps.get("sample_missing_trends"))
-        show_gap("articles missing signal tags", gaps["articles_missing_signals"], gaps.get("sample_missing_signals"))
-        show_gap("articles missing embeddings", gaps["articles_missing_embeddings"], gaps.get("sample_missing_embeddings"))
-        show_gap("stories missing embeddings", gaps["stories_missing_embeddings"])
-        show_gap("insights missing embeddings", gaps["insights_missing_embeddings"])
-
-        if limit > 0:
-            console.print(f"  [dim]Limited to {limit} items per step[/dim]")
-        else:
-            console.print("  [dim]These will be filled during processing[/dim]")
+    # New articles this session
+    console.print()
+    if len(new_article_ids) > 0:
+        console.print(f"  [bold]NEW THIS SESSION[/bold]: {len(new_article_ids)} articles fetched")
+        console.print(f"    [dim](Expected to need processing - not counted as gaps)[/dim]")
     else:
-        console.print("  [green]All data complete, no gaps found[/green]")
+        console.print(f"  [bold]NEW THIS SESSION[/bold]: No new articles")
+
+    # Overall processing score
+    console.print()
+    if existing_count > 0:
+        # Calculate total steps done vs total steps needed
+        # 4 steps per article: summary, trends, signals, embedding
+        total_steps = existing_count * 4
+        completed_steps = existing_with_summary + existing_with_trends + existing_with_signals + existing_with_embeddings
+        overall_pct = (completed_steps / total_steps) * 100
+        console.print(f"  [bold]OVERALL SCORE[/bold]: {overall_pct:.0f}% of processing complete on existing corpus")
 
     console.print()
     return gaps
