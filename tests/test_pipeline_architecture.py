@@ -589,9 +589,16 @@ class TestBatchProgressOutput:
 
         mock_storage = MagicMock()
         mock_storage.update_trends.return_value = None
+        mock_storage.get_active_stories.return_value = []
 
         mock_kb = MagicMock()
         mock_kb.get_insights.return_value = []
+
+        stats = {
+            "processed": 0, "insights": 0, "triples": 0,
+            "triples_new": 0, "triples_existing": 0,
+            "connections": 0, "errors": 0,
+        }
 
         # Run the embedding phase (which includes trend tagging)
         with patch('src.report.console', mock_console):
@@ -605,6 +612,8 @@ class TestBatchProgressOutput:
                     _run_embedding_phase(
                         articles=articles,
                         storage=mock_storage,
+                        kb=mock_kb,
+                        stats=stats,
                         embedding_service=mock_embedding_service,
                     )
 
