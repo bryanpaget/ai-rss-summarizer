@@ -1011,13 +1011,7 @@ def _run_connection_detection(
         console.print()
         return
 
-    # Limit how many clusters we ANALYZE (the expensive LLM part)
-    total_clusters = len(clusters)
-    if limit > 0 and total_clusters > limit:
-        clusters = clusters[:limit]
-        console.print(f"  [green]Found {total_clusters} clusters, analyzing {limit}[/green]")
-    else:
-        console.print(f"  [green]Found {total_clusters} clusters[/green]")
+    console.print(f"  [green]Found {len(clusters)} clusters[/green]")
 
     # =========================================================================
     # PHASE 3: Analyze each cluster (TEXT MODEL - O(clusters) calls)
