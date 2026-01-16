@@ -61,6 +61,9 @@ app.add_typer(stories_app, name="stories", help="Story management commands")
 # Register cross-source comparison commands
 app.add_typer(cross_source_app, name="sources", help="Cross-source comparison and diverse feeds")
 
+# Register daemon command for continuous foreground processing
+app.add_typer(daemon_app, name="daemon", help="Run continuous processing in foreground")
+
 
 def is_setup_complete() -> bool:
     """Check if LLM provider has been configured."""
