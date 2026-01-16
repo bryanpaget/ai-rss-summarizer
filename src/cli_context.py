@@ -598,7 +598,7 @@ def _run_tree_wizard() -> tuple[list, list]:
                 prefix = "[✓]" if is_selected else "[ ]"
                 choices.append(f"{prefix} {feed['name']}")
 
-            choices.append("─" * 30)
+            choices.append(questionary.Separator("─" * 30))
             choices.append("← Back to Subjects")
 
             # Use last_choice to keep cursor position
@@ -606,7 +606,7 @@ def _run_tree_wizard() -> tuple[list, list]:
             if 'last_feed_choice' in dir() and last_feed_choice:
                 # Find matching choice (accounting for changed checkbox)
                 for c in choices:
-                    if c[4:] == last_feed_choice[4:]:  # Compare names, not checkmarks
+                    if isinstance(c, str) and c[4:] == last_feed_choice[4:]:  # Compare names, not checkmarks
                         default_choice = c
                         break
 
@@ -621,9 +621,7 @@ def _run_tree_wizard() -> tuple[list, list]:
                 last_feed_choice = None
                 continue
 
-            if choice.startswith("─"):
-                continue
-            elif choice.startswith("← Back"):
+            if choice.startswith("← Back"):
                 level = "subjects"
                 last_feed_choice = None
             elif choice.startswith("["):
