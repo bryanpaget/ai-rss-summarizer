@@ -460,25 +460,14 @@ SETUP_CATEGORIES = {
 }
 
 
-def _show_current_selection(selected_feeds: list, selected_topics: list):
-    """Show a running tally of what's been selected."""
-    if not selected_feeds and not selected_topics:
-        return
-    console.print()
-    console.print("[bold cyan]Current Selection:[/bold cyan]")
+def _show_selection_summary(selected_feeds: list, selected_topics: list) -> str:
+    """Return a one-line summary of current selections."""
+    parts = []
     if selected_feeds:
-        console.print(f"  [green]Feeds ({len(selected_feeds)}):[/green]")
-        for feed in selected_feeds[-5:]:  # Show last 5
-            console.print(f"    - {feed['name']}")
-        if len(selected_feeds) > 5:
-            console.print(f"    [dim]... and {len(selected_feeds) - 5} more[/dim]")
+        parts.append(f"{len(selected_feeds)} feed(s)")
     if selected_topics:
-        console.print(f"  [green]Topics ({len(selected_topics)}):[/green]")
-        for topic in selected_topics[-3:]:  # Show last 3
-            console.print(f"    - {topic}")
-        if len(selected_topics) > 3:
-            console.print(f"    [dim]... and {len(selected_topics) - 3} more[/dim]")
-    console.print()
+        parts.append(f"{len(selected_topics)} topic(s)")
+    return ", ".join(parts) if parts else "nothing selected"
 
 
 def _show_cli_help():
@@ -490,6 +479,172 @@ def _show_cli_help():
     console.print("[dim]  rss feed add URL            - Add a custom feed[/dim]")
     console.print("[dim]  rss context setup           - Run this wizard again[/dim]")
     console.print()
+
+
+def _run_tree_wizard() -> tuple[list, list]:
+    """
+    Run the tree-navigation wizard.
+
+    Returns (selected_feeds, selected_topics).
+    User can navigate up/down the hierarchy freely.
+    """
+    selected_feeds = []  # list of {"name": ..., "url": ...}
+    selected_topics = []  # list of subject names
+
+    level = "categories"
+    current_category = None
+    current_subject = None
+
+    while True:
+        # Build header showing current path and selections
+        summary = _show_selection_summary(selected_feeds, selected_topics)
+
+        if level == "categories":
+            console.print()
+            console.print(f"[dim]Selected: {summary}[/dim]")
+            console.print("[bold]Categories[/bold] - Select to explore, or Done to finish")
+            console.print()
+
+            choices = list(FEED_TAXONOMY.keys())
+            choices.append("─" * 30)
+            choices.append("✓ Done - Review & Confirm")
+
+            choice = questionary.select(
+                "Navigate:",
+                choices=choices,
+            ).ask()
+
+            if choice is None:  # Ctrl+C or escape
+                if not selected_feeds and not selected_topics:
+                    return [], []
+                # Confirm cancel
+                if questionary.confirm("Cancel setup? Your selections will be lost.").ask():
+                    return [], []
+                continue
+
+            if choice.startswith("─"):
+                continue
+            elif choice.startswith("✓ Done"):
+                break  # Go to confirmation
+            else:
+                current_category = choice
+                level = "subjects"
+
+        elif level == "subjects":
+            console.print()
+            console.print(f"[dim]Selected: {summary}[/dim]")
+            console.print(f"[bold]{current_category}[/bold] > Select subject")
+            console.print()
+
+            subjects = list(FEED_TAXONOMY[current_category].keys())
+            choices = subjects.copy()
+            choices.append("─" * 30)
+            choices.append("← Back to Categories")
+
+            choice = questionary.select(
+                "Navigate:",
+                choices=choices,
+            ).ask()
+
+            if choice is None:
+                level = "categories"
+                continue
+
+            if choice.startswith("─"):
+                continue
+            elif choice.startswith("← Back"):
+                level = "categories"
+            else:
+                current_subject = choice
+                level = "feeds"
+
+        elif level == "feeds":
+            console.print()
+            console.print(f"[dim]Selected: {summary}[/dim]")
+            console.print(f"[bold]{current_category}[/bold] > [bold]{current_subject}[/bold]")
+            console.print()
+
+            feeds = FEED_TAXONOMY[current_category][current_subject]
+
+            # Build choices with checkmarks for already-selected
+            choices = []
+            for feed in feeds:
+                is_selected = any(f["url"] == feed["url"] for f in selected_feeds)
+                prefix = "[✓]" if is_selected else "[ ]"
+                choices.append(f"{prefix} {feed['name']}")
+
+            choices.append("─" * 30)
+
+            # Check if subject is already a topic
+            is_topic = current_subject in selected_topics
+            topic_prefix = "[✓]" if is_topic else "[+]"
+            choices.append(f"{topic_prefix} Add \"{current_subject}\" as topic")
+            choices.append("← Back to Subjects")
+
+            choice = questionary.select(
+                "Toggle selection:",
+                choices=choices,
+            ).ask()
+
+            if choice is None:
+                level = "subjects"
+                continue
+
+            if choice.startswith("─"):
+                continue
+            elif choice.startswith("← Back"):
+                level = "subjects"
+            elif "as topic" in choice:
+                # Toggle topic
+                if current_subject in selected_topics:
+                    selected_topics.remove(current_subject)
+                else:
+                    selected_topics.append(current_subject)
+            elif choice.startswith("["):
+                # Toggle feed
+                feed_name = choice[4:]  # Remove "[✓] " or "[ ] "
+                feed_data = next((f for f in feeds if f["name"] == feed_name), None)
+                if feed_data:
+                    # Check if already selected
+                    existing = next((f for f in selected_feeds if f["url"] == feed_data["url"]), None)
+                    if existing:
+                        selected_feeds.remove(existing)
+                    else:
+                        selected_feeds.append(feed_data)
+
+    # Final confirmation
+    if not selected_feeds and not selected_topics:
+        console.print()
+        console.print("[yellow]Nothing selected.[/yellow]")
+        if questionary.confirm("Go back and select something?", default=True).ask():
+            return _run_tree_wizard()  # Restart
+        return [], []
+
+    # Show final summary
+    console.print()
+    console.print(Panel("[bold]Review Your Selections[/bold]", style="blue"))
+    console.print()
+
+    if selected_topics:
+        console.print(f"[cyan]Topics ({len(selected_topics)}):[/cyan]")
+        for topic in selected_topics:
+            console.print(f"  • {topic}")
+        console.print()
+
+    if selected_feeds:
+        console.print(f"[cyan]Feeds ({len(selected_feeds)}):[/cyan]")
+        for feed in selected_feeds:
+            console.print(f"  • {feed['name']}")
+            console.print(f"    [dim]{feed['url']}[/dim]")
+        console.print()
+
+    confirm = questionary.confirm("Lock this in?", default=True).ask()
+    if not confirm:
+        if questionary.confirm("Go back and make changes?", default=True).ask():
+            return _run_tree_wizard()  # Restart with current selections preserved? No, restart fresh
+        return [], []
+
+    return selected_feeds, selected_topics
 
 
 def run_setup_wizard_inline(store: UserContextStore = None) -> bool:
