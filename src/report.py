@@ -657,6 +657,23 @@ def _run_embedding_phase(
         console.print(f"  [green]Embedded {embedded_count} articles[/green]")
         stats["embeddings_generated"] = embedded_count
 
+    # Trend tagging (embedding-based categorization)
+    # This belongs in embedding phase because it uses embeddings
+    needs_trends = [a for a in articles if not a.trend_tags]
+    if needs_trends:
+        console.print(f"  Tagging {len(needs_trends)} articles with trend categories...")
+        tagged = 0
+        for article in needs_trends:
+            try:
+                tags = analyze_article(article, embedding_service=embedding_service)
+                storage.update_trends(article.id, tags)
+                article.trend_tags = tags
+                tagged += 1
+            except Exception as e:
+                console.print(f"    [red]ERROR tagging {article.title[:30]}: {e}[/red]")
+                stats["errors"] += 1
+        console.print(f"  [green]Tagged {tagged} articles with trends[/green]")
+
     # Any new stories created during LLM phase need embeddings
     stories = storage.get_active_stories(limit=200)
     stories_needing_embedding = [s for s in stories if not embedding_service.get_embedding(s.id, "story")]
