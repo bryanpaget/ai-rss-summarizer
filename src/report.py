@@ -1102,6 +1102,7 @@ def _run_story_matching(
                 try:
                     clusterer.update_story_with_article(matched_story, article)
                     matched += 1
+                    operations += 1
                     console.print(f"      [cyan]-> Matched to: {matched_story.title}[/cyan]")
                 except Exception as e:
                     console.print(f"      [red]ERROR updating story: {e}[/red]")
@@ -1112,6 +1113,7 @@ def _run_story_matching(
                 try:
                     new_story = clusterer.create_new_story(article)
                     created += 1
+                    operations += 1
                     if new_story:
                         console.print(f"      [green]-> New story: {new_story.title}[/green]")
                 except Exception as e:
