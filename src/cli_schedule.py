@@ -445,3 +445,134 @@ def status():
 
         if config.get("enabled"):
             console.print("[dim]Config shows enabled, but cannot verify[/dim]")
+
+
+@app.command()
+def configure():
+    """
+    Interactive wizard to configure background scheduling.
+
+    Guides you through setting up automatic feed fetching with
+    step-by-step prompts.
+    """
+    console.print()
+    console.print(Panel("[bold]Schedule Configuration Wizard[/bold]", style="blue"))
+    console.print()
+
+    # Check current status
+    config = _load_schedule_config()
+    if config.get("enabled"):
+        mins = config.get("interval_minutes", 0)
+        if mins >= 1440:
+            current = f"{mins // 1440} day(s)"
+        elif mins >= 60:
+            current = f"{mins // 60} hour(s)"
+        else:
+            current = f"{mins} minute(s)"
+        console.print(f"[dim]Current: Enabled, running every {current}[/dim]")
+        console.print()
+
+    # Ask what they want to do
+    console.print("[bold]What would you like to do?[/bold]")
+    console.print()
+    console.print("  [cyan]1[/cyan] - Enable/update background fetching")
+    console.print("  [cyan]2[/cyan] - Disable background fetching")
+    console.print("  [cyan]3[/cyan] - View current status")
+    console.print("  [cyan]q[/cyan] - Cancel")
+    console.print()
+
+    try:
+        choice = typer.prompt("Enter choice", default="1")
+    except (KeyboardInterrupt, EOFError):
+        console.print("\n[dim]Cancelled[/dim]")
+        raise typer.Exit(0)
+
+    if choice.lower() == 'q':
+        console.print("[dim]Cancelled[/dim]")
+        raise typer.Exit(0)
+
+    if choice == '3':
+        status()
+        raise typer.Exit(0)
+
+    if choice == '2':
+        disable()
+        raise typer.Exit(0)
+
+    if choice != '1':
+        console.print(f"[yellow]Unknown choice: {choice}[/yellow]")
+        raise typer.Exit(1)
+
+    # Configure new schedule
+    console.print()
+    console.print("[bold]How often should feeds be fetched?[/bold]")
+    console.print()
+    console.print("  [cyan]1[/cyan] - Every 30 minutes (frequent updates)")
+    console.print("  [cyan]2[/cyan] - Every hour")
+    console.print("  [cyan]3[/cyan] - Every 6 hours")
+    console.print("  [cyan]4[/cyan] - Every 12 hours")
+    console.print("  [cyan]5[/cyan] - Once a day")
+    console.print("  [cyan]6[/cyan] - Every 3 days")
+    console.print("  [cyan]c[/cyan] - Custom interval")
+    console.print()
+
+    try:
+        freq_choice = typer.prompt("Enter choice", default="5")
+    except (KeyboardInterrupt, EOFError):
+        console.print("\n[dim]Cancelled[/dim]")
+        raise typer.Exit(0)
+
+    interval_map = {
+        '1': '30m',
+        '2': '1h',
+        '3': '6h',
+        '4': '12h',
+        '5': '1d',
+        '6': '3d',
+    }
+
+    if freq_choice.lower() == 'c':
+        console.print()
+        console.print("[dim]Enter interval like: 30m, 2h, 1d, 3d[/dim]")
+        try:
+            interval = typer.prompt("Custom interval")
+        except (KeyboardInterrupt, EOFError):
+            console.print("\n[dim]Cancelled[/dim]")
+            raise typer.Exit(0)
+    elif freq_choice in interval_map:
+        interval = interval_map[freq_choice]
+    else:
+        console.print(f"[yellow]Unknown choice: {freq_choice}[/yellow]")
+        raise typer.Exit(1)
+
+    # Validate interval
+    interval_minutes = _parse_interval(interval)
+    if interval_minutes is None:
+        console.print(f"[red]Invalid interval: {interval}[/red]")
+        raise typer.Exit(1)
+
+    # Confirm
+    console.print()
+    if interval_minutes >= 1440:
+        interval_desc = f"every {interval_minutes // 1440} day(s)"
+    elif interval_minutes >= 60:
+        interval_desc = f"every {interval_minutes // 60} hour(s)"
+    else:
+        interval_desc = f"every {interval_minutes} minute(s)"
+
+    console.print(f"[bold]Ready to enable background fetching {interval_desc}[/bold]")
+    console.print()
+
+    try:
+        confirm = typer.confirm("Proceed?", default=True)
+    except (KeyboardInterrupt, EOFError):
+        console.print("\n[dim]Cancelled[/dim]")
+        raise typer.Exit(0)
+
+    if not confirm:
+        console.print("[dim]Cancelled[/dim]")
+        raise typer.Exit(0)
+
+    # Enable with the chosen interval
+    console.print()
+    enable(every=interval)
