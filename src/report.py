@@ -1206,12 +1206,19 @@ def generate_report(
     context_store = UserContextStore()
     profile = context_store.load_profile()
     if force_setup or (not profile.watching and not profile.current_projects):
-        console.print(Panel(
-            "[yellow]No interests configured yet![/yellow]\n\n"
-            "Let's set up your interests for personalized briefings.",
-            title="[bold]First-Time Setup[/bold]",
-            style="yellow"
-        ))
+        if force_setup:
+            console.print(Panel(
+                "[cyan]Configure your interests and RSS feeds[/cyan]",
+                title="[bold]Setup Wizard[/bold]",
+                style="cyan"
+            ))
+        else:
+            console.print(Panel(
+                "[yellow]No interests configured yet![/yellow]\n\n"
+                "Let's set up your interests for personalized briefings.",
+                title="[bold]First-Time Setup[/bold]",
+                style="yellow"
+            ))
         console.print()
 
         # Try to run interactive setup wizard
