@@ -1507,7 +1507,8 @@ Section {chunk_idx + 1}/{len(chunks)}:
 
 Extract ALL factual relationships from this section. Be thorough - the number of triples depends entirely on the content density.
 
-IMPORTANT: Subjects and objects must be NAMED ENTITIES (people, companies, products, places, organizations) - NOT abstract concepts like 'critique', 'analysis', 'idea', 'dubbing', 'claim'. If a relationship doesn't involve named entities, skip it.
+IMPORTANT: Subjects and objects must be PROPER NOUNS - specific named people (e.g., "John Smith"), companies (e.g., "Google"), places (e.g., "Paris"), organizations (e.g., "UN").
+NEVER use generic nouns like 'woman', 'man', 'father', 'pigs', 'speech', 'article', 'analysis'. If you can't identify a specific name, skip the triple entirely.
 
 Common predicates:
 - developed_by, created_by, founded_by (attribution)
