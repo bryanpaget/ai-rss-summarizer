@@ -574,11 +574,6 @@ def _run_tree_wizard() -> tuple[list, list]:
                 choices.append(f"{prefix} {feed['name']}")
 
             choices.append("─" * 30)
-
-            # Check if subject is already a topic
-            is_topic = current_subject in selected_topics
-            topic_prefix = "[✓]" if is_topic else "[+]"
-            choices.append(f"{topic_prefix} Add \"{current_subject}\" as topic")
             choices.append("← Back to Subjects")
 
             choice = questionary.select(
@@ -594,23 +589,26 @@ def _run_tree_wizard() -> tuple[list, list]:
                 continue
             elif choice.startswith("← Back"):
                 level = "subjects"
-            elif "as topic" in choice:
-                # Toggle topic
-                if current_subject in selected_topics:
-                    selected_topics.remove(current_subject)
-                else:
-                    selected_topics.append(current_subject)
             elif choice.startswith("["):
-                # Toggle feed
+                # Toggle feed - also auto-add subject as topic
                 feed_name = choice[4:]  # Remove "[✓] " or "[ ] "
                 feed_data = next((f for f in feeds if f["name"] == feed_name), None)
                 if feed_data:
-                    # Check if already selected
                     existing = next((f for f in selected_feeds if f["url"] == feed_data["url"]), None)
                     if existing:
                         selected_feeds.remove(existing)
+                        # Remove topic if no more feeds from this subject
+                        remaining = [f for f in selected_feeds if any(
+                            f["url"] == src["url"]
+                            for src in FEED_TAXONOMY.get(current_category, {}).get(current_subject, [])
+                        )]
+                        if not remaining and current_subject in selected_topics:
+                            selected_topics.remove(current_subject)
                     else:
                         selected_feeds.append(feed_data)
+                        # Auto-add subject as topic
+                        if current_subject not in selected_topics:
+                            selected_topics.append(current_subject)
 
     # Final confirmation
     if not selected_feeds and not selected_topics:
