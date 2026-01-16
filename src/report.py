@@ -1070,8 +1070,12 @@ def _run_story_matching(
 
     matched = 0
     created = 0
+    operations = 0
 
     for article in articles:
+        if limit > 0 and operations >= limit:
+            console.print(f"  [dim]Stopped at {limit} story operations (limit reached)[/dim]")
+            break
         article_title = article.title if article.title else "Untitled"
         try:
             embedding = storage.get_embedding(article.id)
