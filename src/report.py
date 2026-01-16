@@ -1500,7 +1500,7 @@ def _show_final_report(
             skippable = score < 0.3
 
             prefix = "[dim]SKIP:[/dim] " if skippable else "  "
-            console.print(f"{prefix}{article.title[:70]}...")
+            console.print(f"{prefix}{article.title}")
     else:
         console.print("   [dim]No additional items.[/dim]")
     console.print()
