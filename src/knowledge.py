@@ -1293,6 +1293,18 @@ def _correct_inverted_predicate(subject: str, predicate: str, obj: str) -> tuple
     predicate_lower = predicate.lower().replace(" ", "_")
 
     if predicate_lower in passive_predicates:
+        # Role terms that indicate a person/people acting on something
+        role_terms = {
+            "co-founders", "co-founder", "founders", "founder",
+            "ceo", "cto", "cfo", "coo", "executives", "executive",
+            "researchers", "researcher", "scientists", "scientist",
+            "directors", "director", "engineers", "engineer"
+        }
+
+        # Check if subject is a role term (should be swapped)
+        if subject.lower() in role_terms:
+            return obj, predicate, subject
+
         # Check if subject looks like a person (capitalized words, no obvious company markers)
         subject_words = subject.split()
         looks_like_person = (
