@@ -633,7 +633,11 @@ def _run_embedding_phase(
             console.print(f"    [dim]Batch {batch_num + 1}/{num_batches} ({len(batch)} items)...[/dim]", end="")
 
             batch_errors = 0
+            limit_reached = False
             for article in batch:
+                if limit > 0 and embedded_count >= limit:
+                    limit_reached = True
+                    break
                 try:
                     semantic_card = _create_semantic_card(article)
                     result = embedding_service.embed_text(semantic_card)
@@ -644,7 +648,10 @@ def _run_embedding_phase(
                     stats["errors"] += 1
                     batch_errors += 1
 
-            if batch_errors == 0:
+            if limit_reached:
+                console.print(f" [dim]stopped (limit reached)[/dim]")
+                break
+            elif batch_errors == 0:
                 console.print(f" [green]done[/green]")
             else:
                 console.print(f" [yellow]done ({batch_errors} errors)[/yellow]")
