@@ -30,6 +30,7 @@ from .cli_schedule import app as schedule_app
 from .cli_context import app as context_app
 from .cli_stories import app as stories_app
 from .cli_cross_source import app as cross_source_app
+from .cli_daemon import app as daemon_app
 
 app = typer.Typer(
     name="rss",
