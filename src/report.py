@@ -482,7 +482,7 @@ def _run_llm_phase(
         else:
             existing = []
             if article.trend_tags:
-                existing.append(f"trends: {article.trend_tags[:40]}")
+                existing.append(f"trends: {article.trend_tags}")
             if article.signal_tags:
                 existing.append("signal: set")
             if existing:
