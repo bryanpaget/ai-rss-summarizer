@@ -2258,7 +2258,8 @@ Return ONLY valid JSON, no other text."""
 
         return CombinedExtractionOutput(
             insights=all_insights,
-            triples=all_triples,
+            new_triples=new_triples,
+            existing_triples=existing_triples,
             signal_tags=signal_tags,
             summary=result.summary,
             is_ad=result.is_ad,
