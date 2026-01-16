@@ -185,13 +185,13 @@ def _run_verification_step(
             gaps["articles_needing_embedding"].append(article)
 
     # Check story embeddings (using shared service)
-    stories = storage.get_active_stories(limit=10000)
+    stories = storage.get_active_stories()
     for story in stories:
         if not embedding_service.get_embedding(story.id, "story"):
             gaps["stories_missing_embeddings"] += 1
 
     # Check insight embeddings
-    insights = kb.get_insights(limit=10000)
+    insights = kb.get_insights()
     for insight in insights:
         if not embedding_service.get_embedding(insight.id, "insight"):
             gaps["insights_missing_embeddings"] += 1
