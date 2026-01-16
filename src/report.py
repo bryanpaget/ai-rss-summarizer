@@ -602,7 +602,11 @@ def _run_embedding_phase(
         return 0
 
     provider_info = embedding_service.get_provider_info()
-    console.print(f"  [green]Using {provider_info.get('provider', 'unknown')} ({provider_info.get('model', 'unknown')})[/green]")
+    model_name = provider_info.get('model', '')
+    if model_name and model_name != 'unknown':
+        console.print(f"  [green]Using {provider_info.get('provider', 'unknown')} ({model_name})[/green]")
+    else:
+        console.print(f"  [green]Using {provider_info.get('provider', 'unknown')}[/green]")
 
     # Filter to articles needing embeddings
     needs_embedding = [a for a in articles if storage.get_embedding(a.id) is None]
