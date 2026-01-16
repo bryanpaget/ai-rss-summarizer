@@ -1086,6 +1086,7 @@ def _run_story_matching(
                 try:
                     new_story = clusterer.create_new_story(article)
                     created += 1
+                    operations += 1
                     if new_story:
                         console.print(f"      [green]-> New story: {new_story.title}[/green]")
                 except Exception as e:
