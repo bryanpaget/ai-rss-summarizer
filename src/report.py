@@ -269,8 +269,6 @@ def _run_pre_embedding_phase(
     # Embed insights first (these are what detect_connections compares against)
     insights = kb.get_insights(limit=500)
     insights_needing_embedding = [i for i in insights if not embedding_service.get_embedding(i.id, "insight")]
-    if limit > 0:
-        insights_needing_embedding = insights_needing_embedding[:limit]
 
     BATCH_SIZE = 10
 
@@ -290,7 +288,11 @@ def _run_pre_embedding_phase(
             console.print(f"    [dim]Batch {batch_num + 1}/{num_batches} ({len(batch)} items)...[/dim]", end="")
 
             batch_errors = 0
+            limit_reached = False
             for insight in batch:
+                if limit > 0 and embedded_count >= limit:
+                    limit_reached = True
+                    break
                 try:
                     result = embedding_service.embed_text(insight.content)
                     embedding_service.save_embedding(insight.id, "insight", result)
@@ -301,7 +303,10 @@ def _run_pre_embedding_phase(
                     errors += 1
                     batch_errors += 1
 
-            if batch_errors == 0:
+            if limit_reached:
+                console.print(f" [dim]stopped (limit reached)[/dim]")
+                break
+            elif batch_errors == 0:
                 console.print(f" [green]done[/green]")
             else:
                 console.print(f" [yellow]done ({batch_errors} errors)[/yellow]")
