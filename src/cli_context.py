@@ -565,7 +565,7 @@ def _run_tree_wizard() -> tuple[list, list]:
 
             subjects = list(FEED_TAXONOMY[current_category].keys())
             choices = subjects.copy()
-            choices.append("─" * 30)
+            choices.append(questionary.Separator("─" * 30))
             choices.append("← Back to Categories")
 
             choice = questionary.select(
@@ -577,9 +577,7 @@ def _run_tree_wizard() -> tuple[list, list]:
                 level = "categories"
                 continue
 
-            if choice.startswith("─"):
-                continue
-            elif choice.startswith("← Back"):
+            if choice.startswith("← Back"):
                 level = "categories"
             else:
                 current_subject = choice
