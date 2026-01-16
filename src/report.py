@@ -1014,8 +1014,6 @@ def _run_connection_detection(
     # =========================================================================
     # PHASE 1: Batch embed all new insights (EMBEDDING MODEL)
     # =========================================================================
-    console.print(f"  [dim]Embedding {len(all_insights)} new insights...[/dim]")
-
     insights_to_embed = []
     for ins in all_insights:
         existing = embedding_service.get_embedding(ins.id, "insight")
@@ -1023,16 +1021,41 @@ def _run_connection_detection(
             insights_to_embed.append(ins)
 
     if insights_to_embed:
-        for ins in insights_to_embed:
-            try:
-                result = embedding_service.embed_text(ins.content)
-                embedding_service.save_embedding(ins.id, "insight", result)
-            except Exception as e:
-                console.print(f"    [red]Embedding failed for insight: {e}[/red]")
-                stats["errors"] += 1
-        console.print(f"  [dim]Embedded {len(insights_to_embed)} insights[/dim]")
+        total = len(insights_to_embed)
+        BATCH_SIZE = 10
+        num_batches = (total + BATCH_SIZE - 1) // BATCH_SIZE
+        embedded_count = 0
+        errors = 0
+
+        console.print(f"  Embedding {total} new insights in {num_batches} batches...")
+
+        for batch_num in range(num_batches):
+            start_idx = batch_num * BATCH_SIZE
+            end_idx = min(start_idx + BATCH_SIZE, total)
+            batch = insights_to_embed[start_idx:end_idx]
+
+            console.print(f"    [dim]Batch {batch_num + 1}/{num_batches} ({len(batch)} items)...[/dim]", end="")
+            batch_errors = 0
+
+            for ins in batch:
+                try:
+                    result = embedding_service.embed_text(ins.content)
+                    embedding_service.save_embedding(ins.id, "insight", result)
+                    embedded_count += 1
+                except Exception as e:
+                    console.print(f"\n      [red]Embedding failed: {e}[/red]")
+                    stats["errors"] += 1
+                    errors += 1
+                    batch_errors += 1
+
+            if batch_errors == 0:
+                console.print(f" [green]done[/green]")
+            else:
+                console.print(f" [yellow]done ({batch_errors} errors)[/yellow]")
+
+        console.print(f"  [green]Embedded {embedded_count} insights[/green]")
     else:
-        console.print(f"  [dim]All insights already embedded[/dim]")
+        console.print(f"  [dim]All {len(all_insights)} insights already embedded[/dim]")
 
     # =========================================================================
     # PHASE 2: Cluster insights by similarity (NO MODEL - FAISS only)
