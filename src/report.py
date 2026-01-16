@@ -1563,17 +1563,33 @@ def _score_articles_for_briefing(
         score = 0.5  # Base score
         reason = ""
 
-        # Signal strength - boost non-fluff content
+        # Signal strength - boost non-fluff content, penalize low-quality
         if article.signal_tags:
             tags_lower = article.signal_tags.lower()
+            # Positive signals
             if "research" in tags_lower or "data-driven" in tags_lower:
-                score += 0.2
+                score += 0.3
                 reason = "Research-backed"
             if "primary" in tags_lower:
-                score += 0.1
+                score += 0.2
                 reason = "Primary source"
-            if "noise" in tags_lower or "ad" in tags_lower:
-                score -= 0.3
+            if "documented" in tags_lower:
+                score += 0.1
+            if "factual" in tags_lower:
+                score += 0.1
+            # Negative signals - penalize fluff and low-quality content
+            if "noise" in tags_lower or "ad" in tags_lower or "promotional" in tags_lower:
+                score -= 0.4
+            if "aggregator" in tags_lower:
+                score -= 0.2
+            if "speculative" in tags_lower:
+                score -= 0.15
+            if "opinion" in tags_lower:
+                score -= 0.1
+            if "sensational" in tags_lower:
+                score -= 0.15
+            if "non-sequitur" in tags_lower:
+                score -= 0.1
 
         # User interest match
         tracked = profile.watching + profile.current_projects
