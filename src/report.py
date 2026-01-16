@@ -27,8 +27,7 @@ from .storage import Storage, Article
 from .content_filter import filter_articles, cleanup_old_spam
 from .knowledge import (
     KnowledgeBase,
-    extract_insights_from_article,
-    extract_triples_with_comparison,
+    extract_all_from_article,
     detect_connections,
     format_relationship,
 )
