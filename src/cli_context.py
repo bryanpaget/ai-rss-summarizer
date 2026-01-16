@@ -551,9 +551,7 @@ def _run_tree_wizard() -> tuple[list, list]:
                     return [], []
                 continue
 
-            if choice.startswith("─"):
-                continue
-            elif choice.startswith("✓ Done"):
+            if choice.startswith("✓ Done"):
                 break  # Go to confirmation
             else:
                 current_category = choice
