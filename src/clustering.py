@@ -9,6 +9,7 @@ from .llm_providers import LLMProvider
 from .storage import Article, NewsItem, Storage, Story
 from .embeddings import EmbeddingService, EmbeddingError, embed_and_store_article, embed_and_store_story
 from .knowledge import KnowledgeBase
+from .content_filter import is_promotional_content
 
 
 class ClusteringError(Exception):
