@@ -1201,6 +1201,21 @@ def generate_report(
     console.print(Panel(f"[bold]Generating Report[/bold]\n[dim]Using {provider.name}[/dim]", style="blue"))
     console.print()
 
+    # Check if user has set up interests - warn prominently if not
+    context_store = UserContextStore()
+    profile = context_store.get_profile()
+    if not profile.watching and not profile.current_projects:
+        console.print(Panel(
+            "[yellow]No interests configured![/yellow]\n\n"
+            "Your briefing will be generic without personalization.\n"
+            "Set up interests for better results:\n\n"
+            "  rss context watch \"AI\"     - Track a topic\n"
+            "  rss context add project X  - Track a project",
+            title="[bold]Setup Recommended[/bold]",
+            style="yellow"
+        ))
+        console.print()
+
     # Fetch latest articles
     console.print("[bold]Fetching:[/bold] Latest articles...")
     feeds = load_feeds(feeds_file)
