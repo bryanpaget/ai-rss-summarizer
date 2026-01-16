@@ -93,6 +93,32 @@ The report pipeline MUST be structured in phases:
 
 NEVER interleave text and embedding requests item-by-item. This causes excessive model switching.
 
+### Architectural Tests (ENFORCED)
+
+These invariants are enforced by `tests/test_pipeline_architecture.py`:
+
+| Test | Rule | Enforcement |
+|------|------|-------------|
+| `test_llm_phase_no_embedding_calls` | LLM phase must have 0 embedding calls | Fails if embedding service called during `_run_llm_phase` |
+| `test_llm_phase_model_switches` | LLM phase must have 0 model switches | Fails if LLM->EMBED->LLM pattern detected |
+| `test_llm_calls_per_article` | 1 LLM call per article | Fails if calls != article count |
+
+**How tests work:**
+1. Mock provider and embedding service log ALL calls with caller function names
+2. Run the pipeline phase
+3. Parse log to detect violations
+4. ALWAYS print full call log for visibility (pass or fail)
+
+**If tests fail:**
+1. Look at the CALL SEQUENCE in the output
+2. Find which function made the wrong call
+3. Fix that function, don't add workarounds
+
+**Consolidated extraction:**
+- `extract_all_from_article()` in knowledge.py does insights + triples in 1 LLM call
+- Replaces the old pattern of 3+ separate calls per article
+- If you see separate insight/triple extraction calls, that's a regression
+
 ## Problem Solving Principles
 
 ### Bandaids vs Root Cause
