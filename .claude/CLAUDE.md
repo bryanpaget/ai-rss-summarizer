@@ -46,6 +46,25 @@ This applies especially to:
 
 ---
 
+## CRITICAL: No Hardcoded Limits Policy
+
+**Internal functions must NOT have hardcoded limits. The only limit is the user's `-m/--max-per-step` parameter.**
+
+Rules:
+- Query functions default to `limit=None` (no limit)
+- NEVER replace one hardcoded limit with another (e.g., changing `limit=200` to `limit=10000` is WRONG)
+- "No limit" means NO LIMIT, not "pick a big number"
+- Only the user-facing limit parameter controls processing
+
+Functions that follow this policy:
+- `get_active_stories(limit=None)` - returns ALL active stories by default
+- `get_all_stories(limit=None)` - returns ALL stories by default
+- `get_insights(limit=None)` - returns ALL insights by default
+
+When you see a hardcoded limit in a query function, the fix is to make `limit` optional (defaulting to `None`), NOT to increase the number.
+
+---
+
 No arbitrary limits. Process based on meaning/content, not arbitrary constraints.
 - Content truncation (`[:N]`) destroys information - use semantic chunking via LLM instead
 - Fixed extraction counts ("aim for N", "3-5", "5-10") contradict "extract ALL" - let content determine output
