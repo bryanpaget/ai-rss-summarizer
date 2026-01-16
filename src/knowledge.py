@@ -676,6 +676,26 @@ class KnowledgeBase:
 
     def save_triple(self, triple: Triple) -> bool:
         """Save an RDF-style triple to the database."""
+        # Validate triple - reject tautologies and circular reasoning
+        subj_lower = triple.subject.lower().strip()
+        obj_lower = triple.object.lower().strip()
+
+        # Reject if subject == object
+        if subj_lower == obj_lower:
+            return False
+
+        # Reject if one contains the other (circular)
+        if subj_lower in obj_lower or obj_lower in subj_lower:
+            # Allow if they're very different lengths (e.g., "AI" in "AI safety")
+            if len(subj_lower) > 3 and len(obj_lower) > 3:
+                if abs(len(subj_lower) - len(obj_lower)) < min(len(subj_lower), len(obj_lower)):
+                    return False
+
+        # Reject vague predicates that often produce garbage
+        vague_predicates = {'is important to', 'is related to', 'is about', 'involves'}
+        if triple.predicate.lower().strip() in vague_predicates:
+            return False
+
         with self._connect() as conn:
             try:
                 conn.execute(
