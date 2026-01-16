@@ -1398,6 +1398,8 @@ def _show_final_report(
                                 tag_parts.extend(val)
                             elif val is True:
                                 tag_parts.append(key)
+                    # Deduplicate while preserving order
+                    tag_parts = list(dict.fromkeys(tag_parts))
                     console.print(f"   [dim]Signal: {', '.join(tag_parts)}[/dim]")
                 except (json.JSONDecodeError, TypeError):
                     console.print(f"   [dim]Signal: {article.signal_tags}[/dim]")
