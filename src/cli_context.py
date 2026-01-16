@@ -321,6 +321,95 @@ SETUP_CATEGORIES = {
 }
 
 
+def run_setup_wizard_inline(store: UserContextStore = None) -> bool:
+    """
+    Run the setup wizard inline (without typer.Exit).
+
+    Used when called from within the report flow.
+    Returns True if topics were added, False if cancelled/skipped.
+    """
+    if not QUESTIONARY_AVAILABLE:
+        return False
+
+    if store is None:
+        store = UserContextStore()
+
+    profile = store.load_profile()
+
+    # Step 1: Select broad categories
+    console.print("[bold]Step 1:[/bold] Select topic categories you're interested in")
+    console.print("[dim]Use arrow keys to move, space to select, enter to confirm[/dim]")
+    console.print()
+
+    category_choices = list(SETUP_CATEGORIES.keys())
+    selected_categories = questionary.checkbox(
+        "Select categories:",
+        choices=category_choices,
+    ).ask()
+
+    if selected_categories is None or not selected_categories:
+        console.print("[yellow]Skipped - continuing with generic briefing.[/yellow]")
+        return False
+
+    # Step 2: Select specific topics within chosen categories
+    console.print()
+    console.print("[bold]Step 2:[/bold] Select specific topics within your categories")
+    console.print()
+
+    all_topics = []
+    for category in selected_categories:
+        topics = SETUP_CATEGORIES.get(category, [])
+        all_topics.extend(topics)
+
+    selected_topics = []
+    if all_topics:
+        selected_topics = questionary.checkbox(
+            "Select specific topics:",
+            choices=all_topics,
+        ).ask()
+
+        if selected_topics is None:
+            console.print("[yellow]Skipped - continuing with generic briefing.[/yellow]")
+            return False
+
+    # Step 3: Optional custom topics
+    console.print()
+    add_custom = questionary.confirm(
+        "Would you like to add any custom topics?",
+        default=False,
+    ).ask()
+
+    custom_topics = []
+    if add_custom:
+        console.print("[dim]Enter topics one per line, empty line to finish[/dim]")
+        while True:
+            topic = questionary.text("Add topic (or press enter to finish):").ask()
+            if not topic:
+                break
+            custom_topics.append(topic.strip())
+
+    # Combine all selected topics
+    final_topics = list(set(selected_topics + custom_topics))
+
+    if not final_topics:
+        console.print("[yellow]No topics selected - continuing with generic briefing.[/yellow]")
+        return False
+
+    # Save to profile
+    profile.watching = list(set(profile.watching + final_topics))
+    store.save_profile(profile)
+
+    # Show summary
+    console.print()
+    console.print(Panel("[bold green]Setup Complete![/bold green]", style="green"))
+    console.print()
+    console.print(f"[green]Added {len(final_topics)} topics to your interests:[/green]")
+    for topic in final_topics:
+        console.print(f"  - {topic}")
+
+    return True
+
+
 @app.command("setup")
 def setup_wizard():
     """
