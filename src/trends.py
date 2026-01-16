@@ -97,7 +97,8 @@ def categorize_text(
         # Log top scores for debugging (helps diagnose threshold issues)
         all_scores.sort(key=lambda x: x[1], reverse=True)
         top_scores = all_scores[:3]
-        logger.debug(f"Top category scores: {top_scores} (threshold: {CATEGORY_SIMILARITY_THRESHOLD})")
+        import sys
+        print(f"DEBUG TRENDS: Top scores {top_scores}, threshold={CATEGORY_SIMILARITY_THRESHOLD}", file=sys.stderr)
 
         # Sort by similarity and return category names
         matches.sort(key=lambda x: x[1], reverse=True)
