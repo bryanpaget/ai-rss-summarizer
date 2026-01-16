@@ -547,6 +547,7 @@ class Storage:
             content=row["content"],
             summary=row["summary"],
             trend_tags=row["trend_tags"],
+            signal_tags=row["signal_tags"],
             story_id=story_id_value,
             created_at=row["created_at"],
         )
