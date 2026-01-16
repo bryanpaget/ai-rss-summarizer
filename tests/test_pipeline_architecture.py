@@ -507,16 +507,34 @@ class TestBatchProgressOutput:
 
         mock_storage = MagicMock()
         mock_storage.get_articles.return_value = articles
+        mock_storage.get_active_stories.return_value = []
+        mock_storage.update_trends.return_value = None
+
+        mock_kb = MagicMock()
+        mock_kb.get_insights.return_value = []
+
+        stats = {
+            "processed": 0, "insights": 0, "triples": 0,
+            "triples_new": 0, "triples_existing": 0,
+            "connections": 0, "errors": 0,
+        }
 
         # Import and run embedding phase with mock console
         with patch('src.report.console', mock_console):
-            from src.report import _run_embedding_phase
+            with patch('src.trends._category_embeddings_cache', {
+                "AI": [0.1] * 384,
+                "Technology": [0.2] * 384,
+            }):
+                with patch('src.trends._categories_initialized', True):
+                    from src.report import _run_embedding_phase
 
-            _run_embedding_phase(
-                articles=articles,
-                storage=mock_storage,
-                embedding_service=mock_embedding_service,
-            )
+                    _run_embedding_phase(
+                        articles=articles,
+                        storage=mock_storage,
+                        kb=mock_kb,
+                        stats=stats,
+                        embedding_service=mock_embedding_service,
+                    )
 
         # Print captured calls for visibility
         print("\n" + "=" * 80)
