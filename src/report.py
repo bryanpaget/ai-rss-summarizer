@@ -415,50 +415,43 @@ def _run_llm_phase(
 
         article_errors = []  # Collect errors for this article
 
-        # --- Extract insights (LLM call) ---
-        console.print("  [dim]- Extracting insights...[/dim]")
+        # --- CONSOLIDATED EXTRACTION (single LLM call for insights + triples) ---
+        console.print("  [dim]- Extracting insights and facts...[/dim]")
         try:
-            insights = extract_insights_from_article(article, provider, kb) or []
+            extraction = extract_all_from_article(article, provider, kb)
+            insights = extraction.insights
+            triples = extraction.new_triples
+
+            # Report insights
             for ins in insights:
                 stats["insights"] += 1
                 console.print(f"    [green]+[/green] {ins.content}")
             if not insights:
                 console.print("    [dim]No insights extracted[/dim]")
+
+            # Report triples
+            if extraction.new_triples:
+                console.print(f"    [green]+{len(extraction.new_triples)} new facts:[/green]")
+                for t in extraction.new_triples[:5]:
+                    console.print(f"      [green]*[/green] {t.subject} -> {t.predicate} -> {t.object}")
+                if len(extraction.new_triples) > 5:
+                    console.print(f"      [dim]...and {len(extraction.new_triples) - 5} more[/dim]")
+                stats["triples_new"] += len(extraction.new_triples)
+            else:
+                console.print("    [dim]No new facts[/dim]")
+
+            if extraction.existing_triples:
+                console.print(f"    [dim]~{len(extraction.existing_triples)} already known[/dim]")
+                stats["triples_existing"] += len(extraction.existing_triples)
+            stats["triples"] += len(extraction.new_triples) + len(extraction.existing_triples)
         except Exception as e:
-            error_msg = f"Insight extraction failed: {e}"
+            error_msg = f"Extraction failed: {e}"
             article_errors.append(error_msg)
             console.print(f"    [red]ERROR: {error_msg}[/red]")
             stats["errors"] += 1
 
         # --- Connection detection DEFERRED ---
         # Connections are detected AFTER Step 4 (embedding phase) to avoid model switching.
-        # The insights are collected and connections will be found in batch later.
-
-        # --- Extract facts/triples (LLM call) ---
-        console.print("  [dim]- Extracting facts...[/dim]")
-        try:
-            triple_result = extract_triples_with_comparison(article, provider, kb)
-            triples = triple_result.new_triples
-
-            if triple_result.new_triples:
-                console.print(f"    [green]+{len(triple_result.new_triples)} new facts:[/green]")
-                for t in triple_result.new_triples[:5]:
-                    console.print(f"      [green]*[/green] {t.subject} -> {t.predicate} -> {t.object}")
-                if len(triple_result.new_triples) > 5:
-                    console.print(f"      [dim]...and {len(triple_result.new_triples) - 5} more[/dim]")
-                stats["triples_new"] += len(triple_result.new_triples)
-            else:
-                console.print("    [dim]No new facts[/dim]")
-
-            if triple_result.existing_triples:
-                console.print(f"    [dim]~{len(triple_result.existing_triples)} already known[/dim]")
-                stats["triples_existing"] += len(triple_result.existing_triples)
-            stats["triples"] += triple_result.total_extracted
-        except Exception as e:
-            error_msg = f"Fact extraction failed: {e}"
-            article_errors.append(error_msg)
-            console.print(f"    [red]ERROR: {error_msg}[/red]")
-            stats["errors"] += 1
 
         # --- Tagging ---
         console.print("  [dim]- Tagging...[/dim]")
