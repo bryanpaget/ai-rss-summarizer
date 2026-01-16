@@ -914,6 +914,7 @@ def _run_connection_detection(
     provider,
     stats: dict,
     embedding_service: EmbeddingService,
+    max_per_step: int = 0,
 ) -> None:
     """
     Detect connections using cluster-based analysis.
