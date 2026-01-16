@@ -535,7 +535,7 @@ def _run_tree_wizard() -> tuple[list, list]:
             console.print()
 
             choices = list(FEED_TAXONOMY.keys())
-            choices.append("─" * 30)
+            choices.append(questionary.Separator("─" * 30))
             choices.append("✓ Done - Review & Confirm")
 
             choice = questionary.select(
