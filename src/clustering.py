@@ -940,6 +940,7 @@ def batch_process_articles(
         "stories_created": 0,
         "articles_added_to_existing": 0,
         "total_news_items": 0,
+        "spam_skipped": 0,
         "errors": [],
     }
 
@@ -949,6 +950,11 @@ def batch_process_articles(
         )
 
         stats["processed"] += 1
+
+        # Check if skipped due to spam
+        if result.get("skipped_spam"):
+            stats["spam_skipped"] += 1
+            continue
 
         if result.get("story_created"):
             stats["stories_created"] += 1
