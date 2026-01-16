@@ -1419,9 +1419,10 @@ def _show_final_report(
                 except (json.JSONDecodeError, TypeError):
                     console.print(f"   [dim]Signal: {article.signal_tags}[/dim]")
 
-            # What we know - facts extracted FROM this specific article
-            # This shows actual facts we learned from THIS article, not random KB matches
-            article_triples = kb.get_triples_by_article(article.id, limit=3)
+            # What we know - facts extracted FROM this specific article during this session
+            # Use item["triples"] directly - these are the triples we JUST extracted from THIS article
+            # Don't query the KB which could return old/wrong data
+            article_triples = item.get("triples", [])[:3]  # Show up to 3 facts
 
             if article_triples:
                 console.print(f"   [blue]What we know:[/blue]")
