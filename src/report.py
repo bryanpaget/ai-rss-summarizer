@@ -43,6 +43,31 @@ from .user_context import UserContextStore, UserContextProfile
 
 console = Console(force_terminal=True, legacy_windows=True)
 
+# GLOBAL LIMIT - set once at start, used everywhere
+_GLOBAL_LIMIT: int = 0
+
+
+def apply_limit(items: list, what: str = "") -> list:
+    """Apply universal limit to any list.
+
+    This is THE ONLY place limits are applied.
+    Every step goes through this function.
+    """
+    if _GLOBAL_LIMIT <= 0:
+        return items
+
+    if len(items) > _GLOBAL_LIMIT:
+        if what:
+            console.print(f"  [dim]({len(items)} {what}, limited to {_GLOBAL_LIMIT})[/dim]")
+        return items[:_GLOBAL_LIMIT]
+    return items
+
+
+def set_global_limit(limit: int) -> None:
+    """Set the global limit. Called once at start of report generation."""
+    global _GLOBAL_LIMIT
+    _GLOBAL_LIMIT = limit
+
 
 # =============================================================================
 # HELPER FUNCTIONS
