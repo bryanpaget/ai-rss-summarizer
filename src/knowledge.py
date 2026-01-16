@@ -2142,7 +2142,8 @@ def extract_all_from_article(
     if not article.content or len(article.content) < 100:
         return CombinedExtractionOutput(
             insights=[],
-            triples=[],
+            new_triples=[],
+            existing_triples=[],
             signal_tags=[],
             summary="",
             is_ad=False,
