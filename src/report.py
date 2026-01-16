@@ -973,8 +973,10 @@ def _run_connection_detection(
     # =========================================================================
     console.print(f"  [dim]Clustering insights by similarity...[/dim]")
 
-    # Get ALL insights with embeddings for clustering (not just new ones)
-    all_kb_insights = kb.get_insights(limit=500)
+    # Get insights with embeddings for clustering
+    # Apply limit to insights if max_per_step is set
+    insight_limit = max_per_step * 10 if max_per_step > 0 else 500
+    all_kb_insights = kb.get_insights(limit=insight_limit)
     clusters = _cluster_insights_by_similarity(
         all_kb_insights,
         embedding_service,
@@ -986,7 +988,13 @@ def _run_connection_detection(
         console.print()
         return
 
-    console.print(f"  [green]Found {len(clusters)} clusters[/green]")
+    # Apply limit to clusters if max_per_step is set
+    total_clusters = len(clusters)
+    if max_per_step > 0 and len(clusters) > max_per_step:
+        clusters = clusters[:max_per_step]
+        console.print(f"  [green]Found {total_clusters} clusters, analyzing {len(clusters)} (limited by -m)[/green]")
+    else:
+        console.print(f"  [green]Found {len(clusters)} clusters[/green]")
 
     # =========================================================================
     # PHASE 3: Analyze each cluster (TEXT MODEL - O(clusters) calls)
