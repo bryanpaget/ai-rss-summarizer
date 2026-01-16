@@ -148,23 +148,31 @@ def _run_verification_step(
     # Count TRUE backlog from DB (not just the limited articles list)
     # Use same min_content_length filter as processing so gaps only count processable items
     all_unanalyzed = storage.get_unanalyzed_articles(exclude_spam=True, min_content_length=min_content_length)
+
+    # Track which titles have been shown as examples to avoid repeats
+    shown_titles: set[str] = set()
+
     for article in all_unanalyzed:
         if not article.summary:
             gaps["articles_missing_summary"] += 1
-            if len(gaps["sample_missing_summary"]) < 3:
+            if len(gaps["sample_missing_summary"]) < 3 and article.title not in shown_titles:
                 gaps["sample_missing_summary"].append(article.title)
+                shown_titles.add(article.title)
         if not article.trend_tags:
             gaps["articles_missing_trends"] += 1
-            if len(gaps["sample_missing_trends"]) < 3:
+            if len(gaps["sample_missing_trends"]) < 3 and article.title not in shown_titles:
                 gaps["sample_missing_trends"].append(article.title)
+                shown_titles.add(article.title)
         if not article.signal_tags:
             gaps["articles_missing_signals"] += 1
-            if len(gaps["sample_missing_signals"]) < 3:
+            if len(gaps["sample_missing_signals"]) < 3 and article.title not in shown_titles:
                 gaps["sample_missing_signals"].append(article.title)
+                shown_titles.add(article.title)
         if storage.get_embedding(article.id) is None:
             gaps["articles_missing_embeddings"] += 1
-            if len(gaps["sample_missing_embeddings"]) < 3:
+            if len(gaps["sample_missing_embeddings"]) < 3 and article.title not in shown_titles:
                 gaps["sample_missing_embeddings"].append(article.title)
+                shown_titles.add(article.title)
 
     # Track what will actually be processed (from limited list)
     for article in articles:
