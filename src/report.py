@@ -662,8 +662,6 @@ def _run_embedding_phase(
     # Any new stories created during LLM phase need embeddings
     stories = storage.get_active_stories(limit=200)
     stories_needing_embedding = [s for s in stories if not embedding_service.get_embedding(s.id, "story")]
-    if limit > 0:
-        stories_needing_embedding = stories_needing_embedding[:limit]
 
     if stories_needing_embedding:
         total = len(stories_needing_embedding)
@@ -680,7 +678,11 @@ def _run_embedding_phase(
             console.print(f"    [dim]Batch {batch_num + 1}/{num_batches} ({len(batch)} items)...[/dim]", end="")
 
             batch_errors = 0
+            limit_reached = False
             for story in batch:
+                if limit > 0 and story_embedded >= limit:
+                    limit_reached = True
+                    break
                 try:
                     result = embedding_service.embed_story(story)
                     embedding_service.save_embedding(story.id, "story", result)
@@ -690,7 +692,10 @@ def _run_embedding_phase(
                     stats["errors"] += 1
                     batch_errors += 1
 
-            if batch_errors == 0:
+            if limit_reached:
+                console.print(f" [dim]stopped (limit reached)[/dim]")
+                break
+            elif batch_errors == 0:
                 console.print(f" [green]done[/green]")
             else:
                 console.print(f" [yellow]done ({batch_errors} errors)[/yellow]")
