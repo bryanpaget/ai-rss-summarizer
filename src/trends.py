@@ -66,14 +66,11 @@ def categorize_text(
     Returns:
         List of matching category names, or ["Uncategorized"] if none match.
     """
-    import sys
     if not text:
-        print("DEBUG TRENDS: No text provided", file=sys.stderr)
         return ["Uncategorized"]
 
     # Require embedding service
     if embedding_service is None or not embedding_service.is_available():
-        print(f"DEBUG TRENDS: Embedding service unavailable (is_none={embedding_service is None})", file=sys.stderr)
         logger.error("EmbeddingService required but not available for trend categorization")
         return ["Uncategorized"]
 
@@ -85,7 +82,6 @@ def categorize_text(
         # Get category embeddings
         category_embeddings = _get_category_embeddings(embedding_service)
         if not category_embeddings:
-            print("DEBUG TRENDS: No category embeddings", file=sys.stderr)
             logger.error("Failed to create category embeddings")
             return ["Uncategorized"]
 
