@@ -87,10 +87,17 @@ def categorize_text(
 
         # Find matching categories by similarity
         matches = []
+        all_scores = []  # Track all scores for debugging
         for category, cat_embedding in category_embeddings.items():
             similarity = embedding_service.cosine_similarity(text_embedding, cat_embedding)
+            all_scores.append((category, similarity))
             if similarity >= CATEGORY_SIMILARITY_THRESHOLD:
                 matches.append((category, similarity))
+
+        # Log top scores for debugging (helps diagnose threshold issues)
+        all_scores.sort(key=lambda x: x[1], reverse=True)
+        top_scores = all_scores[:3]
+        logger.debug(f"Top category scores: {top_scores} (threshold: {CATEGORY_SIMILARITY_THRESHOLD})")
 
         # Sort by similarity and return category names
         matches.sort(key=lambda x: x[1], reverse=True)
