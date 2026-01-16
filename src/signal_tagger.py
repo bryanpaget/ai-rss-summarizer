@@ -63,7 +63,9 @@ class SignalTags:
             + self.tone
             + self.actionability
         )
-        return ", ".join(all_tags)
+        # Remove duplicates while preserving order
+        unique_tags = list(dict.fromkeys(all_tags))
+        return ", ".join(unique_tags)
 
     def has_any_tag(self, *tags: str) -> bool:
         """Check if any of the given tags are present."""
