@@ -1205,7 +1205,7 @@ def generate_report(
     # Check if user has set up interests - auto-launch setup wizard if not
     context_store = UserContextStore()
     profile = context_store.load_profile()
-    if not profile.watching and not profile.current_projects:
+    if force_setup or (not profile.watching and not profile.current_projects):
         console.print(Panel(
             "[yellow]No interests configured yet![/yellow]\n\n"
             "Let's set up your interests for personalized briefings.",
