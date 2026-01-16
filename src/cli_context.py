@@ -8,7 +8,14 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+try:
+    import questionary
+    QUESTIONARY_AVAILABLE = True
+except ImportError:
+    QUESTIONARY_AVAILABLE = False
+
 from .knowledge import KnowledgeBase, UserContext
+from .user_context import UserContextStore
 
 app = typer.Typer(
     name="context",
