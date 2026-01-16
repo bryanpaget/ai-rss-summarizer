@@ -463,14 +463,9 @@ def update(
 @app.command()
 def report(
     limit: int = typer.Option(
-        20,
-        "--limit", "-n",
-        help="Maximum number of articles to process",
-    ),
-    max_per_step: int = typer.Option(
         0,
-        "--max-per-step", "-m",
-        help="Limit items per step (0=unlimited). Use -m 5 to process incrementally when catching up on a large backlog.",
+        "--limit", "-n", "-m",
+        help="Universal limit for ALL steps (0=unlimited). Applies to articles, embeddings, clusters, stories - everything.",
     ),
     skip_summarized: bool = typer.Option(
         True,
@@ -498,8 +493,8 @@ def report(
     over someone's shoulder as they read and analyze the news.
 
     Examples:
-        rss report              # Process up to 20 articles
-        rss report --limit 50   # Process more articles
+        rss report              # Process ALL new articles (no limit)
+        rss report -n 3         # Limit to 3 items per step (fast test)
         rss report --reprocess  # Re-analyze already-summarized articles
     """
     require_setup()
@@ -510,7 +505,7 @@ def report(
         skip_summarized=skip_summarized,
         db_path=db_path,
         kb_path=kb_path,
-        max_per_step=max_per_step,
+        max_per_step=limit,  # UNIFIED: limit applies to ALL steps
     )
 
 
