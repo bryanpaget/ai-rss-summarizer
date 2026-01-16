@@ -384,49 +384,35 @@ def _run_pre_embedding_phase(
     insights = kb.get_insights()
     insights_needing_embedding = [i for i in insights if not embedding_service.get_embedding(i.id, "insight")]
 
-    BATCH_SIZE = 10
-
     if insights_needing_embedding:
-        total = len(insights_needing_embedding)
-        num_batches = (total + BATCH_SIZE - 1) // BATCH_SIZE
-        embedded_count = 0
-        errors = 0
+        progress = BatchProgress(len(insights_needing_embedding), batch_size=10, label="insights")
+        console.print(f"  Embedding {progress.total_items} insights in {progress.num_batches} batches...")
 
-        console.print(f"  Embedding {total} insights in {num_batches} batches...")
-
-        for batch_num in range(num_batches):
-            start_idx = batch_num * BATCH_SIZE
-            end_idx = min(start_idx + BATCH_SIZE, total)
-            batch = insights_needing_embedding[start_idx:end_idx]
-
-            console.print(f"    [dim]Batch {batch_num + 1}/{num_batches} ({len(batch)} items)...[/dim]", end="")
-
+        for batch_num, batch in progress.iterate(insights_needing_embedding):
+            progress.start_batch()
+            batch_success = 0
             batch_errors = 0
             limit_reached = False
+
             for insight in batch:
-                if limit > 0 and embedded_count >= limit:
+                if limit > 0 and progress.total_processed + batch_success >= limit:
                     limit_reached = True
                     break
                 try:
                     result = embedding_service.embed_text(insight.content)
                     embedding_service.save_embedding(insight.id, "insight", result)
-                    embedded_count += 1
+                    batch_success += 1
                 except Exception as e:
                     console.print(f"\n  [red]ERROR: {e}[/red]", end="")
                     stats["errors"] += 1
-                    errors += 1
                     batch_errors += 1
 
+            progress.end_batch(batch_success, batch_errors, stopped=limit_reached)
             if limit_reached:
-                console.print(f" [dim]stopped (limit reached)[/dim]")
                 break
-            elif batch_errors == 0:
-                console.print(f" [green]done[/green]")
-            else:
-                console.print(f" [yellow]done ({batch_errors} errors)[/yellow]")
 
-        console.print(f"  [green]Embedded {embedded_count} insights[/green]")
-        stats["insights_embedded"] = embedded_count
+        progress.summary(f"Embedded {progress.total_processed} insights")
+        stats["insights_embedded"] = progress.total_processed
     else:
         console.print("  [dim]All insights already have embeddings[/dim]")
 
