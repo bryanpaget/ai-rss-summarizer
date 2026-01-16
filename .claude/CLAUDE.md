@@ -144,6 +144,24 @@ These invariants are enforced by `tests/test_pipeline_architecture.py`:
 - `analyze_article()` uses STORED article embedding via `get_embedding()`, never creates new
 - If you see `embed_text()` during trend tagging, that's a violation
 
+## CRITICAL: Validate Changes by Running Actual Commands
+
+**Unit tests passing does NOT mean the code works. Always run the actual user-facing command.**
+
+After making changes to any code that affects user-facing functionality:
+1. Run the actual CLI command (e.g., `rss report -m 1`) to verify it works
+2. Do NOT ask the user for error messages you could get by running the command yourself
+3. If the command crashes, fix it immediately before reporting "done"
+
+Why this matters:
+- Unit tests mock dependencies - they don't test real integration
+- Mocked tests can pass while real code crashes (e.g., Unicode encoding issues on Windows)
+- Asking the user for errors you could trivially obtain yourself wastes their time and destroys trust
+
+**The work is NOT complete until the actual command runs successfully.**
+
+---
+
 ## Problem Solving Principles
 
 ### Bandaids vs Root Cause
