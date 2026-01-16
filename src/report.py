@@ -1281,10 +1281,6 @@ def generate_report(
 
     console.print()
 
-    # Apply limit limit to articles if set
-    if limit > 0:
-        articles = articles[:limit]
-
     # Track total pipeline time
     pipeline_start = time.time()
 
