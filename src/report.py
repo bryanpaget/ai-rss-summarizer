@@ -1203,7 +1203,7 @@ def generate_report(
 
     # Check if user has set up interests - warn prominently if not
     context_store = UserContextStore()
-    profile = context_store.get_profile()
+    profile = context_store.load_profile()
     if not profile.watching and not profile.current_projects:
         console.print(Panel(
             "[yellow]No interests configured![/yellow]\n\n"
