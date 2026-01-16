@@ -1285,7 +1285,7 @@ def generate_report(
 
     # Step 4.5: Batched Connection Detection (AFTER embeddings, no model switching)
     step_start = time.time()
-    _run_connection_detection(processed_articles, kb, provider, stats, embedding_service)
+    _run_connection_detection(processed_articles, kb, provider, stats, embedding_service, max_per_step)
     console.print(f"  [dim]Step 4.5 completed in {time.time() - step_start:.1f}s[/dim]\n")
 
     # Step 5: Story Matching
