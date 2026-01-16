@@ -12,3 +12,6 @@ https://rss.nytimes.com/services/xml/rss/nyt/World.xml
 
 # Science
 https://www.sciencedaily.com/rss/all.xml
+
+https://example.com/feed1.xml
+https://example.com/feed2.xml
