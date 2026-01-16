@@ -597,24 +597,42 @@ class Storage:
                 return self._row_to_story(row)
             return None
 
-    def get_active_stories(self, limit: int = 50) -> list[Story]:
-        """Get active stories (not resolved), sorted by last update."""
+    def get_active_stories(self, limit: Optional[int] = None) -> list[Story]:
+        """Get active stories (not resolved), sorted by last update.
+
+        Args:
+            limit: Maximum number of stories to return. None means no limit.
+        """
         with self._connect() as conn:
-            rows = conn.execute(
-                """
-                SELECT * FROM stories
-                WHERE lifecycle_state != 'resolved'
-                ORDER BY last_updated DESC
-                LIMIT ?
-                """,
-                (limit,),
-            ).fetchall()
+            if limit is not None:
+                rows = conn.execute(
+                    """
+                    SELECT * FROM stories
+                    WHERE lifecycle_state != 'resolved'
+                    ORDER BY last_updated DESC
+                    LIMIT ?
+                    """,
+                    (limit,),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """
+                    SELECT * FROM stories
+                    WHERE lifecycle_state != 'resolved'
+                    ORDER BY last_updated DESC
+                    """,
+                ).fetchall()
             return [self._row_to_story(row) for row in rows]
 
     def get_all_stories(
-        self, limit: int = 100, lifecycle_state: Optional[str] = None
+        self, limit: Optional[int] = None, lifecycle_state: Optional[str] = None
     ) -> list[Story]:
-        """Get stories with optional filtering by lifecycle state."""
+        """Get stories with optional filtering by lifecycle state.
+
+        Args:
+            limit: Maximum number of stories to return. None means no limit.
+            lifecycle_state: Filter by lifecycle state.
+        """
         query = "SELECT * FROM stories WHERE 1=1"
         params: list = []
 
@@ -622,8 +640,10 @@ class Storage:
             query += " AND lifecycle_state = ?"
             params.append(lifecycle_state)
 
-        query += " ORDER BY last_updated DESC LIMIT ?"
-        params.append(limit)
+        query += " ORDER BY last_updated DESC"
+        if limit is not None:
+            query += " LIMIT ?"
+            params.append(limit)
 
         with self._connect() as conn:
             rows = conn.execute(query, params).fetchall()
