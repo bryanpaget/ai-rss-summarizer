@@ -461,8 +461,8 @@ class KnowledgeBase:
                 conn.execute(
                     """
                     INSERT INTO knowledge_relationships
-                    (id, source_insight_id, target_insight_id, relationship_type, strength)
-                    VALUES (?, ?, ?, ?, ?)
+                    (id, source_insight_id, target_insight_id, relationship_type, strength, detected_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
                     """,
                     (
                         relationship.id,
@@ -470,6 +470,7 @@ class KnowledgeBase:
                         relationship.target_insight_id,
                         relationship.relationship_type,
                         relationship.strength,
+                        relationship.detected_at.isoformat() if relationship.detected_at else datetime.now().isoformat(),
                     ),
                 )
                 conn.commit()
