@@ -2271,7 +2271,8 @@ Return ONLY valid JSON, no other text."""
         # Return empty result on failure
         return CombinedExtractionOutput(
             insights=[],
-            triples=[],
+            new_triples=[],
+            existing_triples=[],
             signal_tags=[],
             summary="",
             is_ad=False,
