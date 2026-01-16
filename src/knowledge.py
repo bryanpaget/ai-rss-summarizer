@@ -1113,11 +1113,181 @@ class KnowledgeBase:
         }
 
 
+@dataclass
+class ConsolidatedExtractionResult:
+    """Result of consolidated extraction - insights and triples in one call."""
+    insights: list[Insight]
+    new_triples: list[Triple]
+    existing_triples: list[Triple]
+
+
+def extract_all_from_article(
+    article: Article,
+    llm_provider,
+    knowledge_base: KnowledgeBase,
+) -> ConsolidatedExtractionResult:
+    """
+    Extract insights AND triples from article in a SINGLE LLM call.
+
+    This consolidates what was previously 3+ separate calls:
+    - extract_insights_from_article (1 call)
+    - _semantic_chunk (1 call)
+    - extract_triples_with_comparison (N calls per chunk)
+
+    Into 1 call that returns both insights and triples.
+
+    Args:
+        article: Article to extract from
+        llm_provider: LLM provider for extraction
+        knowledge_base: Knowledge base to save to
+
+    Returns:
+        ConsolidatedExtractionResult with insights and triples
+    """
+    result = ConsolidatedExtractionResult(
+        insights=[],
+        new_triples=[],
+        existing_triples=[],
+    )
+
+    if not article.content or len(article.content) < 100:
+        return result
+
+    # Get user's analysis principles if configured
+    constitution_context = get_constitution_context()
+
+    # Single consolidated prompt
+    prompt = f"""{constitution_context}
+=== ARTICLE TO ANALYZE ===
+Extract insights and factual relationships from ONLY the article content below.
+
+Article: "{article.title}"
+
+Content: {article.content}
+
+=== EXTRACTION INSTRUCTIONS ===
+
+1. INSIGHTS: Extract key learnings. For each:
+   - content: one clear sentence
+   - type: technical/tool/statistic/opinion
+   - confidence: high/medium/low
+   - reason: why this confidence level
+
+2. TRIPLES: Extract factual subject-predicate-object relationships.
+   - Subjects/objects must be PROPER NOUNS (specific names, companies, places)
+   - NEVER use generic nouns like 'man', 'woman', 'article'
+   - Common predicates: developed_by, acquired, partnered_with, announced, competes_with, located_in, costs, uses
+
+Return as JSON:
+{{
+  "insights": [
+    {{"content": "...", "type": "technical", "confidence": "high", "reason": "..."}}
+  ],
+  "triples": [
+    {{"subject": "Entity", "predicate": "relationship", "object": "Entity", "confidence": "high"}}
+  ]
+}}
+
+Only return valid JSON, no other text."""
+
+    try:
+        response = llm_provider.summarize(prompt, max_length=2000)
+
+        # Parse JSON
+        response = response.strip()
+        if response.startswith("```"):
+            lines = response.split("\n")
+            response = "\n".join(lines[1:-1] if len(lines) > 2 else lines)
+
+        # Find JSON object
+        start = response.find("{")
+        end = response.rfind("}") + 1
+        if start >= 0 and end > start:
+            response = response[start:end]
+
+        data = json.loads(response)
+
+        # Process insights
+        for insight_data in data.get("insights", []):
+            insight_id = str(uuid.uuid4())
+            insight = Insight(
+                id=insight_id,
+                article_id=article.id,
+                content=insight_data.get("content", ""),
+                insight_type=insight_data.get("type", "technical"),
+                confidence=insight_data.get("confidence", "medium"),
+                confidence_reason=insight_data.get("reason", ""),
+            )
+            knowledge_base.save_insight(insight)
+            result.insights.append(insight)
+
+        # Process triples
+        for triple_data in data.get("triples", []):
+            if not isinstance(triple_data, dict):
+                continue
+
+            subject = triple_data.get("subject", "")
+            predicate = triple_data.get("predicate", "")
+            obj = triple_data.get("object", "")
+
+            if not (subject and predicate and obj):
+                continue
+
+            triple = Triple(
+                id=str(uuid.uuid4()),
+                subject=subject,
+                predicate=predicate,
+                object=obj,
+                subject_type="entity",
+                object_type="entity",
+                source_article_id=article.id,
+                confidence=triple_data.get("confidence", "medium"),
+            )
+
+            # Check for existing
+            existing = knowledge_base.get_triples(
+                subject=triple.subject,
+                predicate=triple.predicate,
+                object_val=triple.object,
+                limit=1
+            )
+
+            if existing:
+                result.existing_triples.append(existing[0])
+            else:
+                if knowledge_base.save_triple(triple):
+                    result.new_triples.append(triple)
+
+        return result
+
+    except json.JSONDecodeError as e:
+        import sys
+        print(f"JSON parsing failed for consolidated extraction: {e}", file=sys.stderr)
+        # Fallback: create minimal insight
+        insight = Insight(
+            id=str(uuid.uuid4()),
+            article_id=article.id,
+            content=article.summary or article.title,
+            insight_type="technical",
+            confidence="low",
+            confidence_reason=f"JSON parsing failed: {str(e)}",
+        )
+        knowledge_base.save_insight(insight)
+        result.insights.append(insight)
+        return result
+    except Exception as e:
+        import sys
+        print(f"Consolidated extraction failed: {e}", file=sys.stderr)
+        return result
+
+
 def extract_insights_from_article(
     article: Article, llm_provider, knowledge_base: KnowledgeBase
 ) -> list[Insight]:
     """
     Extract knowledge insights from an article using LLM.
+
+    DEPRECATED: Use extract_all_from_article for consolidated extraction.
 
     Args:
         article: Article to extract insights from
