@@ -280,5 +280,200 @@ def show_context(
     console.print(table)
 
 
+# Predefined topic categories for the setup wizard
+SETUP_CATEGORIES = {
+    "AI & Machine Learning": [
+        "Artificial Intelligence",
+        "Machine Learning",
+        "Large Language Models",
+        "ChatGPT & GPT",
+        "AI Safety",
+        "Neural Networks",
+    ],
+    "Technology": [
+        "Software Development",
+        "Cybersecurity",
+        "Cloud Computing",
+        "Startups",
+        "Open Source",
+        "Programming Languages",
+    ],
+    "Business & Finance": [
+        "Stock Market",
+        "Cryptocurrency",
+        "Startups & Venture Capital",
+        "Corporate News",
+        "Economic Policy",
+    ],
+    "Science": [
+        "Space Exploration",
+        "Climate Science",
+        "Medical Research",
+        "Physics",
+        "Biology",
+    ],
+    "World Affairs": [
+        "International Relations",
+        "Geopolitics",
+        "Elections",
+        "Policy & Legislation",
+    ],
+}
+
+
+@app.command("setup")
+def setup_wizard():
+    """
+    Interactive setup wizard for configuring your interests.
+
+    Use arrow keys to navigate, space to select, enter to confirm.
+
+    Example:
+        rss context setup
+    """
+    if not QUESTIONARY_AVAILABLE:
+        console.print("[red]Error: questionary library not installed[/red]")
+        console.print("[dim]Install with: pip install questionary[/dim]")
+        raise typer.Exit(1)
+
+    console.print()
+    console.print(Panel("[bold]RSS Summarizer Setup Wizard[/bold]", style="blue"))
+    console.print()
+    console.print("Let's configure your interests to personalize your news briefings.")
+    console.print()
+
+    # Load existing profile
+    store = UserContextStore()
+    profile = store.load_profile()
+
+    # Step 1: Select broad categories
+    console.print("[bold]Step 1:[/bold] Select topic categories you're interested in")
+    console.print("[dim]Use arrow keys to move, space to select, enter to confirm[/dim]")
+    console.print()
+
+    category_choices = list(SETUP_CATEGORIES.keys())
+    selected_categories = questionary.checkbox(
+        "Select categories:",
+        choices=category_choices,
+    ).ask()
+
+    if selected_categories is None:
+        console.print("[yellow]Setup cancelled.[/yellow]")
+        raise typer.Exit(0)
+
+    if not selected_categories:
+        console.print("[yellow]No categories selected. You can always run setup again.[/yellow]")
+        raise typer.Exit(0)
+
+    # Step 2: Select specific topics within chosen categories
+    console.print()
+    console.print("[bold]Step 2:[/bold] Select specific topics within your categories")
+    console.print()
+
+    all_topics = []
+    for category in selected_categories:
+        topics = SETUP_CATEGORIES.get(category, [])
+        all_topics.extend(topics)
+
+    if all_topics:
+        selected_topics = questionary.checkbox(
+            "Select specific topics:",
+            choices=all_topics,
+        ).ask()
+
+        if selected_topics is None:
+            console.print("[yellow]Setup cancelled.[/yellow]")
+            raise typer.Exit(0)
+    else:
+        selected_topics = []
+
+    # Step 3: Optional custom topics
+    console.print()
+    add_custom = questionary.confirm(
+        "Would you like to add any custom topics?",
+        default=False,
+    ).ask()
+
+    custom_topics = []
+    if add_custom:
+        console.print("[dim]Enter topics one per line, empty line to finish[/dim]")
+        while True:
+            topic = questionary.text("Add topic (or press enter to finish):").ask()
+            if not topic:
+                break
+            custom_topics.append(topic.strip())
+
+    # Combine all selected topics
+    final_topics = list(set(selected_topics + custom_topics))
+
+    if not final_topics:
+        console.print("[yellow]No topics selected.[/yellow]")
+        raise typer.Exit(0)
+
+    # Save to profile
+    profile.watching = list(set(profile.watching + final_topics))
+    store.save_profile(profile)
+
+    # Show summary
+    console.print()
+    console.print(Panel("[bold green]Setup Complete![/bold green]", style="green"))
+    console.print()
+    console.print(f"[green]Added {len(final_topics)} topics to your interests:[/green]")
+    for topic in final_topics:
+        console.print(f"  - {topic}")
+    console.print()
+    console.print("[dim]Your briefings will now be personalized based on these interests.[/dim]")
+    console.print("[dim]Run 'rss context list' to see all your settings.[/dim]")
+    console.print("[dim]Run 'rss context setup' again to add more topics.[/dim]")
+
+
+@app.command("watch")
+def watch_topic(
+    topic: str = typer.Argument(..., help="Topic to watch"),
+):
+    """
+    Quick command to add a topic to your watch list.
+
+    Example:
+        rss context watch "AI Safety"
+        rss context watch "Climate Change"
+    """
+    store = UserContextStore()
+    profile = store.load_profile()
+
+    if topic in profile.watching:
+        console.print(f"[yellow]Already watching: {topic}[/yellow]")
+        return
+
+    profile.watching.append(topic)
+    store.save_profile(profile)
+    console.print(f"[green]Now watching: {topic}[/green]")
+
+
+@app.command("unwatch")
+def unwatch_topic(
+    topic: str = typer.Argument(..., help="Topic to stop watching"),
+):
+    """
+    Remove a topic from your watch list.
+
+    Example:
+        rss context unwatch "AI Safety"
+    """
+    store = UserContextStore()
+    profile = store.load_profile()
+
+    if topic not in profile.watching:
+        console.print(f"[yellow]Not watching: {topic}[/yellow]")
+        console.print("[dim]Current topics:[/dim]")
+        for t in profile.watching[:5]:
+            console.print(f"  - {t}")
+        return
+
+    profile.watching.remove(topic)
+    store.save_profile(profile)
+    console.print(f"[green]Stopped watching: {topic}[/green]")
+
+
 if __name__ == "__main__":
     app()
