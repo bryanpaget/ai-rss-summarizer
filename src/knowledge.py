@@ -1978,7 +1978,12 @@ def extract_all_from_article(
     constitution_context = get_constitution_context()
 
     # ONE prompt that extracts everything
-    prompt = f"""{constitution_context}Analyze this article completely. Extract ALL information in a single structured response.
+    # CRITICAL: Constitution is for HOW to analyze, not WHAT to extract
+    prompt = f"""{constitution_context}
+=== ARTICLE TO ANALYZE ===
+Extract information from ONLY the article content below. Do NOT include the analysis principles above as insights or facts - they are instructions for HOW to analyze, not content to extract.
+
+Analyze this article completely. Extract ALL information in a single structured response.
 
 Article: "{article.title}"
 
