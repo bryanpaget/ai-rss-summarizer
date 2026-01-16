@@ -455,7 +455,7 @@ def _run_llm_phase(
                 article.trend_tags = tags
                 if tags:
                     tag_list = [t.strip() for t in tags.split(",")]
-                    tag_output.append(f"trends: {', '.join(tag_list[:3])}")
+                    tag_output.append(f"trends: {', '.join(tag_list)}")
             except Exception as e:
                 error_msg = f"Trend tagging failed: {e}"
                 article_errors.append(error_msg)
