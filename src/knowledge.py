@@ -1344,12 +1344,12 @@ Only return the JSON array, no other text."""
                 chunks = [c.strip() for c in chunks if c.strip()]
                 if chunks:
                     return chunks
-    except json.JSONDecodeError as e:
-        import sys
-        print(f"JSON parsing failed for chunks: {e}", file=sys.stderr)
-    except Exception as e:
-        import sys
-        print(f"Error parsing chunks: {e}", file=sys.stderr)
+    except json.JSONDecodeError:
+        # Silently fall back - expected for some LLM outputs
+        pass
+    except Exception:
+        # Silently fall back
+        pass
 
     # Fallback: return full text as single chunk (never truncate)
     return [text]
