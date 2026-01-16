@@ -730,22 +730,12 @@ def _run_embedding_phase(
     # This belongs in embedding phase because it uses embeddings
     needs_trends = [a for a in articles if not a.trend_tags]
     if needs_trends:
-        total = len(needs_trends)
-        console.print(f"  Tagging {total} articles with trend categories...")
-        tagged = 0
-        errors = 0
+        progress = BatchProgress(len(needs_trends), batch_size=10, label="articles")
+        console.print(f"  Tagging {progress.total_items} articles with trend categories...")
 
-        # Process in batches with progress output
-        TREND_BATCH_SIZE = 10
-        num_batches = (total + TREND_BATCH_SIZE - 1) // TREND_BATCH_SIZE
-
-        for batch_num in range(num_batches):
-            start_idx = batch_num * TREND_BATCH_SIZE
-            end_idx = min(start_idx + TREND_BATCH_SIZE, total)
-            batch = needs_trends[start_idx:end_idx]
-
-            console.print(f"    [dim]Batch {batch_num + 1}/{num_batches} ({len(batch)} items)...[/dim]", end="")
-            batch_tagged = 0
+        for batch_num, batch in progress.iterate(needs_trends):
+            progress.start_batch()
+            batch_success = 0
             batch_errors = 0
 
             for article in batch:
@@ -753,20 +743,15 @@ def _run_embedding_phase(
                     tags = analyze_article(article, embedding_service=embedding_service)
                     storage.update_trends(article.id, tags)
                     article.trend_tags = tags
-                    tagged += 1
-                    batch_tagged += 1
+                    batch_success += 1
                 except Exception as e:
                     console.print(f"\n      [red]ERROR tagging {article.title[:30]}: {e}[/red]")
                     stats["errors"] += 1
-                    errors += 1
                     batch_errors += 1
 
-            if batch_errors == 0:
-                console.print(f" [green]done ({batch_tagged} tagged)[/green]")
-            else:
-                console.print(f" [yellow]done ({batch_tagged} tagged, {batch_errors} errors)[/yellow]")
+            progress.end_batch(batch_success, batch_errors)
 
-        console.print(f"  [green]Tagged {tagged} articles with trends[/green]")
+        progress.summary(f"Tagged {progress.total_processed} articles with trends")
 
     # Any new stories created during LLM phase need embeddings
     stories = storage.get_active_stories()
