@@ -1116,12 +1116,11 @@ def _run_story_matching(
 # =============================================================================
 
 def generate_report(
-    limit: int = 20,
     skip_summarized: bool = True,
     db_path: str = "articles.db",
     kb_path: str = "knowledge.db",
     feeds_file: str = "config/feeds.txt",
-    max_per_step: int = 0,
+    limit: int = 0,  # UNIVERSAL limit for ALL steps (0=unlimited)
 ) -> dict:
     """
     Generate a comprehensive report with self-healing pipeline.
