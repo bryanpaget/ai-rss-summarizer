@@ -280,44 +280,183 @@ def show_context(
     console.print(table)
 
 
-# Predefined topic categories for the setup wizard
+# Comprehensive RSS Feed Taxonomy
+# Structure: Category -> Subject -> Feeds (name, url)
+FEED_TAXONOMY = {
+    "Technology": {
+        "AI & Machine Learning": [
+            {"name": "Ars Technica AI", "url": "https://feeds.arstechnica.com/arstechnica/technology-lab"},
+            {"name": "TechCrunch AI", "url": "https://techcrunch.com/category/artificial-intelligence/feed/"},
+            {"name": "Wired AI", "url": "https://www.wired.com/feed/category/science/latest/rss"},
+            {"name": "The Verge AI", "url": "https://www.theverge.com/ai-artificial-intelligence/rss/index.xml"},
+        ],
+        "Cybersecurity": [
+            {"name": "Dark Reading", "url": "https://www.darkreading.com/rss.xml"},
+            {"name": "Krebs on Security", "url": "https://krebsonsecurity.com/feed/"},
+            {"name": "Schneier on Security", "url": "https://www.schneier.com/blog/index.rdf"},
+            {"name": "Threatpost", "url": "https://threatpost.com/feed/"},
+        ],
+        "Software Development": [
+            {"name": "InfoQ", "url": "https://feed.infoq.com/"},
+            {"name": "The Register - Software", "url": "https://www.theregister.com/software/headlines.atom"},
+            {"name": "Slashdot - Developers", "url": "https://rss.slashdot.org/Slashdot/slashdotDevelopers"},
+            {"name": "DZone", "url": "https://feeds.dzone.com/home"},
+        ],
+        "Hardware": [
+            {"name": "Tom's Hardware", "url": "https://www.tomshardware.com/rss.xml"},
+            {"name": "AnandTech", "url": "https://www.anandtech.com/rss/"},
+            {"name": "Engadget Hardware", "url": "https://www.engadget.com/rss.xml"},
+            {"name": "ZDNet Hardware", "url": "https://www.zdnet.com/topic/hardware/rss.xml"},
+        ],
+        "Startups & VC": [
+            {"name": "TechCrunch Startups", "url": "https://techcrunch.com/startups/feed/"},
+            {"name": "VentureBeat", "url": "https://venturebeat.com/feed/"},
+            {"name": "Sifted", "url": "https://sifted.eu/feed/"},
+        ],
+    },
+    "World News": {
+        "Global Headlines": [
+            {"name": "BBC World News", "url": "https://feeds.bbci.co.uk/news/world/rss.xml"},
+            {"name": "Al Jazeera English", "url": "https://www.aljazeera.com/xml/rss/all.xml"},
+            {"name": "The Guardian World", "url": "https://www.theguardian.com/world/rss"},
+            {"name": "The Atlantic World", "url": "https://www.theatlantic.com/feed/channel/world/"},
+        ],
+        "United States": [
+            {"name": "NYT US News", "url": "https://rss.nytimes.com/services/xml/rss/nyt/US.xml"},
+            {"name": "NPR News", "url": "https://feeds.npr.org/1001/rss.xml"},
+        ],
+        "Europe": [
+            {"name": "BBC Europe", "url": "https://feeds.bbci.co.uk/news/world/europe/rss.xml"},
+            {"name": "Deutsche Welle", "url": "https://rss.dw.com/rdf/rss-en-all"},
+            {"name": "The Local", "url": "https://www.thelocal.com/feed/"},
+        ],
+        "Asia & Middle East": [
+            {"name": "Al Jazeera Middle East", "url": "https://www.aljazeera.com/xml/rss/middle-east.xml"},
+            {"name": "BBC Asia", "url": "https://feeds.bbci.co.uk/news/world/asia/rss.xml"},
+            {"name": "South China Morning Post", "url": "https://www.scmp.com/rss/91/feed"},
+        ],
+    },
+    "Business & Finance": {
+        "Markets": [
+            {"name": "WSJ Markets", "url": "https://feeds.a.dj.com/rss/RSSMarketsMain.xml"},
+            {"name": "MarketWatch", "url": "http://feeds.marketwatch.com/marketwatch/marketupdates/"},
+            {"name": "Bloomberg Markets", "url": "https://www.bloomberg.com/feeds/markets/headlines.xml"},
+        ],
+        "Economy": [
+            {"name": "NYT Economy", "url": "https://rss.nytimes.com/services/xml/rss/nyt/Economy.xml"},
+            {"name": "The Economist", "url": "https://www.economist.com/sections/economics/rss.xml"},
+            {"name": "Financial Times", "url": "https://www.ft.com/?format=rss"},
+        ],
+        "Personal Finance": [
+            {"name": "Kiplingers", "url": "https://www.kiplinger.com/rss/index.php"},
+            {"name": "NerdWallet", "url": "https://www.nerdwallet.com/blog/feed/"},
+            {"name": "The Penny Hoarder", "url": "https://www.thepennyhoarder.com/feed/"},
+        ],
+    },
+    "Science": {
+        "Space & Astronomy": [
+            {"name": "NASA Breaking News", "url": "https://www.nasa.gov/rss/breaking_news.rss"},
+            {"name": "Space.com", "url": "https://www.space.com/home/feed/site.xml"},
+            {"name": "Sky & Telescope", "url": "https://skyandtelescope.org/feed/"},
+        ],
+        "Biological Sciences": [
+            {"name": "Nature News", "url": "https://www.nature.com/nature.rss"},
+            {"name": "Science Magazine", "url": "https://www.sciencemag.org/rss/news_current.xml"},
+            {"name": "Scientific American", "url": "https://rss.sciam.com/ScientificAmerican-News"},
+        ],
+    },
+    "Politics": {
+        "US Federal": [
+            {"name": "Politico Pulse", "url": "https://www.politico.com/rss/politicopulse.xml"},
+            {"name": "The Hill", "url": "https://thehill.com/rss/syndication/all"},
+            {"name": "RealClearPolitics", "url": "https://www.realclearpolitics.com/index.xml"},
+        ],
+        "Analysis": [
+            {"name": "FiveThirtyEight", "url": "https://fivethirtyeight.com/features/feed/"},
+            {"name": "The Atlantic Politics", "url": "https://www.theatlantic.com/feed/channel/politics/"},
+            {"name": "Vox Politics", "url": "https://www.vox.com/rss/politics/index.xml"},
+        ],
+    },
+    "Health & Wellness": {
+        "Medical Research": [
+            {"name": "Mayo Clinic", "url": "https://sharing.mayoclinic.org/feed/"},
+            {"name": "Harvard Health", "url": "https://www.health.harvard.edu/blog/feed"},
+            {"name": "Medical News Today", "url": "https://rss.medicalnewstoday.com/featurednews.xml"},
+        ],
+    },
+    "Entertainment & Culture": {
+        "Movies & TV": [
+            {"name": "Variety", "url": "https://variety.com/feed/"},
+            {"name": "Hollywood Reporter", "url": "https://www.hollywoodreporter.com/feed/"},
+            {"name": "Entertainment Weekly", "url": "https://ew.com/feed/"},
+        ],
+        "Music": [
+            {"name": "Pitchfork", "url": "https://pitchfork.com/feed/rss"},
+            {"name": "Rolling Stone", "url": "https://www.rollingstone.com/feed/"},
+            {"name": "Billboard", "url": "https://www.billboard.com/feed/"},
+        ],
+    },
+    "Sports": {
+        "General Sports": [
+            {"name": "ESPN Headlines", "url": "https://www.espn.com/espn/rss/news"},
+            {"name": "CBS Sports", "url": "https://www.cbssports.com/rss/headlines/"},
+            {"name": "Sports Illustrated", "url": "https://www.si.com/.rss/full/"},
+        ],
+    },
+    "Gaming": {
+        "Game News": [
+            {"name": "IGN All", "url": "https://feeds.feedburner.com/ign/all"},
+            {"name": "Kotaku", "url": "https://kotaku.com/rss"},
+            {"name": "Polygon", "url": "https://www.polygon.com/rss/index.xml"},
+        ],
+        "PC Gaming": [
+            {"name": "PC Gamer", "url": "https://www.pcgamer.com/rss"},
+            {"name": "Rock Paper Shotgun", "url": "https://www.rockpapershotgun.com/feed"},
+        ],
+    },
+    "Lifestyle": {
+        "Home & Garden": [
+            {"name": "Apartment Therapy", "url": "https://www.apartmenttherapy.com/main.rss"},
+            {"name": "Design Milk", "url": "https://design-milk.com/feed/"},
+        ],
+    },
+    "Arts & Design": {
+        "Architecture": [
+            {"name": "Dezeen", "url": "https://www.dezeen.com/feed/"},
+            {"name": "ArchDaily", "url": "https://www.archdaily.com/feed"},
+        ],
+    },
+    "Education & Learning": {
+        "Higher Ed": [
+            {"name": "Chronicle of Higher Ed", "url": "https://www.chronicle.com/section/news/rss"},
+            {"name": "Inside Higher Ed", "url": "https://www.insidehighered.com/rss/feed/news"},
+        ],
+    },
+    "Food & Cooking": {
+        "Recipes": [
+            {"name": "Serious Eats", "url": "https://www.seriouseats.com/rss"},
+            {"name": "Simply Recipes", "url": "https://www.simplyrecipes.com/rss"},
+        ],
+    },
+    "Travel": {
+        "Destinations": [
+            {"name": "Lonely Planet", "url": "https://www.lonelyplanet.com/articles/feed"},
+            {"name": "Conde Nast Traveler", "url": "https://www.cntraveler.com/feed/rss"},
+        ],
+    },
+    "Environment & Sustainability": {
+        "Climate News": [
+            {"name": "Grist", "url": "https://grist.org/feed/"},
+            {"name": "Mongabay", "url": "https://news.mongabay.com/feed/"},
+            {"name": "Environment News Service", "url": "https://ens-newswire.com/feed/"},
+        ],
+    },
+}
+
+# Legacy format for backwards compatibility with topic-based selection
 SETUP_CATEGORIES = {
-    "AI & Machine Learning": [
-        "Artificial Intelligence",
-        "Machine Learning",
-        "Large Language Models",
-        "ChatGPT & GPT",
-        "AI Safety",
-        "Neural Networks",
-    ],
-    "Technology": [
-        "Software Development",
-        "Cybersecurity",
-        "Cloud Computing",
-        "Startups",
-        "Open Source",
-        "Programming Languages",
-    ],
-    "Business & Finance": [
-        "Stock Market",
-        "Cryptocurrency",
-        "Startups & Venture Capital",
-        "Corporate News",
-        "Economic Policy",
-    ],
-    "Science": [
-        "Space Exploration",
-        "Climate Science",
-        "Medical Research",
-        "Physics",
-        "Biology",
-    ],
-    "World Affairs": [
-        "International Relations",
-        "Geopolitics",
-        "Elections",
-        "Policy & Legislation",
-    ],
+    category: list(subjects.keys())
+    for category, subjects in FEED_TAXONOMY.items()
 }
 
 
