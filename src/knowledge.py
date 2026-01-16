@@ -2214,7 +2214,8 @@ Return ONLY valid JSON, no other text."""
 
         # Process extracted data and save to knowledge base
         all_insights = []
-        all_triples = []
+        new_triples = []
+        existing_triples = []
 
         for chunk in result.chunks:
             # Save insights from this chunk
@@ -2245,7 +2246,9 @@ Return ONLY valid JSON, no other text."""
                     confidence=triple_data.confidence,
                 )
                 if knowledge_base.save_triple(triple):
-                    all_triples.append(triple)
+                    new_triples.append(triple)
+                else:
+                    existing_triples.append(triple)
 
         # Convert signal tags to dict format
         signal_tags = [
