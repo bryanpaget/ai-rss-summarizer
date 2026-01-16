@@ -598,6 +598,11 @@ def _run_llm_phase(
                 console.print(f"    [dim]~{len(extraction.existing_triples)} already known[/dim]")
                 stats["triples_existing"] += len(extraction.existing_triples)
             stats["triples"] += len(extraction.new_triples) + len(extraction.existing_triples)
+
+            # Save summary (BUG FIX: summary was extracted but not saved)
+            if extraction.summary:
+                storage.update_summary(article.id, extraction.summary)
+                article.summary = extraction.summary
         except Exception as e:
             error_msg = f"Extraction failed: {e}"
             article_errors.append(error_msg)
