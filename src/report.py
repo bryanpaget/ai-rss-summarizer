@@ -1003,6 +1003,9 @@ def _run_connection_detection(
     total_connections = 0
 
     for i, cluster in enumerate(clusters):
+        if limit > 0 and i >= limit:
+            console.print(f"  [dim]Stopped at {limit} clusters (limit reached)[/dim]")
+            break
         console.print(f"    [dim]Cluster {i+1}/{len(clusters)} ({len(cluster)} insights)...[/dim]", end="")
 
         new_triples, connections = _analyze_cluster_for_triples(cluster, provider, kb)
