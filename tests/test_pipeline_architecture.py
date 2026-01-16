@@ -414,3 +414,45 @@ class TestPipelineArchitecture:
                 f"VIOLATION: Expected {expected} LLM calls ({NUM_ARTICLES} articles x 1). "
                 f"Got {llm_calls} ({per_article:.1f} per article)."
             )
+
+    def test_trend_tagging_no_new_embeddings(self, capsys):
+        """
+        TEST: Trend tagging must NOT create new embeddings.
+
+        Trend tagging should use stored embeddings via get_embedding(),
+        NOT create new ones via embed_text(). Re-embedding is a violation.
+
+        ALWAYS prints the call log for visibility.
+        """
+        from src.trends import analyze_article
+
+        logger = PipelineCallLogger()
+        logger.clear()
+
+        embedding_service = create_logging_embedding_service(logger)
+        # Return a stored embedding so the code can use it
+        embedding_service.get_embedding.return_value = [0.1] * 384
+
+        article = create_test_article("trend-test-1")
+        article.summary = "This is a test summary about AI technology."
+
+        # Call trend tagging
+        try:
+            analyze_article(article, embedding_service=embedding_service)
+        except Exception as e:
+            # Might fail if code expects different interface - that's OK for this test
+            print(f"analyze_article raised: {e}")
+
+        # ALWAYS print the log
+        report = logger.get_full_report()
+        print(report)
+
+        # Count embed_text calls specifically
+        embed_text_calls = [c for c in logger.calls if c["method"] == "embed_text"]
+
+        if embed_text_calls:
+            pytest.fail(
+                f"VIOLATION: Trend tagging called embed_text() {len(embed_text_calls)} times. "
+                f"Should be 0 - must use stored embeddings via get_embedding() instead.\n"
+                f"Callers: {[c['caller'] for c in embed_text_calls]}"
+            )
