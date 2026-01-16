@@ -698,8 +698,11 @@ def setup_wizard():
     """
     Interactive setup wizard for configuring your interests and RSS feeds.
 
-    Navigate through a hierarchy of categories, subjects, and feeds.
-    Use arrow keys to move, space to select, enter to confirm.
+    Navigate through a tree of categories, subjects, and feeds.
+    - Arrow keys to move up/down
+    - Enter to drill into a category/subject or toggle a feed
+    - Select "Back" options to go up a level
+    - "Done" at the top level to review and confirm
 
     Example:
         rss context setup
@@ -712,149 +715,39 @@ def setup_wizard():
     console.print()
     console.print(Panel("[bold]RSS Summarizer Setup Wizard[/bold]", style="blue"))
     console.print()
-    console.print("Let's configure your interests and RSS feeds.")
-    console.print(f"[dim]Available: {len(FEED_TAXONOMY)} categories with {sum(len(s) for s in FEED_TAXONOMY.values())} subjects[/dim]")
+    console.print("Configure your interests and RSS feeds.")
+    console.print(f"[dim]Available: {len(FEED_TAXONOMY)} categories, {sum(len(s) for s in FEED_TAXONOMY.values())} subjects[/dim]")
     console.print()
+    console.print("[dim]Navigate with arrow keys, Enter to select, Back options to go up[/dim]")
 
-    # Load existing profile
-    store = UserContextStore()
-    profile = store.load_profile()
-    selected_feeds = []
-    selected_topics = []
+    # Run tree navigation wizard
+    selected_feeds, selected_topics = _run_tree_wizard()
 
-    # Step 1: Select broad categories
-    console.print("[bold]Step 1 of 4:[/bold] Select topic categories")
-    console.print("[dim]Use arrow keys to move, space to select, enter to confirm[/dim]")
-    console.print()
-
-    category_choices = list(FEED_TAXONOMY.keys())
-    selected_categories = questionary.checkbox(
-        "Select categories:",
-        choices=category_choices,
-    ).ask()
-
-    if selected_categories is None:
-        console.print("[yellow]Setup cancelled.[/yellow]")
-        _show_cli_help()
-        raise typer.Exit(0)
-
-    if not selected_categories:
-        console.print("[yellow]No categories selected. You can always run setup again.[/yellow]")
-        _show_cli_help()
-        raise typer.Exit(0)
-
-    # Step 2: Select subjects within chosen categories
-    console.print()
-    console.print("[bold]Step 2 of 4:[/bold] Select specific subjects")
-    console.print()
-
-    all_subjects = []
-    subject_to_category = {}
-    for category in selected_categories:
-        subjects = FEED_TAXONOMY.get(category, {})
-        for subject in subjects.keys():
-            display = f"{subject} ({category})"
-            all_subjects.append(display)
-            subject_to_category[display] = (category, subject)
-
-    selected_subject_displays = []
-    if all_subjects:
-        selected_subject_displays = questionary.checkbox(
-            "Select subjects:",
-            choices=all_subjects,
-        ).ask()
-
-        if selected_subject_displays is None:
-            console.print("[yellow]Setup cancelled.[/yellow]")
-            _show_cli_help()
-            raise typer.Exit(0)
-
-        # Add selected subjects as topics
-        for display in selected_subject_displays:
-            _, subject = subject_to_category[display]
-            selected_topics.append(subject)
-
-        _show_current_selection(selected_feeds, selected_topics)
-
-    # Step 3: Select specific feeds from chosen subjects
-    console.print()
-    console.print("[bold]Step 3 of 4:[/bold] Select RSS feeds to subscribe to")
-    console.print("[dim]These will be added as feed subscriptions[/dim]")
-    console.print()
-
-    all_feed_choices = []
-    feed_lookup = {}
-    for display in selected_subject_displays:
-        category, subject = subject_to_category[display]
-        feeds = FEED_TAXONOMY.get(category, {}).get(subject, [])
-        for feed in feeds:
-            feed_display = f"{feed['name']} - {subject}"
-            all_feed_choices.append(feed_display)
-            feed_lookup[feed_display] = feed
-
-    if all_feed_choices:
-        selected_feed_displays = questionary.checkbox(
-            "Select feeds:",
-            choices=all_feed_choices,
-        ).ask()
-
-        if selected_feed_displays:
-            for display in selected_feed_displays:
-                selected_feeds.append(feed_lookup[display])
-
-        _show_current_selection(selected_feeds, selected_topics)
-
-    # Step 4: Optional custom additions
-    console.print()
-    console.print("[bold]Step 4 of 4:[/bold] Custom additions (optional)")
-    add_custom = questionary.confirm(
-        "Would you like to add custom topics or feed URLs?",
-        default=False,
-    ).ask()
-
-    if add_custom:
-        console.print("[dim]Enter topics/URLs one per line, empty line to finish[/dim]")
-        while True:
-            entry = questionary.text("Add topic or feed URL (or press enter to finish):").ask()
-            if not entry:
-                break
-            entry = entry.strip()
-            if entry.startswith("http://") or entry.startswith("https://"):
-                selected_feeds.append({"name": entry.split("/")[2], "url": entry})
-            else:
-                selected_topics.append(entry)
-
-    # Final summary check
     if not selected_feeds and not selected_topics:
-        console.print("[yellow]No topics or feeds selected.[/yellow]")
+        console.print("[yellow]No selections made.[/yellow]")
         _show_cli_help()
         raise typer.Exit(0)
 
     # Save topics to profile
+    store = UserContextStore()
+    profile = store.load_profile()
     if selected_topics:
         profile.watching = list(set(profile.watching + selected_topics))
         store.save_profile(profile)
 
-    # Show summary
+    # Show final success
     console.print()
     console.print(Panel("[bold green]Setup Complete![/bold green]", style="green"))
-    console.print()
-    if selected_topics:
-        console.print(f"[green]Added {len(selected_topics)} topic(s) to your interests:[/green]")
-        for topic in selected_topics:
-            console.print(f"  - {topic}")
+
     if selected_feeds:
-        console.print(f"[green]Selected {len(selected_feeds)} feed(s):[/green]")
-        for feed in selected_feeds:
-            console.print(f"  - {feed['name']}: {feed['url']}")
         console.print()
-        console.print("[yellow]To add these feeds, run:[/yellow]")
+        console.print("[yellow]To subscribe to your selected feeds, run:[/yellow]")
         for feed in selected_feeds:
             console.print(f"  rss feed add \"{feed['url']}\"")
+
     console.print()
     console.print("[dim]Your briefings will now be personalized based on these interests.[/dim]")
-    console.print("[dim]Run 'rss context list' to see all your settings.[/dim]")
-    console.print("[dim]Run 'rss context setup' again to add more topics.[/dim]")
+    _show_cli_help()
 
 
 @app.command("watch")
