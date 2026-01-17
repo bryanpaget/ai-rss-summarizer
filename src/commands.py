@@ -200,13 +200,15 @@ Summary:"""
 
     # =========================================================================
     # PHASE 2d: Knowledge extraction (submit/collect pattern for batching)
+    # ALL LLM calls use submit/collect - no blocking until collection phase
     # =========================================================================
     console.print(f"[dim]Extracting knowledge from {len(articles)} articles...[/dim]")
 
     from .gateway import get_gateway
+    from .embeddings import EmbeddingService
     gateway = get_gateway()
 
-    # --- INSIGHTS: Submit all, then collect all ---
+    # --- STEP 1: INSIGHTS - Submit all, then collect all ---
     insight_handles = []
     for article in articles:
         prompt = build_insight_prompt(article)
@@ -226,7 +228,7 @@ Summary:"""
             console.print(f"[red]Error extracting insights from '{article.title[:40]}': {e}[/red]")
             stats["errors"] = stats.get("errors", 0) + 1
 
-    # --- ENTITY RELATIONSHIPS: Submit all, then collect all ---
+    # --- STEP 2: ENTITY RELATIONSHIPS - Submit all, then collect all ---
     entity_rel_handles = []
     for article in articles:
         prompt = build_entity_rel_prompt(article)
@@ -244,13 +246,36 @@ Summary:"""
             console.print(f"[red]Error extracting entity relationships from '{article.title[:40]}': {e}[/red]")
             stats["errors"] = stats.get("errors", 0) + 1
 
-    # --- TRIPLES: Submit all chunks from all articles, then collect all ---
-    triple_handles = []  # List of (article, handle) for tracking
+    # --- STEP 3: CHUNKING - Submit all chunk prompts, then collect all ---
+    chunk_handles = []
+    articles_needing_chunks = [a for a in articles if a.content and len(a.content) >= 200]
+    for article in articles_needing_chunks:
+        prompt = build_chunk_prompt(article)
+        if prompt:
+            handle = gateway.submit_text(prompt)
+            chunk_handles.append((article, handle))
+
+    # Collect chunk responses - builds article_chunks mapping
+    article_chunks = {}  # article.id -> list of chunks
+    for article, handle in chunk_handles:
+        try:
+            response = gateway.collect_text(handle)
+            chunks = parse_chunk_response(article, response)
+            article_chunks[article.id] = chunks
+        except Exception as e:
+            # Fallback to full content as single chunk
+            article_chunks[article.id] = [article.content] if article.content else []
+
+    # For articles that didn't need chunking, use content as single chunk
     for article in articles:
-        if not article.content or len(article.content) < 100:
-            continue
-        # Get chunks (this still uses LLM but we batch the extraction)
-        chunks = _semantic_chunk(article.content, provider, article.title)
+        if article.id not in article_chunks:
+            if article.content and len(article.content) >= 100:
+                article_chunks[article.id] = [article.content]
+
+    # --- STEP 4: TRIPLES - Submit all extraction prompts, then collect all ---
+    triple_handles = []
+    for article in articles:
+        chunks = article_chunks.get(article.id, [])
         for i, chunk in enumerate(chunks):
             prompt = build_triple_prompt(article.title, i, len(chunks), chunk)
             handle = gateway.submit_text(prompt)
@@ -266,17 +291,34 @@ Summary:"""
             console.print(f"[red]Error extracting triples from '{article.title[:40]}': {e}[/red]")
             stats["errors"] = stats.get("errors", 0) + 1
 
-    # --- CONNECTIONS: Detect connections for new insights ---
-    for insight in all_insights:
-        try:
-            relationships = detect_connections(insight, kb, provider)
-            if relationships:
-                stats["connections"] = stats.get("connections", 0) + len(relationships)
-                for rel in relationships:
-                    formatted = format_relationship(rel, kb)
-                    console.print(f"  [green]-> {formatted}[/green]")
-        except Exception as e:
-            stats["errors"] = stats.get("errors", 0) + 1
+    # --- STEP 5: CONNECTIONS - Get candidates (FAISS), submit all, collect all ---
+    # First, get candidates for all insights (no LLM, just FAISS)
+    try:
+        embedding_service = EmbeddingService(kb)
+        if embedding_service.is_available():
+            connection_work = []  # (insight, candidates, handle)
+            for insight in all_insights:
+                candidates = get_connection_candidates(insight, kb, embedding_service)
+                if candidates:
+                    prompt = build_connection_prompt(insight, candidates)
+                    if prompt:
+                        handle = gateway.submit_text(prompt)
+                        connection_work.append((insight, candidates, handle))
+
+            # Collect connection responses and parse
+            for insight, candidates, handle in connection_work:
+                try:
+                    response = gateway.collect_text(handle)
+                    relationships = parse_connection_response(insight, candidates, response, kb)
+                    if relationships:
+                        stats["connections"] = stats.get("connections", 0) + len(relationships)
+                        for rel in relationships:
+                            formatted = format_relationship(rel, kb)
+                            console.print(f"  [green]-> {formatted}[/green]")
+                except Exception as e:
+                    stats["errors"] = stats.get("errors", 0) + 1
+    except Exception as e:
+        console.print(f"[dim]Skipping connection detection: {e}[/dim]")
 
     # =========================================================================
     # STEP 3: Cluster into stories
