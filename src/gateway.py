@@ -371,8 +371,8 @@ class LocalLLMGateway:
     ) -> list[str]:
         """Process multiple text requests in a batch.
 
-        Uses parallel subprocess calls to submit requests quickly,
-        allowing the gateway to batch them efficiently.
+        Submits all requests first, then collects responses.
+        The gateway batches same-type requests for efficient processing.
 
         Args:
             prompts: List of prompts
@@ -386,21 +386,14 @@ class LocalLLMGateway:
             return []
 
         batch_start = time.time()
-        logger.debug(f"batch_text: starting {len(prompts)} requests (parallel submit)")
+        logger.debug(f"batch_text: starting {len(prompts)} requests")
 
-        # Submit all requests in parallel using threads
+        # Submit all requests (gateway queues them for batch processing)
         submit_start = time.time()
-        handles = [None] * len(prompts)
-
-        def submit_one(idx: int) -> tuple[int, str]:
-            handle = self.submit_text(prompts[idx], system_prompt, temperature)
-            return idx, handle
-
-        with ThreadPoolExecutor(max_workers=min(len(prompts), 10)) as executor:
-            futures = [executor.submit(submit_one, i) for i in range(len(prompts))]
-            for future in futures:
-                idx, handle = future.result()
-                handles[idx] = handle
+        handles = []
+        for prompt in prompts:
+            handle = self.submit_text(prompt, system_prompt, temperature)
+            handles.append(handle)
 
         submit_time = time.time() - submit_start
         logger.debug(f"batch_text: all {len(prompts)} submitted in {submit_time:.2f}s")
