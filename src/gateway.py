@@ -74,11 +74,8 @@ class LocalLLMGateway:
         """
         self.timeout = timeout
         self._gateway_path = self._find_gateway()
-        # Status directory for queue monitoring
-        self._status_dir = Path(os.environ.get(
-            'LM_STUDIO_STATUS_DIR',
-            Path.home() / '.lmstudio_gateway'
-        ))
+        # IPC directory for queue monitoring (matches safe-model-load.sh)
+        self._ipc_dir = Path.home() / '.claude' / 'ipc'
 
     def _find_gateway(self) -> str:
         """Find the gateway script path.
