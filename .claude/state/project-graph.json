@@ -9,20 +9,20 @@
                                                      ]
                                          },
                       "tags":  {
-                                   "out":  [
-
-                                           ],
                                    "in":  [
                                               8
-                                          ]
+                                          ],
+                                   "out":  [
+
+                                           ]
                                },
                       "entity relationships":  {
-                                                   "out":  [
-
-                                                           ],
                                                    "in":  [
                                                               11
-                                                          ]
+                                                          ],
+                                                   "out":  [
+
+                                                           ]
                                                },
                       "process: 572ms":  {
                                              "in":  [
@@ -44,21 +44,21 @@
                                                   ]
                                       },
                       "insights":  {
-                                       "out":  [
-                                                   11
-                                               ],
                                        "in":  [
 
-                                              ]
+                                              ],
+                                       "out":  [
+                                                   11
+                                               ]
                                    },
                       "knowledge extraction":  {
-                                                   "out":  [
-
-                                                           ],
                                                    "in":  [
                                                               9,
                                                               10
-                                                          ]
+                                                          ],
+                                                   "out":  [
+
+                                                           ]
                                                },
                       "article.id":  {
                                          "in":  [
@@ -70,6 +70,14 @@
                                                      2
                                                  ]
                                      },
+                      "queue: 12256ms":  {
+                                             "in":  [
+
+                                                    ],
+                                             "out":  [
+                                                         5
+                                                     ]
+                                         },
                       "`request_text`":  {
                                              "in":  [
 
@@ -95,22 +103,14 @@
 
                                                     ]
                                         },
-                      "`request_embedding`":  {
-                                                  "in":  [
-                                                             3
-                                                         ],
-                                                  "out":  [
-
-                                                          ]
-                                              },
                       "tagging":  {
+                                      "in":  [
+
+                                             ],
                                       "out":  [
                                                   9,
                                                   10
-                                              ],
-                                      "in":  [
-
-                                             ]
+                                              ]
                                   },
                       "queue: 11910ms":  {
                                              "in":  [
@@ -120,21 +120,21 @@
                                                          6
                                                      ]
                                          },
-                      "queue: 12256ms":  {
-                                             "in":  [
+                      "`request_embedding`":  {
+                                                  "in":  [
+                                                             3
+                                                         ],
+                                                  "out":  [
 
-                                                    ],
-                                             "out":  [
-                                                         5
-                                                     ]
-                                         },
+                                                          ]
+                                              },
                       "summaries":  {
-                                        "out":  [
-                                                    8
-                                                ],
                                         "in":  [
 
-                                               ]
+                                               ],
+                                        "out":  [
+                                                    8
+                                                ]
                                     }
                   },
     "validation_queue":  [
@@ -144,13 +144,13 @@
     "project_root":  "C:/Users/jpswi/personal projects/RSSsummarizer",
     "sessions":  {
                      "b83ca0cf-6f48-4726-b27f-0daeab98089d":  {
-                                                                  "last_turn":  24,
-                                                                  "last_active":  "2026-01-16T20:38:43.2946333-08:00",
+                                                                  "last_turn":  25,
+                                                                  "last_active":  "2026-01-17T05:47:49.4152777-08:00",
                                                                   "last_dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer"
                                                               }
                  },
     "metadata":  {
-                     "last_turn":  24,
+                     "last_turn":  25,
                      "cycles_found":  0,
                      "total_connected":  6,
                      "total_orphans":  5
