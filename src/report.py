@@ -658,10 +658,7 @@ def _run_llm_phase(
             rate_per_article = step_elapsed / articles_done
             eta_seconds = articles_remaining * rate_per_article
 
-            if eta_seconds > 60:
-                eta_str = f"~{eta_seconds / 60:.1f}m remaining"
-            else:
-                eta_str = f"~{eta_seconds:.0f}s remaining"
+            eta_str = f"~{format_duration(eta_seconds)} remaining"
 
             if article_errors:
                 console.print(f"  [yellow][!] {article_elapsed:.1f}s | {eta_str}[/yellow]")
