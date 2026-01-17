@@ -244,7 +244,7 @@ class LocalLLMGateway:
     ) -> str:
         """Submit a request to the gateway and return response file path.
 
-        Uses direct queue write for speed - no subprocess overhead.
+        Uses subprocess to call the bash script which handles processor spawning.
         Caller must poll/wait for file to be written.
 
         Args:
@@ -256,15 +256,50 @@ class LocalLLMGateway:
         Returns:
             Path to response file (will be written when request completes)
         """
-        # Use direct queue write - much faster than subprocess
-        request = {
-            "type": request_type,
-            "prompt": prompt,
-            "system": system_prompt or "",
-            "temperature": temperature if temperature is not None else 0.3,
-        }
-        paths = self._queue_requests_direct([request])
-        return paths[0]
+        # Write prompt to temp file to avoid shell escaping issues
+        with tempfile.NamedTemporaryFile(
+            mode='w', suffix='.txt', delete=False, encoding='utf-8'
+        ) as f:
+            f.write(prompt)
+            temp_path = f.name
+
+        try:
+            bash_exe = self.GIT_BASH if os.name == 'nt' else 'bash'
+            gateway_path = self._win_to_msys_path(self._gateway_path)
+            temp_path_msys = self._win_to_msys_path(temp_path)
+
+            cmd = [bash_exe, gateway_path, "request", request_type,
+                   "--prompt-file", temp_path_msys]
+
+            if system_prompt:
+                cmd.extend(["--system", system_prompt])
+            if temperature is not None:
+                cmd.extend(["--temperature", str(temperature)])
+
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=30,
+            )
+
+            if result.returncode != 0:
+                raise GatewayError(f"Gateway submit failed: {result.stderr or result.stdout}")
+
+            stdout = result.stdout.strip()
+            if not stdout.startswith('FILE='):
+                raise GatewayError(f"Unexpected gateway output: {stdout}")
+
+            response_path_msys = stdout[5:]
+            return self._msys_to_win_path(response_path_msys)
+
+        finally:
+            try:
+                os.unlink(temp_path)
+            except Exception:
+                pass
 
     def _wait_for_response(self, response_path: str) -> dict:
         """Wait for response file and parse it.
