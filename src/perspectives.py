@@ -551,6 +551,8 @@ def synthesize_perspectives(
     """
     Generate multiple perspectives for a story cluster.
 
+    Uses submit/collect pattern for batched LLM calls when gateway is available.
+
     Args:
         cluster_id: Story cluster ID
         categories: List of perspective categories to generate
@@ -567,34 +569,103 @@ def synthesize_perspectives(
 
     perspectives = {}
 
-    for category in categories:
-        try:
-            perspective = synthesize_perspective(
-                category=category,
-                articles=articles,
-                llm_provider=llm_provider,
-                storage=storage,
-                cluster_id=cluster_id,
-            )
-            perspectives[category] = perspective
+    # Try to use gateway for batched processing
+    try:
+        from .gateway import get_gateway, GatewayUnavailableError
+        gateway = get_gateway()
+        use_gateway = gateway.is_available()
+    except (ImportError, GatewayUnavailableError):
+        use_gateway = False
 
-        except InsufficientSourcesError:
-            # Create low-confidence placeholder
-            perspectives[category] = Perspective(
-                category=category,
-                content=f"Insufficient sources for {category} perspective (need {PERSPECTIVE_CATEGORIES[category]['min_sources']}, have {len(articles)})",
-                source_articles=[a.id for a in articles],
-                confidence=0.1,
-                generated_at=datetime.now(),
-            )
+    if use_gateway and llm_provider:
+        # --- BATCHED PATH: Submit all, then collect all ---
 
-        except CategoryNotApplicableError:
-            # Skip this category
-            continue
+        # Step 1: Build prompts and check eligibility
+        eligible_categories = []
+        for category in categories:
+            if category not in PERSPECTIVE_CATEGORIES:
+                continue
 
-        except LLMProviderError:
-            # Use fallback
-            perspectives[category] = generate_fallback_perspective(category, articles)
+            category_info = PERSPECTIVE_CATEGORIES[category]
+            min_sources = category_info.get('min_sources', 1)
+
+            # Check cache first
+            cached = storage.get_cached_perspective(cluster_id, category)
+            if cached and is_cache_fresh(cached):
+                perspectives[category] = cached
+                continue
+
+            # Check minimum sources
+            if len(articles) < min_sources:
+                perspectives[category] = Perspective(
+                    category=category,
+                    content=f"Insufficient sources for {category} perspective (need {min_sources}, have {len(articles)})",
+                    source_articles=[a.id for a in articles],
+                    confidence=0.1,
+                    generated_at=datetime.now(),
+                )
+                continue
+
+            eligible_categories.append(category)
+
+        # Step 2: Submit all prompts
+        handles = []
+        for category in eligible_categories:
+            prompt = build_perspective_prompt(category, articles)
+            handle = gateway.submit_text(prompt, temperature=0.3)
+            handles.append((category, handle))
+
+        # Step 3: Collect all responses
+        for category, handle in handles:
+            try:
+                synthesis = gateway.collect_text(handle)
+
+                if not synthesis or len(synthesis.strip()) < 10:
+                    perspectives[category] = generate_fallback_perspective(category, articles)
+                    continue
+
+                perspective = Perspective(
+                    category=category,
+                    content=synthesis,
+                    source_articles=[a.id for a in articles],
+                    confidence=estimate_confidence(category, synthesis, articles),
+                    generated_at=datetime.now(),
+                )
+
+                # Cache the result
+                storage.cache_perspective(cluster_id, category, perspective)
+                perspectives[category] = perspective
+
+            except Exception:
+                perspectives[category] = generate_fallback_perspective(category, articles)
+
+    else:
+        # --- SEQUENTIAL PATH: Original behavior for non-gateway providers ---
+        for category in categories:
+            try:
+                perspective = synthesize_perspective(
+                    category=category,
+                    articles=articles,
+                    llm_provider=llm_provider,
+                    storage=storage,
+                    cluster_id=cluster_id,
+                )
+                perspectives[category] = perspective
+
+            except InsufficientSourcesError:
+                perspectives[category] = Perspective(
+                    category=category,
+                    content=f"Insufficient sources for {category} perspective (need {PERSPECTIVE_CATEGORIES[category]['min_sources']}, have {len(articles)})",
+                    source_articles=[a.id for a in articles],
+                    confidence=0.1,
+                    generated_at=datetime.now(),
+                )
+
+            except CategoryNotApplicableError:
+                continue
+
+            except LLMProviderError:
+                perspectives[category] = generate_fallback_perspective(category, articles)
 
     return perspectives
 
