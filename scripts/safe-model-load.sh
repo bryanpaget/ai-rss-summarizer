@@ -1243,7 +1243,20 @@ process_queue() {
 
     log "Starting queue processing (PID: ${BASHPID:-$$})"
 
-    while [[ -s "$QUEUE_FILE" ]]; do
+    while true; do
+        # Check if queue is empty
+        if [[ ! -s "$QUEUE_FILE" ]]; then
+            # Queue appears empty - wait briefly and re-check
+            # This catches requests that arrive during the final batch processing
+            log "Queue appears empty, waiting 500ms to confirm..."
+            sleep 0.5
+            if [[ ! -s "$QUEUE_FILE" ]]; then
+                log "Queue confirmed empty after wait, exiting processor"
+                break
+            fi
+            log "Queue had items after wait, continuing"
+        fi
+
         # Sort queue to group same-type requests
         sort_queue_by_type
 
