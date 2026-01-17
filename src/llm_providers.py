@@ -546,32 +546,6 @@ class LMStudioProvider(OpenAICompatibleProvider):
         # Record estimated usage (gateway doesn't provide token counts)
         self._record_usage(prompt, result, "gateway")
         return result.strip()
-            except (json.JSONDecodeError, KeyError, TypeError) as e:
-                # Could not parse error response - log and continue to raise_for_status
-                import sys
-                print(f"Warning: Could not parse LM Studio error response: {e}", file=sys.stderr)
-
-        response.raise_for_status()
-
-        data = response.json()
-        result = data["choices"][0]["message"]["content"].strip()
-
-        # Record usage
-        usage = data.get("usage", {})
-        if usage:
-            self.last_usage = UsageStats(
-                input_tokens=usage.get("prompt_tokens", 0),
-                output_tokens=usage.get("completion_tokens", 0),
-                total_tokens=usage.get("total_tokens", 0),
-                model=model,
-                provider=self.name,
-            )
-            self.session_usage["calls"] += 1
-            self.session_usage["total_tokens"] += self.last_usage.total_tokens
-        else:
-            self._record_usage(prompt, result, model)
-
-        return result
 
     def summarize(self, text: str, max_length: int = 150) -> str:
         """Generate summary using LM Studio with auto-load support."""
