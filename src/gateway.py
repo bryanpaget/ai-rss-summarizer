@@ -454,7 +454,8 @@ class LocalLLMGateway:
     ) -> list[str]:
         """Process multiple text requests in a batch.
 
-        Submits all requests in parallel (saturating gateway queue), then collects.
+        Uses direct queue writing to submit all requests atomically,
+        ensuring the queue is fully saturated before processing begins.
 
         Args:
             prompts: List of prompts
@@ -468,26 +469,25 @@ class LocalLLMGateway:
             return []
 
         batch_start = time.time()
-        logger.debug(f"batch_text: starting {len(prompts)} requests (parallel submit)")
+        logger.debug(f"batch_text: starting {len(prompts)} requests (direct queue)")
 
-        # Submit all requests in parallel using threads
-        # This saturates the gateway queue immediately instead of sequentially
+        # Build request list
+        requests = [
+            {
+                "type": "text",
+                "prompt": prompt,
+                "system": system_prompt or "",
+                "temperature": temperature,
+            }
+            for prompt in prompts
+        ]
+
+        # Submit all at once via direct queue write
         submit_start = time.time()
-        handles = [None] * len(prompts)
-
-        def submit_one(idx: int) -> tuple[int, str]:
-            handle = self.submit_text(prompts[idx], system_prompt, temperature)
-            return idx, handle
-
-        with ThreadPoolExecutor(max_workers=min(len(prompts), 10)) as executor:
-            futures = [executor.submit(submit_one, i) for i in range(len(prompts))]
-            for future in as_completed(futures):
-                idx, handle = future.result()
-                handles[idx] = handle
-
+        handles = self._queue_requests_direct(requests)
         submit_time = time.time() - submit_start
         queue_depth = self.get_queue_depth()
-        logger.debug(f"batch_text: all {len(prompts)} submitted in {submit_time:.2f}s, queue={queue_depth}")
+        logger.debug(f"batch_text: all {len(prompts)} queued in {submit_time:.3f}s, queue={queue_depth}")
 
         # Collect all responses
         results = []
