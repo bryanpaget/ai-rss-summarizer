@@ -101,7 +101,7 @@ class BatchProgress:
         eta_seconds = avg_time * remaining_batches
         if eta_seconds < 1:
             return ""
-        return f"~{self._format_duration(eta_seconds)} remaining"
+        return f"~{format_duration(eta_seconds)} remaining"
 
     def iterate(self, items: list):
         """Yield (batch_num, batch) tuples for iteration."""
@@ -129,7 +129,7 @@ class BatchProgress:
         self.total_processed += success_count
         self.total_errors += error_count
 
-        duration_str = f"({self._format_duration(duration)})"
+        duration_str = f"({format_duration(duration)})"
 
         if stopped:
             console.print(f" [dim]stopped {duration_str}[/dim]")
@@ -144,11 +144,11 @@ class BatchProgress:
         """Print final summary with total time."""
         total_time = sum(self.batch_times)
         if custom_message:
-            console.print(f"  [green]{custom_message}[/green] [dim]({self._format_duration(total_time)} total)[/dim]")
+            console.print(f"  [green]{custom_message}[/green] [dim]({format_duration(total_time)} total)[/dim]")
         elif self.total_errors == 0:
-            console.print(f"  [green]Processed {self.total_processed} {self.label}[/green] [dim]({self._format_duration(total_time)} total)[/dim]")
+            console.print(f"  [green]Processed {self.total_processed} {self.label}[/green] [dim]({format_duration(total_time)} total)[/dim]")
         else:
-            console.print(f"  [yellow]Processed {self.total_processed} {self.label} ({self.total_errors} errors)[/yellow] [dim]({self._format_duration(total_time)} total)[/dim]")
+            console.print(f"  [yellow]Processed {self.total_processed} {self.label} ({self.total_errors} errors)[/yellow] [dim]({format_duration(total_time)} total)[/dim]")
 
 
 # =============================================================================
