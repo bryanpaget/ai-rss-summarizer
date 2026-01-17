@@ -908,6 +908,100 @@ def backfill_story_embeddings(
     return stats
 
 
+# =============================================================================
+# BATCH HELPERS: Separate prompt building from response parsing for batching
+# =============================================================================
+
+def build_news_extraction_prompt(
+    article: Article, existing_items: list[NewsItem]
+) -> str:
+    """Build prompt for extracting news items from article."""
+    existing_summary = "\n".join(
+        [f"- {item.title}: {item.description}" for item in existing_items[:10]]
+    )
+
+    return f"""Extract new information from this article.
+
+ARTICLE:
+Title: {article.title}
+Content: {article.content}
+
+ALREADY KNOWN (from previous articles):
+{existing_summary if existing_summary else "None"}
+
+Task: Extract distinct pieces of NEW information from this article.
+For each piece of information, classify it as:
+- new_info: Actually new development or fact
+- recap: Background/context from earlier
+- analysis: Commentary or interpretation
+- opinion: Editorial perspective
+
+Respond with JSON array:
+[
+    {{
+        "title": "brief title of news item",
+        "description": "what's new",
+        "type": "new_info|recap|analysis|opinion",
+        "confidence": 0.0-1.0
+    }}
+]
+"""
+
+
+def parse_news_extraction_response(
+    response: str, article: Article, story: Story, storage: Storage, min_confidence: float = 0.7
+) -> list[NewsItem]:
+    """Parse news items from LLM response and save to storage."""
+    items = []
+
+    try:
+        # Try to find JSON array in response
+        start = response.find("[")
+        end = response.rfind("]") + 1
+        if start >= 0 and end > start:
+            json_str = response[start:end]
+            data = json.loads(json_str)
+
+            # Parse published timestamp
+            if article.published:
+                try:
+                    if isinstance(article.published, str):
+                        pub_str = article.published.replace("Z", "+00:00")
+                        first_seen = datetime.fromisoformat(pub_str).replace(tzinfo=None)
+                    else:
+                        first_seen = article.published
+                except (ValueError, TypeError):
+                    first_seen = datetime.now()
+            else:
+                first_seen = datetime.now()
+
+            for item_data in data:
+                if isinstance(item_data, dict):
+                    item = NewsItem(
+                        id=str(uuid.uuid4()),
+                        story_id=story.id,
+                        title=item_data.get("title", "")[:200],
+                        description=item_data.get("description", "")[:1000],
+                        first_reported_by=article.feed_url,
+                        first_seen=first_seen,
+                        article_ids=[article.id],
+                        item_type=item_data.get("type", "new_info"),
+                        confidence=float(item_data.get("confidence", 0.8)),
+                    )
+                    # Save if meets confidence threshold
+                    if item.confidence >= min_confidence:
+                        storage.save_news_item(item)
+                        # Add to story's news_item_ids
+                        if item.id not in story.news_item_ids:
+                            story.news_item_ids.append(item.id)
+                        items.append(item)
+
+    except (json.JSONDecodeError, ValueError, TypeError):
+        pass  # Expected for non-JSON responses
+
+    return items
+
+
 def batch_process_articles(
     articles: list[Article],
     llm_provider: LLMProvider,
