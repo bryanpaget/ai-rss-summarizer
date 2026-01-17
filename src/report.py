@@ -92,19 +92,6 @@ class BatchProgress:
         self.total_processed: int = 0
         self.total_errors: int = 0
 
-    def _format_duration(self, seconds: float) -> str:
-        """Format seconds into human-readable duration."""
-        if seconds < 60:
-            return f"{seconds:.1f}s"
-        elif seconds < 3600:
-            mins = int(seconds // 60)
-            secs = seconds % 60
-            return f"{mins}m {secs:.0f}s"
-        else:
-            hours = int(seconds // 3600)
-            mins = int((seconds % 3600) // 60)
-            return f"{hours}h {mins}m"
-
     def _get_eta(self) -> str:
         """Calculate estimated time remaining based on average batch time."""
         if not self.batch_times:
