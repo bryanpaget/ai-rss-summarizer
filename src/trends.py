@@ -263,8 +263,12 @@ def analyze_trends(
     for article in articles:
         # Get or compute trend tags
         if not article.trend_tags:
-            tags = analyze_article(article, embedding_service=embedding_service)
-            storage.update_trends(article.id, tags)
+            # Only tag if article has an embedding
+            if storage.get_embedding(article.id) is not None:
+                tags = analyze_article(article, embedding_service=embedding_service, storage=storage)
+                storage.update_trends(article.id, tags)
+            else:
+                tags = "Uncategorized"
         else:
             tags = article.trend_tags
 
