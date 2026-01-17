@@ -190,13 +190,13 @@ def analyze_article(
     Categorize an article using its STORED embedding.
 
     ARCHITECTURE: This function NEVER creates new embeddings.
-    It retrieves the article's pre-computed embedding from storage/FAISS
+    It retrieves the article's pre-computed embedding from storage
     and compares against pre-computed category embeddings.
 
     Args:
         article: Article with .id attribute
-        embedding_service: For retrieving stored embeddings and similarity calc
-        storage: Optional storage for retrieving embeddings
+        embedding_service: For similarity calculation (not embedding retrieval)
+        storage: Storage instance for retrieving article embeddings
 
     Returns:
         Comma-separated category names
@@ -204,8 +204,15 @@ def analyze_article(
     if embedding_service is None or not embedding_service.is_available():
         return "Uncategorized"
 
-    # Get the article's STORED embedding - never create new
-    article_embedding = embedding_service.get_embedding(article.id, "article")
+    # Get the article's STORED embedding from storage (articles.db)
+    # NOT from embedding_service (knowledge.db) - that's a different database!
+    article_embedding = None
+    if storage is not None:
+        article_embedding = storage.get_embedding(article.id)
+
+    # Fallback to embedding_service for backwards compatibility
+    if article_embedding is None:
+        article_embedding = embedding_service.get_embedding(article.id, "article")
 
     if article_embedding is None:
         logger.warning(
