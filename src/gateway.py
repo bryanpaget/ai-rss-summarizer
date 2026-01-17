@@ -11,6 +11,7 @@ This allows the gateway's queue reorganization to batch by type efficiently.
 """
 
 import json
+import logging
 import os
 import subprocess
 import tempfile
@@ -18,6 +19,8 @@ import time
 from dataclasses import dataclass
 from typing import Optional
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 class GatewayError(Exception):
