@@ -426,7 +426,7 @@ class LocalLLMGateway:
     def batch_embedding(self, texts: list[str]) -> list[list[float]]:
         """Process multiple embedding requests in a batch.
 
-        Submits all requests first (allowing gateway to batch), then collects.
+        Submits all requests in parallel (saturating gateway queue), then collects.
 
         Args:
             texts: List of texts to embed
@@ -438,20 +438,26 @@ class LocalLLMGateway:
             return []
 
         batch_start = time.time()
-        logger.debug(f"batch_embedding: starting {len(texts)} requests")
+        logger.debug(f"batch_embedding: starting {len(texts)} requests (parallel submit)")
 
-        # Submit all requests
-        handles = []
+        # Submit all requests in parallel using threads
+        # This saturates the gateway queue immediately instead of sequentially
         submit_start = time.time()
-        for i, text in enumerate(texts):
-            t0 = time.time()
-            handle = self.submit_embedding(text)
-            handles.append(handle)
-            queue_depth = self.get_queue_depth()
-            logger.debug(f"  submit {i+1}/{len(texts)}: {time.time()-t0:.3f}s, queue={queue_depth}")
+        handles = [None] * len(texts)
+
+        def submit_one(idx: int) -> tuple[int, str]:
+            handle = self.submit_embedding(texts[idx])
+            return idx, handle
+
+        with ThreadPoolExecutor(max_workers=min(len(texts), 10)) as executor:
+            futures = [executor.submit(submit_one, i) for i in range(len(texts))]
+            for future in as_completed(futures):
+                idx, handle = future.result()
+                handles[idx] = handle
 
         submit_time = time.time() - submit_start
-        logger.debug(f"batch_embedding: all {len(texts)} submitted in {submit_time:.2f}s")
+        queue_depth = self.get_queue_depth()
+        logger.debug(f"batch_embedding: all {len(texts)} submitted in {submit_time:.2f}s, queue={queue_depth}")
 
         # Collect all responses
         results = []
