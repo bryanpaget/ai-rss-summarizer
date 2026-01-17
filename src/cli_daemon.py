@@ -55,27 +55,6 @@ def _parse_interval(interval: str) -> Optional[int]:
         return None
 
 
-def _format_duration(seconds: int) -> str:
-    """Format seconds into human-readable duration."""
-    if seconds < 60:
-        return f"{seconds}s"
-    elif seconds < 3600:
-        mins = seconds // 60
-        return f"{mins}m"
-    elif seconds < 86400:
-        hours = seconds // 3600
-        mins = (seconds % 3600) // 60
-        if mins:
-            return f"{hours}h {mins}m"
-        return f"{hours}h"
-    else:
-        days = seconds // 86400
-        hours = (seconds % 86400) // 3600
-        if hours:
-            return f"{days}d {hours}h"
-        return f"{days}d"
-
-
 def _input_listener():
     """Background thread to listen for 'q' to quit."""
     global _stop_requested
