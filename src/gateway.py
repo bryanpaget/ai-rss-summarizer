@@ -137,6 +137,22 @@ class LocalLLMGateway:
         except Exception:
             return False
 
+    def get_queue_depth(self) -> int:
+        """Check how many items are pending in the gateway queue.
+
+        Returns:
+            Number of pending requests, or -1 if queue file doesn't exist
+        """
+        queue_file = self._status_dir / 'queue'
+        if not queue_file.exists():
+            return -1
+        try:
+            with open(queue_file, 'r') as f:
+                lines = [l for l in f.readlines() if l.strip()]
+            return len(lines)
+        except Exception:
+            return -1
+
     def _submit_request(
         self,
         request_type: str,
