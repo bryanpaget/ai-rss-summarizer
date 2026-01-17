@@ -195,35 +195,83 @@ Summary:"""
                 article.trend_tags = tags
 
     # =========================================================================
-    # PHASE 2d: Knowledge extraction (batch where possible)
+    # PHASE 2d: Knowledge extraction (submit/collect pattern for batching)
     # =========================================================================
     console.print(f"[dim]Extracting knowledge from {len(articles)} articles...[/dim]")
+
+    from .gateway import get_gateway
+    gateway = get_gateway()
+
+    # --- INSIGHTS: Submit all, then collect all ---
+    insight_handles = []
     for article in articles:
+        prompt = build_insight_prompt(article)
+        if prompt:
+            handle = gateway.submit_text(prompt)
+            insight_handles.append((article, handle))
+
+    # Collect insight responses and parse
+    all_insights = []
+    for article, handle in insight_handles:
         try:
-            insights = extract_insights_from_article(article, provider, kb)
-            if insights:
-                stats["insights"] += len(insights)
-
-                # Detect connections between insights
-                for insight in insights:
-                    relationships = detect_connections(insight, kb, provider)
-                    if relationships:
-                        stats["connections"] = stats.get("connections", 0) + len(relationships)
-                        for rel in relationships:
-                            formatted = format_relationship(rel, kb)
-                            console.print(f"  [green]-> {formatted}[/green]")
-
-            # Extract knowledge graph triples
-            triples = extract_triples_from_article(article, provider, kb)
-            if triples:
-                stats["triples"] = stats.get("triples", 0) + len(triples)
-
-            # Extract entity relationships
-            entity_rels = extract_entity_relationships_from_article(article, provider, kb)
-            if entity_rels:
-                stats["entity_relationships"] = stats.get("entity_relationships", 0) + len(entity_rels)
+            response = gateway.collect_text(handle)
+            insights = parse_insight_response(article, response, kb)
+            all_insights.extend(insights)
+            stats["insights"] += len(insights)
         except Exception as e:
-            console.print(f"[red]Error extracting knowledge from '{article.title[:40]}': {e}[/red]")
+            console.print(f"[red]Error extracting insights from '{article.title[:40]}': {e}[/red]")
+            stats["errors"] = stats.get("errors", 0) + 1
+
+    # --- ENTITY RELATIONSHIPS: Submit all, then collect all ---
+    entity_rel_handles = []
+    for article in articles:
+        prompt = build_entity_rel_prompt(article)
+        if prompt:
+            handle = gateway.submit_text(prompt)
+            entity_rel_handles.append((article, handle))
+
+    # Collect entity relationship responses and parse
+    for article, handle in entity_rel_handles:
+        try:
+            response = gateway.collect_text(handle)
+            rels = parse_entity_rel_response(article, response, kb)
+            stats["entity_relationships"] = stats.get("entity_relationships", 0) + len(rels)
+        except Exception as e:
+            console.print(f"[red]Error extracting entity relationships from '{article.title[:40]}': {e}[/red]")
+            stats["errors"] = stats.get("errors", 0) + 1
+
+    # --- TRIPLES: Submit all chunks from all articles, then collect all ---
+    triple_handles = []  # List of (article, handle) for tracking
+    for article in articles:
+        if not article.content or len(article.content) < 100:
+            continue
+        # Get chunks (this still uses LLM but we batch the extraction)
+        chunks = _semantic_chunk(article.content, provider, article.title)
+        for i, chunk in enumerate(chunks):
+            prompt = build_triple_prompt(article.title, i, len(chunks), chunk)
+            handle = gateway.submit_text(prompt)
+            triple_handles.append((article, handle))
+
+    # Collect triple responses and parse
+    for article, handle in triple_handles:
+        try:
+            response = gateway.collect_text(handle)
+            new_triples, _ = parse_triple_response(article, response, kb)
+            stats["triples"] = stats.get("triples", 0) + len(new_triples)
+        except Exception as e:
+            console.print(f"[red]Error extracting triples from '{article.title[:40]}': {e}[/red]")
+            stats["errors"] = stats.get("errors", 0) + 1
+
+    # --- CONNECTIONS: Detect connections for new insights ---
+    for insight in all_insights:
+        try:
+            relationships = detect_connections(insight, kb, provider)
+            if relationships:
+                stats["connections"] = stats.get("connections", 0) + len(relationships)
+                for rel in relationships:
+                    formatted = format_relationship(rel, kb)
+                    console.print(f"  [green]-> {formatted}[/green]")
+        except Exception as e:
             stats["errors"] = stats.get("errors", 0) + 1
 
     # =========================================================================
