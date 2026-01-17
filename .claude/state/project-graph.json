@@ -17,36 +17,36 @@
                                                   ]
                                       },
                       "queue: 11572ms":  {
+                                             "in":  [
+
+                                                    ],
                                              "out":  [
                                                          7
-                                                     ],
-                                             "in":  [
-
-                                                    ]
+                                                     ]
                                          },
                       "queue: 11910ms":  {
+                                             "in":  [
+
+                                                    ],
                                              "out":  [
                                                          6
-                                                     ],
-                                             "in":  [
-
-                                                    ]
+                                                     ]
                                          },
                       "queue: 12256ms":  {
+                                             "in":  [
+
+                                                    ],
                                              "out":  [
                                                          5
-                                                     ],
-                                             "in":  [
-
-                                                    ]
+                                                     ]
                                          },
                       "queue: 12651ms":  {
-                                             "out":  [
-                                                         4
-                                                     ],
                                              "in":  [
 
-                                                    ]
+                                                    ],
+                                             "out":  [
+                                                         4
+                                                     ]
                                          },
                       "`request_text`":  {
                                              "in":  [
@@ -76,15 +76,15 @@
                                                  ]
                                      },
                       "process: 572ms":  {
-                                             "out":  [
-
-                                                     ],
                                              "in":  [
                                                         4,
                                                         5,
                                                         6,
                                                         7
-                                                    ]
+                                                    ],
+                                             "out":  [
+
+                                                     ]
                                          }
                   },
     "validation_queue":  [
@@ -94,13 +94,13 @@
     "project_root":  "C:/Users/jpswi/personal projects/RSSsummarizer",
     "sessions":  {
                      "b83ca0cf-6f48-4726-b27f-0daeab98089d":  {
-                                                                  "last_turn":  22,
-                                                                  "last_active":  "2026-01-16T20:30:40.2915318-08:00",
+                                                                  "last_turn":  23,
+                                                                  "last_active":  "2026-01-16T20:30:53.4379004-08:00",
                                                                   "last_dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer"
                                                               }
                  },
     "metadata":  {
-                     "last_turn":  22,
+                     "last_turn":  23,
                      "cycles_found":  0,
                      "total_connected":  4,
                      "total_orphans":  3
