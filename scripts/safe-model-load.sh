@@ -1138,9 +1138,11 @@ process_batch() {
             break
         fi
 
-        # If this was the last item, commit to exit
+        # If queue was empty when we popped, check if we should continue
+        # Don't "commit to exit" here - let the outer process_queue() loop
+        # do the final check with its wait-and-recheck logic
         if [[ "$is_last" == "true" ]]; then
-            log "Last item dispatched, processor committing to exit"
+            log "Queue was empty after last pop, ending batch (outer loop will recheck)"
             break
         fi
     done
