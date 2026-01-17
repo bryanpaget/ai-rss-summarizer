@@ -25,6 +25,14 @@ from .knowledge import (
     extract_entity_relationships_from_article,
     detect_connections,
     format_relationship,
+    # Batch helpers for submit/collect pattern
+    build_insight_prompt,
+    parse_insight_response,
+    build_entity_rel_prompt,
+    parse_entity_rel_response,
+    build_triple_prompt,
+    parse_triple_response,
+    _semantic_chunk,
 )
 
 console = Console(force_terminal=True, legacy_windows=True)
