@@ -799,7 +799,8 @@ def _run_embedding_phase(
 
     # Trend tagging (embedding-based categorization)
     # This belongs in embedding phase because it uses embeddings
-    needs_trends = [a for a in articles if not a.trend_tags]
+    # Only tag articles that HAVE embeddings - skip those that don't
+    needs_trends = [a for a in articles if not a.trend_tags and storage.get_embedding(a.id) is not None]
     if needs_trends:
         progress = BatchProgress(len(needs_trends), batch_size=10, label="articles")
         console.print(f"  Tagging {progress.total_items} articles with trend categories...")
