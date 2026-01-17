@@ -1,31 +1,31 @@
 ﻿{
     "adjacency":  {
                       "article.id":  {
+                                         "in":  [
+
+                                                ],
                                          "out":  [
                                                      0,
                                                      1,
                                                      2
-                                                 ],
-                                         "in":  [
-
-                                                ]
+                                                 ]
                                      },
                       "result.vector":  {
-                                            "out":  [
-
-                                                    ],
                                             "in":  [
                                                        0,
                                                        2
-                                                   ]
+                                                   ],
+                                            "out":  [
+
+                                                    ]
                                         },
                       "\"article\"":  {
-                                          "out":  [
-
-                                                  ],
                                           "in":  [
                                                      1
-                                                 ]
+                                                 ],
+                                          "out":  [
+
+                                                  ]
                                       }
                   },
     "validation_queue":  [
@@ -35,13 +35,13 @@
     "project_root":  "C:/Users/jpswi/personal projects/RSSsummarizer",
     "sessions":  {
                      "b83ca0cf-6f48-4726-b27f-0daeab98089d":  {
-                                                                  "last_turn":  12,
-                                                                  "last_active":  "2026-01-16T16:20:50.5547738-08:00",
+                                                                  "last_turn":  13,
+                                                                  "last_active":  "2026-01-16T17:26:37.9130165-08:00",
                                                                   "last_dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer"
                                                               }
                  },
     "metadata":  {
-                     "last_turn":  12,
+                     "last_turn":  13,
                      "cycles_found":  0,
                      "total_connected":  3,
                      "total_orphans":  0
