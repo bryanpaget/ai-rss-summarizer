@@ -812,7 +812,7 @@ def _run_embedding_phase(
 
             for article in batch:
                 try:
-                    tags = analyze_article(article, embedding_service=embedding_service)
+                    tags = analyze_article(article, embedding_service=embedding_service, storage=storage)
                     storage.update_trends(article.id, tags)
                     article.trend_tags = tags
                     batch_success += 1
