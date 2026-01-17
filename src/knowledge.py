@@ -2005,6 +2005,97 @@ Only return valid JSON, no other text."""
         return []
 
 
+def build_entity_rel_prompt(article: Article) -> Optional[str]:
+    """Build the prompt for entity relationship extraction. Returns None if article not suitable."""
+    if not article.content or len(article.content) < 100:
+        return None
+
+    return f"""Identify ALL relationships between organizations, people, and products in this article. Extract every significant relationship present.
+
+Article: "{article.title}"
+
+Content: {article.content}
+
+Find all significant relationships between named entities. Focus on:
+- Business relationships (acquired, partnered, competes_with)
+- People relationships (founded, leads, joined, left)
+- Product relationships (created, maintains, deprecated)
+
+Return as JSON array:
+[
+  {{
+    "source": "Microsoft",
+    "target": "OpenAI",
+    "relationship": "invested_in",
+    "properties": {{"amount": "$10 billion", "year": "2023"}}
+  }}
+]
+
+Only return valid JSON, no other text."""
+
+
+def parse_entity_rel_response(
+    article: Article, response: str, knowledge_base: "KnowledgeBase"
+) -> list[EntityRelationship]:
+    """Parse LLM response and save entity relationships to knowledge base."""
+    try:
+        response = response.strip()
+        if response.startswith("```"):
+            lines = response.split("\n")
+            response = "\n".join(lines[1:-1] if len(lines) > 2 else lines)
+
+        rels_data = json.loads(response)
+
+        relationships = []
+        for data in rels_data:
+            source_name = data.get("source", "")
+            target_name = data.get("target", "")
+
+            if not source_name or not target_name:
+                continue
+
+            # Get or create entities
+            source_entity = knowledge_base.get_entity_by_name(source_name, "company")
+            if not source_entity:
+                source_entity = Entity(
+                    id=str(uuid.uuid4()),
+                    name=source_name,
+                    entity_type="company",
+                )
+                knowledge_base.save_entity(source_entity)
+
+            target_entity = knowledge_base.get_entity_by_name(target_name, "company")
+            if not target_entity:
+                target_entity = Entity(
+                    id=str(uuid.uuid4()),
+                    name=target_name,
+                    entity_type="company",
+                )
+                knowledge_base.save_entity(target_entity)
+
+            # Create relationship
+            properties = data.get("properties")
+            rel = EntityRelationship(
+                id=str(uuid.uuid4()),
+                source_entity_id=source_entity.id,
+                target_entity_id=target_entity.id,
+                relationship_type=data.get("relationship", "related_to"),
+                properties=json.dumps(properties) if properties else None,
+                source_article_id=article.id,
+            )
+            knowledge_base.save_entity_relationship(rel)
+            relationships.append(rel)
+
+        return relationships
+
+    except json.JSONDecodeError as e:
+        logger.warning(f"JSON parsing failed for entity relationships from '{article.title[:40]}': {e}")
+        return []
+    except Exception as e:
+        logger.warning(f"Entity relationship parsing failed for '{article.title[:40]}': {e}")
+        return []
+
+
 def detect_connections(
     new_insight: Insight,
     knowledge_base: KnowledgeBase,
