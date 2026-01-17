@@ -124,31 +124,70 @@ def update(
     articles = storage.get_articles(limit=limit * 3)
     tagger = SignalTagger(use_llm=True, provider=provider)
 
-    for article in articles:
-        # Summarize if needed
-        if not article.summary:
-            try:
-                article.summary = provider.summarize(article.content)
+    # =========================================================================
+    # PHASE 2a: Batch summarization (all summaries in one batch call)
+    # =========================================================================
+    articles_needing_summary = [a for a in articles if not a.summary and a.content]
+    if articles_needing_summary:
+        console.print(f"[dim]Summarizing {len(articles_needing_summary)} articles (batched)...[/dim]")
+        from .gateway import get_gateway
+        gateway = get_gateway()
+
+        # Build prompts using same format as provider.summarize()
+        max_length = 150
+        prompts = []
+        for article in articles_needing_summary:
+            prompt = f"""Summarize the following text in {max_length} characters or less.
+Be concise and capture the key points.
+
+Text:
+{article.content}
+
+Summary:"""
+            prompts.append(prompt)
+
+        try:
+            results = gateway.batch_text(prompts, temperature=0.3)
+            for article, summary in zip(articles_needing_summary, results):
+                article.summary = summary.strip()
+                if len(article.summary) > max_length * 2:
+                    article.summary = article.summary[:max_length]
                 storage.update_summary(article.id, article.summary)
                 stats["summarized"] += 1
-            except Exception as e:
-                console.print(f"[red]Error summarizing '{article.title[:40]}': {e}[/red]")
-                stats["errors"] = stats.get("errors", 0) + 1
+        except Exception as e:
+            console.print(f"[red]Error batch summarizing: {e}[/red]")
+            stats["errors"] = stats.get("errors", 0) + len(articles_needing_summary)
 
-        # Tag with signals if needed
-        if not article.signal_tags:
-            try:
-                tags = tagger.tag_article(article)
-                storage.update_signal_tags(article.id, tags.to_json())
-                article.signal_tags = tags.to_json()
-                stats["tagged"] += 1
-            except Exception as e:
-                console.print(f"[red]Error tagging '{article.title[:40]}': {e}[/red]")
-                stats["errors"] = stats.get("errors", 0) + 1
+    # =========================================================================
+    # PHASE 2b: Batch signal tagging (all tags in one batch call)
+    # =========================================================================
+    articles_needing_tags = [a for a in articles if not a.signal_tags]
+    if articles_needing_tags:
+        console.print(f"[dim]Tagging {len(articles_needing_tags)} articles (batched)...[/dim]")
+        try:
+            # Use tagger's batch method if available, otherwise tag individually
+            if hasattr(tagger, 'tag_articles_batch'):
+                tag_results = tagger.tag_articles_batch(articles_needing_tags)
+                for article, tags in zip(articles_needing_tags, tag_results):
+                    storage.update_signal_tags(article.id, tags.to_json())
+                    article.signal_tags = tags.to_json()
+                    stats["tagged"] += 1
+            else:
+                # Fallback to individual tagging if batch not available
+                for article in articles_needing_tags:
+                    tags = tagger.tag_article(article)
+                    storage.update_signal_tags(article.id, tags.to_json())
+                    article.signal_tags = tags.to_json()
+                    stats["tagged"] += 1
+        except Exception as e:
+            console.print(f"[red]Error tagging articles: {e}[/red]")
+            stats["errors"] = stats.get("errors", 0) + 1
 
-        # Analyze trends if needed (requires embedding)
+    # =========================================================================
+    # PHASE 2c: Trend analysis (requires embeddings, done individually)
+    # =========================================================================
+    for article in articles:
         if not article.trend_tags:
-            # Only tag if article has an embedding - otherwise skip silently
             if storage.get_embedding(article.id) is not None:
                 from .embeddings import EmbeddingService
                 embedding_service = EmbeddingService(kb)
@@ -156,7 +195,11 @@ def update(
                 storage.update_trends(article.id, tags)
                 article.trend_tags = tags
 
-        # Extract knowledge (insights, triples, entity relationships)
+    # =========================================================================
+    # PHASE 2d: Knowledge extraction (batch where possible)
+    # =========================================================================
+    console.print(f"[dim]Extracting knowledge from {len(articles)} articles...[/dim]")
+    for article in articles:
         try:
             insights = extract_insights_from_article(article, provider, kb)
             if insights:
