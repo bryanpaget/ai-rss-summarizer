@@ -430,6 +430,55 @@ class SignalTagger:
             print(f"LLM tagging failed ({e}), falling back to rules")
             return self._tag_with_rules(article)
 
+    def tag_articles_batch(self, articles: list) -> list:
+        """
+        Tag multiple articles using batched LLM calls.
+
+        Uses gateway.batch_text() for efficient processing - all prompts
+        are submitted together and processed in a single batch.
+
+        Args:
+            articles: List of Article objects to tag
+
+        Returns:
+            List of SignalTags objects (same order as input articles)
+        """
+        if not self.use_llm:
+            # Rule-based tagging doesn't benefit from batching
+            return [self._tag_with_rules(a) for a in articles]
+
+        if not articles:
+            return []
+
+        from .gateway import get_gateway
+
+        gateway = get_gateway()
+        if not gateway.is_available():
+            # Fall back to rule-based if gateway unavailable
+            return [self._tag_with_rules(a) for a in articles]
+
+        # Build all prompts
+        prompts = [self._build_llm_prompt(article) for article in articles]
+
+        # Batch call to gateway
+        try:
+            responses = gateway.batch_text(prompts, temperature=0.3)
+        except Exception as e:
+            print(f"Batch tagging failed ({e}), falling back to rules")
+            return [self._tag_with_rules(a) for a in articles]
+
+        # Parse all responses
+        results = []
+        for i, (article, response) in enumerate(zip(articles, responses)):
+            try:
+                tags = self._parse_llm_response(response)
+                results.append(tags)
+            except Exception as e:
+                print(f"Failed to parse tags for '{article.title[:40]}': {e}")
+                results.append(self._tag_with_rules(article))
+
+        return results
+
     def _build_llm_prompt(self, article: Article) -> str:
         """Build prompt for LLM tagging."""
         # Get user's analysis principles if configured
