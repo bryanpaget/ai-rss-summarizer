@@ -433,17 +433,34 @@ class LocalLLMGateway:
         if not texts:
             return []
 
+        batch_start = time.time()
+        logger.debug(f"batch_embedding: starting {len(texts)} requests")
+
         # Submit all requests
         handles = []
-        for text in texts:
+        submit_start = time.time()
+        for i, text in enumerate(texts):
+            t0 = time.time()
             handle = self.submit_embedding(text)
             handles.append(handle)
+            queue_depth = self.get_queue_depth()
+            logger.debug(f"  submit {i+1}/{len(texts)}: {time.time()-t0:.3f}s, queue={queue_depth}")
+
+        submit_time = time.time() - submit_start
+        logger.debug(f"batch_embedding: all {len(texts)} submitted in {submit_time:.2f}s")
 
         # Collect all responses
         results = []
-        for handle in handles:
+        collect_start = time.time()
+        for i, handle in enumerate(handles):
+            t0 = time.time()
             result = self.collect_embedding(handle)
             results.append(result)
+            logger.debug(f"  collect {i+1}/{len(handles)}: {time.time()-t0:.3f}s")
+
+        collect_time = time.time() - collect_start
+        total_time = time.time() - batch_start
+        logger.debug(f"batch_embedding: collected in {collect_time:.2f}s, total={total_time:.2f}s")
 
         return results
 
