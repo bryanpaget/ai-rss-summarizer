@@ -1199,35 +1199,55 @@ def _run_connection_detection(
     console.print(f"  [green]Found {len(clusters)} clusters[/green]")
 
     # =========================================================================
-    # PHASE 3: Analyze each cluster (TEXT MODEL - O(clusters) calls)
+    # PHASE 3: Analyze clusters (TEXT MODEL - submit all, then collect all)
     # =========================================================================
-    console.print(f"  [dim]Analyzing clusters for themes and relationships...[/dim]")
+    from .gateway import get_gateway
 
+    gateway = get_gateway()
+    console.print(f"  [dim]Analyzing {len(clusters)} clusters for themes and relationships...[/dim]")
+
+    # Apply limit to clusters
+    clusters_to_process = clusters[:limit] if limit > 0 else clusters
+
+    # --- STEP 3a: Build prompts and submit all ---
+    cluster_handles = []
+    for cluster in clusters_to_process:
+        prompt = build_cluster_analysis_prompt(cluster)
+        if prompt:
+            handle = gateway.submit_text(prompt, temperature=0.3)
+            cluster_handles.append((cluster, handle))
+
+    console.print(f"  [dim]Submitted {len(cluster_handles)} cluster analysis requests[/dim]")
+
+    # --- STEP 3b: Collect all responses and parse ---
     total_triples = 0
     total_connections = 0
 
-    for i, cluster in enumerate(clusters):
-        if limit > 0 and i >= limit:
-            console.print(f"  [dim]Stopped at {limit} clusters (limit reached)[/dim]")
-            break
-        console.print(f"    [dim]Cluster {i+1}/{len(clusters)} ({len(cluster)} insights)...[/dim]", end="")
+    for i, (cluster, handle) in enumerate(cluster_handles):
+        console.print(f"    [dim]Cluster {i+1}/{len(cluster_handles)} ({len(cluster)} insights)...[/dim]", end="")
 
-        new_triples, connections = _analyze_cluster_for_triples(cluster, provider, kb)
+        try:
+            response = gateway.collect_text(handle)
+            new_triples, connections = parse_cluster_analysis_response(response, cluster, kb)
 
-        if new_triples or connections:
-            console.print(f" [green]+{len(new_triples)} triples, {len(connections)} connections[/green]")
-            total_triples += len(new_triples)
-            total_connections += len(connections)
+            if new_triples or connections:
+                console.print(f" [green]+{len(new_triples)} triples, {len(connections)} connections[/green]")
+                total_triples += len(new_triples)
+                total_connections += len(connections)
 
-            # Show sample triples
-            for t in new_triples[:2]:
-                console.print(f"      [cyan]{t.subject}[/cyan] -> {t.predicate} -> [cyan]{t.object}[/cyan]")
-        else:
-            console.print(f" [dim]no new knowledge[/dim]")
+                # Show sample triples
+                for t in new_triples[:2]:
+                    console.print(f"      [cyan]{t.subject}[/cyan] -> {t.predicate} -> [cyan]{t.object}[/cyan]")
+            else:
+                console.print(f" [dim]no new knowledge[/dim]")
 
-        # Update stats
-        stats["connections"] += len(connections)
-        stats["cluster_triples"] += len(new_triples)
+            # Update stats
+            stats["connections"] += len(connections)
+            stats["cluster_triples"] += len(new_triples)
+
+        except Exception as e:
+            console.print(f" [red]ERROR: {e}[/red]")
+            stats["errors"] += 1
 
     console.print(f"  [green]Added {total_triples} triples to knowledge graph[/green]")
     console.print(f"  [green]Found {total_connections} insight connections[/green]")
