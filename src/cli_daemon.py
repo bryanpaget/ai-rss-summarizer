@@ -239,7 +239,7 @@ def daemon_main(
     console.print()
     console.print(Panel("[bold]RSS Daemon Mode[/bold]", style="blue"))
     console.print()
-    console.print(f"  Interval:  {_format_duration(interval_seconds)}")
+    console.print(f"  Interval:  {format_duration(interval_seconds)}")
     console.print(f"  Step:      {step} ({step_names[step]})")
     console.print(f"  Limit:     {limit if limit > 0 else 'unlimited'}")
     console.print()
@@ -287,7 +287,7 @@ def daemon_main(
                 break
 
             # Wait for next cycle
-            console.print(f"  [dim]Next cycle in {_format_duration(interval_seconds)}...[/dim]")
+            console.print(f"  [dim]Next cycle in {format_duration(interval_seconds)}...[/dim]")
             console.print()
 
             # Sleep in small increments to check for stop request
