@@ -171,15 +171,8 @@ class LocalLLMGateway:
         Returns:
             Path to response file (will be written when request completes)
         """
-        # Log request type for batching visibility with stack trace
-        import sys
-        import traceback
-        print(f"[GATEWAY] SUBMIT {request_type} (prompt: {len(prompt)} chars)", file=sys.stderr)
-        if request_type == "embedding":
-            # Print call stack for embedding to trace where it comes from
-            print("[GATEWAY] Embedding call stack:", file=sys.stderr)
-            for line in traceback.format_stack()[-5:-1]:
-                print(f"  {line.strip()}", file=sys.stderr)
+        # Log request type for batching visibility
+        logger.debug(f"SUBMIT {request_type} (prompt: {len(prompt)} chars)")
         # Write prompt to temp file to avoid shell escaping issues
         with tempfile.NamedTemporaryFile(
             mode='w', suffix='.txt', delete=False, encoding='utf-8'
