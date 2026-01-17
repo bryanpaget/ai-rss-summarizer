@@ -151,6 +151,87 @@ class LocalLLMGateway:
         except Exception:
             return -1
 
+    def _generate_request_id(self) -> str:
+        """Generate a unique request ID matching gateway format."""
+        import random
+        timestamp = int(time.time())
+        pid = os.getpid()
+        rand = random.randint(0, 32767)
+        return f"req_{timestamp}_{pid}_{rand}"
+
+    def _queue_requests_direct(
+        self,
+        requests: list[dict],
+    ) -> list[str]:
+        """Write multiple requests directly to queue file (bypasses bash overhead).
+
+        This is MUCH faster than spawning bash subprocesses for each request.
+        All requests are written atomically, then processor is triggered once.
+
+        Args:
+            requests: List of dicts with keys: type, prompt, system, temperature
+
+        Returns:
+            List of response file paths (in same order as requests)
+        """
+        queue_file = self._ipc_dir / 'queue.jsonl'
+        responses_dir = self._ipc_dir / 'responses'
+
+        # Ensure directories exist
+        self._ipc_dir.mkdir(parents=True, exist_ok=True)
+        responses_dir.mkdir(parents=True, exist_ok=True)
+
+        response_paths = []
+        queue_entries = []
+        queued_at = int(time.time() * 1000)
+
+        for req in requests:
+            req_id = self._generate_request_id()
+            response_path = responses_dir / f"{req_id}.json"
+            response_paths.append(str(response_path))
+
+            entry = {
+                "id": req_id,
+                "type": req.get("type", "text"),
+                "prompt": req.get("prompt", ""),
+                "system": req.get("system", ""),
+                "temperature": str(req.get("temperature", 0.3)),
+                "max_tokens": "",
+                "pipe_path": "",
+                "file_path": str(response_path).replace("\\", "/"),
+                "stream": "false",
+                "queued_at": queued_at,
+            }
+            queue_entries.append(json.dumps(entry))
+            queued_at += 1  # Increment to maintain order
+
+        # Write all entries to queue file atomically
+        with open(queue_file, 'a') as f:
+            for entry in queue_entries:
+                f.write(entry + "\n")
+
+        logger.debug(f"Direct-queued {len(requests)} requests")
+
+        # Trigger the processor (single bash call)
+        self._trigger_processor()
+
+        return response_paths
+
+    def _trigger_processor(self):
+        """Trigger the gateway processor to start processing queue."""
+        try:
+            bash_exe = self.GIT_BASH if os.name == 'nt' else 'bash'
+            gateway_path = self._win_to_msys_path(self._gateway_path)
+
+            # Use 'process' command to trigger processor without adding to queue
+            subprocess.Popen(
+                [bash_exe, gateway_path, "process"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to trigger processor: {e}")
+
     def _submit_request(
         self,
         request_type: str,
