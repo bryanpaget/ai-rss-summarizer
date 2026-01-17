@@ -456,8 +456,8 @@ class LocalLLMGateway:
     ) -> list[str]:
         """Process multiple text requests in a batch.
 
-        Uses direct queue writing to submit all requests atomically,
-        ensuring the queue is fully saturated before processing begins.
+        Uses parallel subprocess calls to submit requests quickly,
+        allowing the gateway to batch them efficiently.
 
         Args:
             prompts: List of prompts
@@ -471,25 +471,24 @@ class LocalLLMGateway:
             return []
 
         batch_start = time.time()
-        logger.debug(f"batch_text: starting {len(prompts)} requests (direct queue)")
+        logger.debug(f"batch_text: starting {len(prompts)} requests (parallel submit)")
 
-        # Build request list
-        requests = [
-            {
-                "type": "text",
-                "prompt": prompt,
-                "system": system_prompt or "",
-                "temperature": temperature,
-            }
-            for prompt in prompts
-        ]
-
-        # Submit all at once via direct queue write
+        # Submit all requests in parallel using threads
         submit_start = time.time()
-        handles = self._queue_requests_direct(requests)
+        handles = [None] * len(prompts)
+
+        def submit_one(idx: int) -> tuple[int, str]:
+            handle = self.submit_text(prompts[idx], system_prompt, temperature)
+            return idx, handle
+
+        with ThreadPoolExecutor(max_workers=min(len(prompts), 10)) as executor:
+            futures = [executor.submit(submit_one, i) for i in range(len(prompts))]
+            for future in futures:
+                idx, handle = future.result()
+                handles[idx] = handle
+
         submit_time = time.time() - submit_start
-        queue_depth = self.get_queue_depth()
-        logger.debug(f"batch_text: all {len(prompts)} queued in {submit_time:.3f}s, queue={queue_depth}")
+        logger.debug(f"batch_text: all {len(prompts)} submitted in {submit_time:.2f}s")
 
         # Collect all responses
         results = []
