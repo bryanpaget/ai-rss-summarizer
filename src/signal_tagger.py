@@ -486,20 +486,19 @@ Return ONLY a JSON object in this exact format (no markdown, no explanation):
             # OpenAI-compatible provider (LM Studio, Ollama, etc.)
 
             # For LM Studio, use the gateway (handles model switching automatically)
+            # NO FALLBACKS - gateway is required for LM Studio
             if "localhost:1234" in self.provider.base_url:
-                try:
-                    from .gateway import get_gateway, GatewayUnavailableError
+                from .gateway import get_gateway
 
-                    gateway = get_gateway()
-                    if gateway.is_available():
-                        return gateway.request_text(prompt, temperature=0.3)
-                except (ImportError, GatewayUnavailableError):
-                    pass  # Fall back to direct API
-                except Exception as e:
-                    import sys
-                    print(f"Warning: Gateway failed, falling back to direct API: {e}", file=sys.stderr)
+                gateway = get_gateway()
+                if not gateway.is_available():
+                    raise RuntimeError(
+                        "Gateway not available. LM Studio must be running.\n"
+                        "Start LM Studio and ensure it's listening on localhost:1234"
+                    )
+                return gateway.request_text(prompt, temperature=0.3)
 
-            # Fallback: Direct API call
+            # Other OpenAI-compatible providers (Ollama, etc.) - use direct API
             import httpx
 
             headers = {
