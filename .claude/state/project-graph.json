@@ -1,15 +1,53 @@
 ﻿{
     "adjacency":  {
-                      "article.id":  {
-                                         "in":  [
+                      "`request_embedding`":  {
+                                                  "in":  [
+                                                             3
+                                                         ],
+                                                  "out":  [
 
-                                                ],
-                                         "out":  [
-                                                     0,
-                                                     1,
-                                                     2
-                                                 ]
-                                     },
+                                                          ]
+                                              },
+                      "\"article\"":  {
+                                          "in":  [
+                                                     1
+                                                 ],
+                                          "out":  [
+
+                                                  ]
+                                      },
+                      "queue: 11572ms":  {
+                                             "out":  [
+                                                         7
+                                                     ],
+                                             "in":  [
+
+                                                    ]
+                                         },
+                      "queue: 11910ms":  {
+                                             "out":  [
+                                                         6
+                                                     ],
+                                             "in":  [
+
+                                                    ]
+                                         },
+                      "queue: 12256ms":  {
+                                             "out":  [
+                                                         5
+                                                     ],
+                                             "in":  [
+
+                                                    ]
+                                         },
+                      "queue: 12651ms":  {
+                                             "out":  [
+                                                         4
+                                                     ],
+                                             "in":  [
+
+                                                    ]
+                                         },
                       "`request_text`":  {
                                              "in":  [
 
@@ -27,22 +65,27 @@
 
                                                     ]
                                         },
-                      "`request_embedding`":  {
-                                                  "in":  [
-                                                             3
-                                                         ],
-                                                  "out":  [
+                      "article.id":  {
+                                         "in":  [
 
-                                                          ]
-                                              },
-                      "\"article\"":  {
-                                          "in":  [
-                                                     1
-                                                 ],
-                                          "out":  [
+                                                ],
+                                         "out":  [
+                                                     0,
+                                                     1,
+                                                     2
+                                                 ]
+                                     },
+                      "process: 572ms":  {
+                                             "out":  [
 
-                                                  ]
-                                      }
+                                                     ],
+                                             "in":  [
+                                                        4,
+                                                        5,
+                                                        6,
+                                                        7
+                                                    ]
+                                         }
                   },
     "validation_queue":  [
 
@@ -51,16 +94,16 @@
     "project_root":  "C:/Users/jpswi/personal projects/RSSsummarizer",
     "sessions":  {
                      "b83ca0cf-6f48-4726-b27f-0daeab98089d":  {
-                                                                  "last_turn":  21,
-                                                                  "last_active":  "2026-01-16T20:13:17.7077103-08:00",
+                                                                  "last_turn":  22,
+                                                                  "last_active":  "2026-01-16T20:30:40.2915318-08:00",
                                                                   "last_dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer"
                                                               }
                  },
     "metadata":  {
-                     "last_turn":  21,
+                     "last_turn":  22,
                      "cycles_found":  0,
-                     "total_connected":  3,
-                     "total_orphans":  0
+                     "total_connected":  4,
+                     "total_orphans":  3
                  },
     "edges":  [
                   {
@@ -100,6 +143,46 @@
                       "type":  "double",
                       "sub":  "`request_text`",
                       "obj":  "`request_embedding`",
+                      "pred":  "is",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  22,
+                      "timestamp":  "2026-01-16T20:30:40.2915318-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "double",
+                      "sub":  "queue: 12651ms",
+                      "obj":  "process: 572ms",
+                      "pred":  "is",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  22,
+                      "timestamp":  "2026-01-16T20:30:40.2915318-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "double",
+                      "sub":  "queue: 12256ms",
+                      "obj":  "process: 572ms",
+                      "pred":  "is",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  22,
+                      "timestamp":  "2026-01-16T20:30:40.2915318-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "double",
+                      "sub":  "queue: 11910ms",
+                      "obj":  "process: 572ms",
+                      "pred":  "is",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  22,
+                      "timestamp":  "2026-01-16T20:30:40.2915318-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "double",
+                      "sub":  "queue: 11572ms",
+                      "obj":  "process: 572ms",
                       "pred":  "is",
                       "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
                   }
