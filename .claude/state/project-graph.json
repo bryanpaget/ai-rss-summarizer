@@ -10,6 +10,14 @@
                                                      2
                                                  ]
                                      },
+                      "`request_embedding`":  {
+                                                  "out":  [
+
+                                                          ],
+                                                  "in":  [
+                                                             3
+                                                         ]
+                                              },
                       "result.vector":  {
                                             "in":  [
                                                        0,
@@ -19,6 +27,14 @@
 
                                                     ]
                                         },
+                      "`request_text`":  {
+                                             "out":  [
+                                                         3
+                                                     ],
+                                             "in":  [
+
+                                                    ]
+                                         },
                       "\"article\"":  {
                                           "in":  [
                                                      1
@@ -35,13 +51,13 @@
     "project_root":  "C:/Users/jpswi/personal projects/RSSsummarizer",
     "sessions":  {
                      "b83ca0cf-6f48-4726-b27f-0daeab98089d":  {
-                                                                  "last_turn":  18,
-                                                                  "last_active":  "2026-01-16T19:37:58.6785082-08:00",
+                                                                  "last_turn":  19,
+                                                                  "last_active":  "2026-01-16T19:43:09.0982287-08:00",
                                                                   "last_dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer"
                                                               }
                  },
     "metadata":  {
-                     "last_turn":  18,
+                     "last_turn":  19,
                      "cycles_found":  0,
                      "total_connected":  3,
                      "total_orphans":  0
@@ -74,6 +90,16 @@
                       "type":  "double",
                       "sub":  "article.id",
                       "obj":  "result.vector",
+                      "pred":  "is",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  19,
+                      "timestamp":  "2026-01-16T19:43:09.0982287-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "double",
+                      "sub":  "`request_text`",
+                      "obj":  "`request_embedding`",
                       "pred":  "is",
                       "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
                   }
