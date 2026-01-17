@@ -22,6 +22,8 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from .utils import format_duration
+
 app = typer.Typer(
     name="daemon",
     help="Run continuous processing in foreground",
