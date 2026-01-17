@@ -171,6 +171,9 @@ class LocalLLMGateway:
         Returns:
             Path to response file (will be written when request completes)
         """
+        # Log request type for batching visibility
+        import sys
+        print(f"[GATEWAY] SUBMIT {request_type} (prompt: {len(prompt)} chars)", file=sys.stderr)
         # Write prompt to temp file to avoid shell escaping issues
         with tempfile.NamedTemporaryFile(
             mode='w', suffix='.txt', delete=False, encoding='utf-8'
