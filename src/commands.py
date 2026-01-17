@@ -165,20 +165,11 @@ Summary:"""
     if articles_needing_tags:
         console.print(f"[dim]Tagging {len(articles_needing_tags)} articles (batched)...[/dim]")
         try:
-            # Use tagger's batch method if available, otherwise tag individually
-            if hasattr(tagger, 'tag_articles_batch'):
-                tag_results = tagger.tag_articles_batch(articles_needing_tags)
-                for article, tags in zip(articles_needing_tags, tag_results):
-                    storage.update_signal_tags(article.id, tags.to_json())
-                    article.signal_tags = tags.to_json()
-                    stats["tagged"] += 1
-            else:
-                # Fallback to individual tagging if batch not available
-                for article in articles_needing_tags:
-                    tags = tagger.tag_article(article)
-                    storage.update_signal_tags(article.id, tags.to_json())
-                    article.signal_tags = tags.to_json()
-                    stats["tagged"] += 1
+            tag_results = tagger.tag_articles_batch(articles_needing_tags)
+            for article, tags in zip(articles_needing_tags, tag_results):
+                storage.update_signal_tags(article.id, tags.to_json())
+                article.signal_tags = tags.to_json()
+                stats["tagged"] += 1
         except Exception as e:
             console.print(f"[red]Error tagging articles: {e}[/red]")
             stats["errors"] = stats.get("errors", 0) + 1
