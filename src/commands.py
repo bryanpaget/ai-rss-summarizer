@@ -146,11 +146,15 @@ def update(
                 console.print(f"[red]Error tagging '{article.title[:40]}': {e}[/red]")
                 stats["errors"] = stats.get("errors", 0) + 1
 
-        # Analyze trends if needed
+        # Analyze trends if needed (requires embedding)
         if not article.trend_tags:
-            tags = analyze_article(article)
-            storage.update_trends(article.id, tags)
-            article.trend_tags = tags
+            # Only tag if article has an embedding - otherwise skip silently
+            if storage.get_embedding(article.id) is not None:
+                from .embeddings import EmbeddingService
+                embedding_service = EmbeddingService(kb)
+                tags = analyze_article(article, embedding_service=embedding_service, storage=storage)
+                storage.update_trends(article.id, tags)
+                article.trend_tags = tags
 
         # Extract knowledge (insights, triples, entity relationships)
         try:
