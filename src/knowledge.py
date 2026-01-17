@@ -2005,6 +2005,114 @@ Only return valid JSON, no other text."""
         return []
 
 
+def build_triple_prompt(article_title: str, chunk_idx: int, total_chunks: int, chunk: str) -> str:
+    """Build the prompt for triple extraction from one chunk."""
+    return f"""Extract factual relationships from this text as subject-predicate-object triples.
+
+Article: "{article_title}"
+Section {chunk_idx + 1}/{total_chunks}:
+
+{chunk}
+
+Extract ALL factual relationships from this section. Be thorough - the number of triples depends entirely on the content density.
+
+IMPORTANT: Subjects and objects must be PROPER NOUNS - specific named people (e.g., "John Smith"), companies (e.g., "Google"), places (e.g., "Paris"), organizations (e.g., "UN").
+NEVER use generic nouns like 'woman', 'man', 'father', 'pigs', 'speech', 'article', 'analysis'. If you can't identify a specific name, skip the triple entirely.
+
+Common predicates:
+- developed_by, created_by, founded_by (attribution)
+- acquired, merged_with, partnered_with (corporate)
+- announced, released, launched (events)
+- competes_with, integrates_with, replaces (relationships)
+- located_in, works_at, leads (associations)
+- costs, valued_at, raised (financial)
+- uses, requires, supports (technical)
+- is_a, part_of, belongs_to (taxonomy)
+- affects, causes, enables (causation)
+
+Return as JSON array:
+[
+  {{"subject": "Entity", "predicate": "relationship", "object": "Entity/Value", "subject_type": "entity", "object_type": "entity", "confidence": "high"}}
+]
+
+Types: entity (company/person/product/technology), literal (facts/values/descriptions)
+
+Only return valid JSON array, no other text."""
+
+
+def parse_triple_response(
+    article: Article,
+    response: str,
+    knowledge_base: "KnowledgeBase",
+    embedding_service: Optional["EmbeddingService"] = None,
+) -> tuple[list[Triple], list[Triple]]:
+    """
+    Parse LLM response and save triples to knowledge base.
+
+    Returns:
+        Tuple of (new_triples, existing_triples)
+    """
+    new_triples = []
+    existing_triples = []
+
+    try:
+        response = response.strip()
+        if response.startswith("```"):
+            lines = response.split("\n")
+            response = "\n".join(lines[1:-1] if len(lines) > 2 else lines)
+
+        # Find JSON array
+        start = response.find("[")
+        end = response.rfind("]") + 1
+        if start >= 0 and end > start:
+            response = response[start:end]
+
+        triples_data = json.loads(response)
+
+        for data in triples_data:
+            if not isinstance(data, dict):
+                continue
+
+            raw_subject = data.get("subject", "")
+            raw_predicate = data.get("predicate", "")
+            raw_object = data.get("object", "")
+
+            corrected_subject, corrected_predicate, corrected_object = _correct_inverted_predicate(
+                raw_subject, raw_predicate, raw_object
+            )
+
+            triple = Triple(
+                id=str(uuid.uuid4()),
+                subject=corrected_subject,
+                predicate=corrected_predicate,
+                object=corrected_object,
+                subject_type=data.get("subject_type", "entity"),
+                object_type=data.get("object_type", "entity"),
+                source_article_id=article.id,
+                confidence=data.get("confidence", "medium"),
+            )
+
+            if not (triple.subject and triple.predicate and triple.object):
+                continue
+
+            existing = _find_similar_triple(
+                triple, knowledge_base, embedding_service=embedding_service
+            )
+
+            if existing:
+                existing_triples.append(existing)
+            else:
+                if knowledge_base.save_triple(triple):
+                    new_triples.append(triple)
+
+    except json.JSONDecodeError as e:
+        logger.warning(f"JSON parsing failed for triple extraction: {e}")
+    except Exception as e:
+        logger.warning(f"Triple parsing failed: {e}")
+
+    return new_triples, existing_triples
+
+
 def build_entity_rel_prompt(article: Article) -> Optional[str]:
     """Build the prompt for entity relationship extraction. Returns None if article not suitable."""
     if not article.content or len(article.content) < 100:
