@@ -1739,11 +1739,7 @@ def _show_final_report(
 
     # Show pipeline duration, not timestamp
     duration = stats.get("pipeline_duration", 0)
-    if duration > 60:
-        duration_str = f"{duration / 60:.1f} minutes"
-    else:
-        duration_str = f"{duration:.1f} seconds"
-    table.add_row("Processing time", duration_str)
+    table.add_row("Processing time", format_duration(duration))
     table.add_row("Insights extracted", str(stats["insights"]))
     table.add_row("Facts added", str(stats.get("triples_new", stats.get("triples", 0))))
     table.add_row("New graph triples", str(stats.get("cluster_triples", 0)))
