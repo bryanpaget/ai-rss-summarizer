@@ -1012,8 +1012,8 @@ def batch_process_articles(
     """
     Process clustering for multiple articles in batch.
 
-    Uses vector embeddings for O(n) similarity comparisons per article,
-    avoiding O(n²) LLM calls that would make batch processing slow.
+    Uses submit/collect pattern for ALL LLM calls to maximize throughput.
+    Model stays loaded and processes continuously.
 
     Args:
         articles: List of articles to process
@@ -1025,9 +1025,13 @@ def batch_process_articles(
     Returns:
         Dictionary with batch processing stats
     """
+    from .gateway import get_gateway
+
     # Create shared KB instance if not provided
     if kb is None:
         kb = KnowledgeBase()
+
+    gateway = get_gateway()
 
     stats = {
         "processed": 0,
@@ -1038,26 +1042,56 @@ def batch_process_articles(
         "errors": [],
     }
 
+    # --- STEP 1: Filter spam and cluster all articles (uses embeddings, not LLM) ---
+    article_stories = {}  # article.id -> (article, story, is_new_story)
+    clusterer = StoryClusterer(llm_provider, storage, kb)
+
     for article in articles:
-        result = process_article_clustering(
-            article, llm_provider, storage, enable_news_extraction, kb
-        )
-
-        stats["processed"] += 1
-
-        # Check if skipped due to spam
-        if result.get("skipped_spam"):
+        # Check if article is spam
+        filter_result = is_promotional_content(article)
+        if filter_result.is_promotional:
             stats["spam_skipped"] += 1
+            stats["processed"] += 1
             continue
 
-        if result.get("story_created"):
-            stats["stories_created"] += 1
-        else:
-            stats["articles_added_to_existing"] += 1
+        try:
+            # Cluster article (uses embeddings, not LLM)
+            story = clusterer.cluster_article(article)
+            is_new_story = len(story.article_ids) == 1
+            article_stories[article.id] = (article, story, is_new_story)
 
-        stats["total_news_items"] += result.get("news_items_extracted", 0)
+            if is_new_story:
+                stats["stories_created"] += 1
+            else:
+                stats["articles_added_to_existing"] += 1
 
-        if "error" in result:
-            stats["errors"].append(f"{article.id}: {result['error']}")
+            stats["processed"] += 1
+        except Exception as e:
+            stats["errors"].append(f"{article.id}: {str(e)}")
+            stats["processed"] += 1
+
+    # --- STEP 2: News extraction - Submit all prompts, then collect all ---
+    if enable_news_extraction and article_stories:
+        news_handles = []  # (article, story, handle)
+
+        # Submit all news extraction prompts
+        for article_id, (article, story, _) in article_stories.items():
+            existing_items = storage.get_news_items(story.id)
+            prompt = build_news_extraction_prompt(article, existing_items)
+            handle = gateway.submit_text(prompt)
+            news_handles.append((article, story, handle))
+
+        # Collect all responses and parse
+        for article, story, handle in news_handles:
+            try:
+                response = gateway.collect_text(handle)
+                items = parse_news_extraction_response(response, article, story, storage)
+                stats["total_news_items"] += len(items)
+
+                # Update story with new items
+                if items:
+                    storage.update_story(story)
+            except Exception as e:
+                stats["errors"].append(f"{article.id}: news extraction failed: {str(e)}")
 
     return stats
