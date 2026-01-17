@@ -1434,6 +1434,128 @@ Only return valid JSON, no other text."""
         return [insight]
 
 
+# =============================================================================
+# BATCH HELPERS: Separate prompt building from response parsing for batching
+# =============================================================================
+
+def build_insight_prompt(article: Article) -> Optional[str]:
+    """Build the prompt for insight extraction. Returns None if article not suitable."""
+    if not article.content or len(article.content) < 100:
+        return None
+
+    constitution_context = get_constitution_context()
+
+    return f"""{constitution_context}
+=== ARTICLE TO ANALYZE ===
+Extract insights from ONLY the article content below. Do NOT include the analysis principles above as insights - they are instructions for HOW to analyze, not content to extract.
+
+Extract ALL key learnings from this article. The number of insights depends on content density.
+
+For each insight, provide:
+1. The insight text (one clear sentence)
+2. Type: technical/tool/statistic/opinion
+3. Confidence: high/medium/low
+4. Reason for confidence level
+5. Entities mentioned (tools, people, companies)
+
+Article: "{article.title}"
+
+Content: {article.content}
+
+Return as JSON array:
+[
+  {{
+    "content": "Insight text here",
+    "type": "technical",
+    "confidence": "high",
+    "reason": "Cited peer-reviewed study",
+    "entities": [{{"name": "Tool Name", "type": "tool"}}]
+  }}
+]
+
+Only return valid JSON, no other text."""
+
+
+def parse_insight_response(
+    article: Article, response: str, knowledge_base: "KnowledgeBase"
+) -> list[Insight]:
+    """Parse LLM response and save insights to knowledge base."""
+    try:
+        # Handle potential markdown code blocks
+        response = response.strip()
+        if response.startswith("```"):
+            lines = response.split("\n")
+            response = "\n".join(lines[1:-1] if len(lines) > 2 else lines)
+
+        insights_data = json.loads(response)
+
+        insights = []
+        for data in insights_data:
+            insight_id = str(uuid.uuid4())
+            insight = Insight(
+                id=insight_id,
+                article_id=article.id,
+                content=data.get("content", ""),
+                insight_type=data.get("type", "technical"),
+                confidence=data.get("confidence", "medium"),
+                confidence_reason=data.get("reason", ""),
+            )
+
+            knowledge_base.save_insight(insight)
+            insights.append(insight)
+
+            # Process entities
+            entities = data.get("entities", [])
+            for entity_data in entities:
+                entity_name = entity_data.get("name", "")
+                entity_type = entity_data.get("type", "concept")
+
+                if not entity_name:
+                    continue
+
+                existing = knowledge_base.get_entity_by_name(entity_name, entity_type)
+                if existing:
+                    entity_id = existing.id
+                    knowledge_base.save_entity(existing)
+                else:
+                    entity_id = str(uuid.uuid4())
+                    entity = Entity(
+                        id=entity_id,
+                        name=entity_name,
+                        entity_type=entity_type,
+                    )
+                    knowledge_base.save_entity(entity)
+
+                knowledge_base.link_insight_to_entity(insight_id, entity_id)
+
+        return insights
+
+    except json.JSONDecodeError as e:
+        logger.warning(f"JSON parsing failed for insights from '{article.title[:40]}': {e}")
+        insight = Insight(
+            id=str(uuid.uuid4()),
+            article_id=article.id,
+            content=article.summary or article.title,
+            insight_type="technical",
+            confidence="low",
+            confidence_reason=f"JSON parsing failed: {str(e)}",
+        )
+        knowledge_base.save_insight(insight)
+        return [insight]
+    except Exception as e:
+        logger.warning(f"Insight parsing failed for '{article.title[:40]}': {e}")
+        insight = Insight(
+            id=str(uuid.uuid4()),
+            article_id=article.id,
+            content=article.summary or article.title,
+            insight_type="technical",
+            confidence="low",
+            confidence_reason=f"Parsing error: {str(e)}",
+        )
+        knowledge_base.save_insight(insight)
+        return [insight]
+
+
 @dataclass
 class TripleExtractionResult:
     """Result of triple extraction with visibility into new vs existing."""
