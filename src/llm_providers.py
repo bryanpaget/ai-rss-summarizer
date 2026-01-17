@@ -531,57 +531,21 @@ class LMStudioProvider(OpenAICompatibleProvider):
         - Model switching coordination
 
         No need for ensure_text_model() - gateway handles it.
+        NO FALLBACKS - gateway is required, fail loudly if unavailable.
         """
-        # Try to use the gateway (preferred path)
-        try:
-            from .gateway import get_gateway, GatewayUnavailableError
+        from .gateway import get_gateway, GatewayUnavailableError
 
-            gateway = get_gateway()
-            if gateway.is_available():
-                result = gateway.request_text(prompt, temperature=0.3)
-                # Record estimated usage (gateway doesn't provide token counts)
-                self._record_usage(prompt, result, "gateway")
-                return result.strip()
+        gateway = get_gateway()
+        if not gateway.is_available():
+            raise RuntimeError(
+                "Gateway not available. LM Studio must be running.\n"
+                "Start LM Studio and ensure it's listening on localhost:1234"
+            )
 
-        except (ImportError, GatewayUnavailableError):
-            pass  # Fall back to direct API call
-        except Exception as e:
-            import sys
-            print(f"Warning: Gateway request failed, falling back to direct API: {e}", file=sys.stderr)
-
-        # Fallback: Direct API call (for users without gateway)
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.api_key}",
-        }
-
-        model = self._get_model()
-        self._discovered_model = model
-
-        payload = {
-            "model": model,
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.3,
-            "max_tokens": max_tokens,
-        }
-
-        response = httpx.post(
-            f"{self.base_url}/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=60.0,
-        )
-
-        # Check for "No models loaded" error
-        if response.status_code == 400:
-            try:
-                error_data = response.json()
-                if "No models loaded" in error_data.get("error", {}).get("message", ""):
-                    if not self._auto_load_attempted:
-                        self._auto_load_attempted = True
-                        if self._auto_load_model():
-                            # Retry the request
-                            return self._make_request(prompt, max_tokens, is_summarize)
+        result = gateway.request_text(prompt, temperature=0.3)
+        # Record estimated usage (gateway doesn't provide token counts)
+        self._record_usage(prompt, result, "gateway")
+        return result.strip()
             except (json.JSONDecodeError, KeyError, TypeError) as e:
                 # Could not parse error response - log and continue to raise_for_status
                 import sys
