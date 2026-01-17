@@ -1,21 +1,5 @@
 ﻿{
     "adjacency":  {
-                      "`request_embedding`":  {
-                                                  "in":  [
-                                                             3
-                                                         ],
-                                                  "out":  [
-
-                                                          ]
-                                              },
-                      "\"article\"":  {
-                                          "in":  [
-                                                     1
-                                                 ],
-                                          "out":  [
-
-                                                  ]
-                                      },
                       "queue: 11572ms":  {
                                              "in":  [
 
@@ -24,6 +8,110 @@
                                                          7
                                                      ]
                                          },
+                      "tags":  {
+                                   "out":  [
+
+                                           ],
+                                   "in":  [
+                                              8
+                                          ]
+                               },
+                      "entity relationships":  {
+                                                   "out":  [
+
+                                                           ],
+                                                   "in":  [
+                                                              11
+                                                          ]
+                                               },
+                      "process: 572ms":  {
+                                             "in":  [
+                                                        4,
+                                                        5,
+                                                        6,
+                                                        7
+                                                    ],
+                                             "out":  [
+
+                                                     ]
+                                         },
+                      "\"article\"":  {
+                                          "in":  [
+                                                     1
+                                                 ],
+                                          "out":  [
+
+                                                  ]
+                                      },
+                      "insights":  {
+                                       "out":  [
+                                                   11
+                                               ],
+                                       "in":  [
+
+                                              ]
+                                   },
+                      "knowledge extraction":  {
+                                                   "out":  [
+
+                                                           ],
+                                                   "in":  [
+                                                              9,
+                                                              10
+                                                          ]
+                                               },
+                      "article.id":  {
+                                         "in":  [
+
+                                                ],
+                                         "out":  [
+                                                     0,
+                                                     1,
+                                                     2
+                                                 ]
+                                     },
+                      "`request_text`":  {
+                                             "in":  [
+
+                                                    ],
+                                             "out":  [
+                                                         3
+                                                     ]
+                                         },
+                      "queue: 12651ms":  {
+                                             "in":  [
+
+                                                    ],
+                                             "out":  [
+                                                         4
+                                                     ]
+                                         },
+                      "result.vector":  {
+                                            "in":  [
+                                                       0,
+                                                       2
+                                                   ],
+                                            "out":  [
+
+                                                    ]
+                                        },
+                      "`request_embedding`":  {
+                                                  "in":  [
+                                                             3
+                                                         ],
+                                                  "out":  [
+
+                                                          ]
+                                              },
+                      "tagging":  {
+                                      "out":  [
+                                                  9,
+                                                  10
+                                              ],
+                                      "in":  [
+
+                                             ]
+                                  },
                       "queue: 11910ms":  {
                                              "in":  [
 
@@ -40,52 +128,14 @@
                                                          5
                                                      ]
                                          },
-                      "queue: 12651ms":  {
-                                             "in":  [
-
-                                                    ],
-                                             "out":  [
-                                                         4
-                                                     ]
-                                         },
-                      "`request_text`":  {
-                                             "in":  [
-
-                                                    ],
-                                             "out":  [
-                                                         3
-                                                     ]
-                                         },
-                      "result.vector":  {
-                                            "in":  [
-                                                       0,
-                                                       2
-                                                   ],
-                                            "out":  [
-
-                                                    ]
-                                        },
-                      "article.id":  {
-                                         "in":  [
-
+                      "summaries":  {
+                                        "out":  [
+                                                    8
                                                 ],
-                                         "out":  [
-                                                     0,
-                                                     1,
-                                                     2
-                                                 ]
-                                     },
-                      "process: 572ms":  {
-                                             "in":  [
-                                                        4,
-                                                        5,
-                                                        6,
-                                                        7
-                                                    ],
-                                             "out":  [
+                                        "in":  [
 
-                                                     ]
-                                         }
+                                               ]
+                                    }
                   },
     "validation_queue":  [
 
@@ -94,16 +144,16 @@
     "project_root":  "C:/Users/jpswi/personal projects/RSSsummarizer",
     "sessions":  {
                      "b83ca0cf-6f48-4726-b27f-0daeab98089d":  {
-                                                                  "last_turn":  23,
-                                                                  "last_active":  "2026-01-16T20:30:53.4379004-08:00",
+                                                                  "last_turn":  24,
+                                                                  "last_active":  "2026-01-16T20:38:43.2946333-08:00",
                                                                   "last_dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer"
                                                               }
                  },
     "metadata":  {
-                     "last_turn":  23,
+                     "last_turn":  24,
                      "cycles_found":  0,
-                     "total_connected":  4,
-                     "total_orphans":  3
+                     "total_connected":  6,
+                     "total_orphans":  5
                  },
     "edges":  [
                   {
@@ -184,6 +234,46 @@
                       "sub":  "queue: 11572ms",
                       "obj":  "process: 572ms",
                       "pred":  "is",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  24,
+                      "timestamp":  "2026-01-16T20:38:43.2946333-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "summaries",
+                      "obj":  "tags",
+                      "pred":  "facts",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  24,
+                      "timestamp":  "2026-01-16T20:38:43.2946333-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "double",
+                      "sub":  "tagging",
+                      "obj":  "knowledge extraction",
+                      "pred":  "is",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  24,
+                      "timestamp":  "2026-01-16T20:38:43.2946333-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "double",
+                      "sub":  "tagging",
+                      "obj":  "knowledge extraction",
+                      "pred":  "is",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  24,
+                      "timestamp":  "2026-01-16T20:38:43.2946333-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "insights",
+                      "obj":  "entity relationships",
+                      "pred":  "triples",
                       "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
                   }
               ]
