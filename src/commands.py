@@ -30,9 +30,13 @@ from .knowledge import (
     parse_insight_response,
     build_entity_rel_prompt,
     parse_entity_rel_response,
+    build_chunk_prompt,
+    parse_chunk_response,
     build_triple_prompt,
     parse_triple_response,
-    _semantic_chunk,
+    get_connection_candidates,
+    build_connection_prompt,
+    parse_connection_response,
 )
 
 console = Console(force_terminal=True, legacy_windows=True)
