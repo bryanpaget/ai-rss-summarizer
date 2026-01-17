@@ -373,7 +373,7 @@ class LocalLLMGateway:
     ) -> list[str]:
         """Process multiple text requests in a batch.
 
-        Submits all requests first (allowing gateway to batch), then collects.
+        Submits all requests in parallel (saturating gateway queue), then collects.
 
         Args:
             prompts: List of prompts
@@ -387,20 +387,26 @@ class LocalLLMGateway:
             return []
 
         batch_start = time.time()
-        logger.debug(f"batch_text: starting {len(prompts)} requests")
+        logger.debug(f"batch_text: starting {len(prompts)} requests (parallel submit)")
 
-        # Submit all requests
-        handles = []
+        # Submit all requests in parallel using threads
+        # This saturates the gateway queue immediately instead of sequentially
         submit_start = time.time()
-        for i, prompt in enumerate(prompts):
-            t0 = time.time()
-            handle = self.submit_text(prompt, system_prompt, temperature)
-            handles.append(handle)
-            queue_depth = self.get_queue_depth()
-            logger.debug(f"  submit {i+1}/{len(prompts)}: {time.time()-t0:.3f}s, queue={queue_depth}")
+        handles = [None] * len(prompts)
+
+        def submit_one(idx: int) -> tuple[int, str]:
+            handle = self.submit_text(prompts[idx], system_prompt, temperature)
+            return idx, handle
+
+        with ThreadPoolExecutor(max_workers=min(len(prompts), 10)) as executor:
+            futures = [executor.submit(submit_one, i) for i in range(len(prompts))]
+            for future in as_completed(futures):
+                idx, handle = future.result()
+                handles[idx] = handle
 
         submit_time = time.time() - submit_start
-        logger.debug(f"batch_text: all {len(prompts)} submitted in {submit_time:.2f}s")
+        queue_depth = self.get_queue_depth()
+        logger.debug(f"batch_text: all {len(prompts)} submitted in {submit_time:.2f}s, queue={queue_depth}")
 
         # Collect all responses
         results = []
