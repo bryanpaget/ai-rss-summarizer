@@ -199,158 +199,45 @@ class LMStudioProvider(EmbeddingProvider):
         return msys_path
 
     def embed(self, text: str) -> list[float]:
-        """Generate embedding using the safe-model-load gateway.
+        """Generate embedding using the gateway.
 
         The gateway handles:
         - Model auto-loading (loads embedding model if needed)
         - Queue management and batching by type
         - Model switching coordination
+
+        NO FALLBACKS - gateway is required, fail loudly if unavailable.
         """
-        # Use the shared gateway module
-        try:
-            from .gateway import get_gateway, GatewayUnavailableError
+        from .gateway import get_gateway
 
-            gateway = get_gateway()
-            if gateway.is_available():
-                return gateway.request_embedding(text)
-
-        except (ImportError, GatewayUnavailableError):
-            pass  # Fall back to legacy implementation
-        except Exception as e:
-            import sys
-            print(f"Warning: Gateway embedding failed, falling back: {e}", file=sys.stderr)
-
-        # Fallback: Use legacy direct implementation
-        return self._embed_single(text)
-
-    def _embed_single(self, text: str) -> list[float]:
-        """Single embedding attempt without retry logic."""
-        import subprocess
-        import json
-        import os
-        import tempfile
-        import time
-
-        home = os.path.expanduser("~")
-        gateway_script = os.path.join(home, '.claude', 'scripts', 'safe-model-load.sh')
-        gateway_path = self._win_to_msys_path(gateway_script)
-
-        # Write text to temp file (safe for any content, avoids shell escaping issues)
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False, encoding='utf-8') as f:
-            f.write(text)
-            temp_path = f.name
-
-        response_path = None
-        try:
-            temp_path_msys = self._win_to_msys_path(temp_path)
-
-            # Use Git Bash explicitly - WSL bash won't work with our path format
-            bash_exe = self.GIT_BASH if os.name == 'nt' else 'bash'
-
-            result = subprocess.run(
-                [bash_exe, gateway_path, "request", "embedding", "--prompt-file", temp_path_msys],
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=self.timeout,
-            )
-
-            if result.returncode != 0:
-                raise EmbeddingProviderError(
-                    f"Gateway failed: {result.stderr or result.stdout}"
-                )
-
-            # Gateway returns FILE=/path/to/response.json
-            stdout = result.stdout.strip()
-            if not stdout.startswith('FILE='):
-                raise EmbeddingProviderError(f"Unexpected gateway output: {stdout}")
-
-            response_path_msys = stdout[5:]
-            response_path = self._msys_to_win_path(response_path_msys)
-
-            # Wait for response file (gateway processes asynchronously)
-            for _ in range(self.timeout):
-                if os.path.exists(response_path):
-                    # Check file is not empty before parsing
-                    file_size = os.path.getsize(response_path)
-                    if file_size == 0:
-                        time.sleep(0.5)  # Wait for file to be written
-                        continue
-
-                    with open(response_path, 'r', encoding='utf-8') as f:
-                        content = f.read()
-                        if not content.strip():
-                            time.sleep(0.5)  # Empty content, wait
-                            continue
-                        response = json.loads(content)
-
-                    if "error" in response:
-                        raise EmbeddingProviderError(f"Gateway error: {response['error']}")
-
-                    # Extract embedding from response
-                    if "data" in response and len(response["data"]) > 0:
-                        return response["data"][0]["embedding"]
-                    elif "embedding" in response:
-                        return response["embedding"]
-                    else:
-                        raise EmbeddingProviderError(f"Unexpected response format: {list(response.keys())}")
-                time.sleep(1)
-
-            raise EmbeddingProviderError(f"Timeout waiting for gateway response after {self.timeout}s")
-
-        except subprocess.TimeoutExpired:
-            raise EmbeddingProviderError(f"Gateway subprocess timed out after {self.timeout}s")
-        except json.JSONDecodeError as e:
-            raise EmbeddingProviderError(f"Invalid JSON from gateway: {e}")
-        except FileNotFoundError:
+        gateway = get_gateway()
+        if not gateway.is_available():
             raise EmbeddingProviderError(
-                f"Gateway script not found. Expected at: {gateway_script}"
+                "Gateway not available. LM Studio must be running.\n"
+                "Start LM Studio and ensure it's listening on localhost:1234"
             )
-        except EmbeddingProviderError:
-            raise
-        except Exception as e:
-            raise EmbeddingProviderError(f"Gateway call failed: {e}")
-        finally:
-            # Clean up temp file
-            try:
-                os.unlink(temp_path)
-            except Exception as e:
-                import sys
-                print(f"Failed to clean up temp file {temp_path}: {e}", file=sys.stderr)
-            # Clean up response file
-            if response_path:
-                try:
-                    os.unlink(response_path)
-                except Exception as e:
-                    import sys
-                    print(f"Failed to clean up response file {response_path}: {e}", file=sys.stderr)
+        return gateway.request_embedding(text)
 
     def embed_batch(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings for multiple texts efficiently.
 
         Uses the gateway's batch functionality which submits all requests
-        first (allowing queue batching) then collects responses.
+        at once for efficient processing.
+
+        NO FALLBACKS - gateway is required, fail loudly if unavailable.
         """
         if not texts:
             return []
 
-        # Use the shared gateway module for efficient batching
-        try:
-            from .gateway import get_gateway, GatewayUnavailableError
+        from .gateway import get_gateway
 
-            gateway = get_gateway()
-            if gateway.is_available():
-                return gateway.batch_embedding(texts)
-
-        except (ImportError, GatewayUnavailableError):
-            pass  # Fall back to sequential processing
-        except Exception as e:
-            import sys
-            print(f"Warning: Gateway batch embedding failed, falling back: {e}", file=sys.stderr)
-
-        # Fallback: Sequential processing
-        return [self.embed(text) for text in texts]
+        gateway = get_gateway()
+        if not gateway.is_available():
+            raise EmbeddingProviderError(
+                "Gateway not available. LM Studio must be running.\n"
+                "Start LM Studio and ensure it's listening on localhost:1234"
+            )
+        return gateway.batch_embedding(texts)
 
 
 class OllamaProvider(EmbeddingProvider):
