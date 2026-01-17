@@ -70,14 +70,6 @@
                                                      2
                                                  ]
                                      },
-                      "queue: 12256ms":  {
-                                             "in":  [
-
-                                                    ],
-                                             "out":  [
-                                                         5
-                                                     ]
-                                         },
                       "`request_text`":  {
                                              "in":  [
 
@@ -103,6 +95,14 @@
 
                                                     ]
                                         },
+                      "`request_embedding`":  {
+                                                  "in":  [
+                                                             3
+                                                         ],
+                                                  "out":  [
+
+                                                          ]
+                                              },
                       "tagging":  {
                                       "in":  [
 
@@ -120,14 +120,14 @@
                                                          6
                                                      ]
                                          },
-                      "`request_embedding`":  {
-                                                  "in":  [
-                                                             3
-                                                         ],
-                                                  "out":  [
+                      "queue: 12256ms":  {
+                                             "in":  [
 
-                                                          ]
-                                              },
+                                                    ],
+                                             "out":  [
+                                                         5
+                                                     ]
+                                         },
                       "summaries":  {
                                         "in":  [
 
@@ -144,13 +144,13 @@
     "project_root":  "C:/Users/jpswi/personal projects/RSSsummarizer",
     "sessions":  {
                      "b83ca0cf-6f48-4726-b27f-0daeab98089d":  {
-                                                                  "last_turn":  29,
-                                                                  "last_active":  "2026-01-17T07:01:38.1853691-08:00",
+                                                                  "last_turn":  30,
+                                                                  "last_active":  "2026-01-17T08:00:52.5463231-08:00",
                                                                   "last_dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer"
                                                               }
                  },
     "metadata":  {
-                     "last_turn":  29,
+                     "last_turn":  30,
                      "cycles_found":  0,
                      "total_connected":  6,
                      "total_orphans":  5
