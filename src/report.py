@@ -536,19 +536,6 @@ def _run_llm_phase(
     console.print("[bold]Step 3:[/bold] LLM Analysis...")
     console.print(f"  [green]Using {provider.name}[/green]")
 
-    # WARMUP: Force text model load before processing articles
-    # This ensures processor is running and text model is loaded after embedding phase
-    # Uses longer timeout (180s) because model switch from embedding can take 60-90s
-    if "localhost:1234" in getattr(provider, 'base_url', ''):
-        from .gateway import LocalLLMGateway
-        warmup_gateway = LocalLLMGateway(timeout=180)  # 3 min timeout for model switch
-        console.print("  [dim]Warming up text model...[/dim]", end="")
-        try:
-            warmup_gateway.request_text("Hello", temperature=0.1)
-            console.print(" [green]ready[/green]")
-        except Exception as e:
-            console.print(f" [yellow]warmup failed: {e}[/yellow]")
-
     tagger = SignalTagger(use_llm=True, provider=provider)
     processed_articles = []
     step_start = time.time()  # For ETA calculation
