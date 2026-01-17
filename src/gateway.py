@@ -217,14 +217,18 @@ class LocalLLMGateway:
         return response_paths
 
     def _trigger_processor(self):
-        """Trigger the gateway processor to start processing queue."""
+        """Trigger the gateway processor by making a minimal request.
+
+        The bash script only spawns a processor when a request is made.
+        We make a quick status check which ensures the script runs.
+        """
         try:
             bash_exe = self.GIT_BASH if os.name == 'nt' else 'bash'
             gateway_path = self._win_to_msys_path(self._gateway_path)
 
-            # Use 'process' command to trigger processor without adding to queue
+            # Status command is fast and ensures script processes any queued items
             subprocess.Popen(
-                [bash_exe, gateway_path, "process"],
+                [bash_exe, gateway_path, "status"],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
