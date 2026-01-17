@@ -255,8 +255,6 @@ class LocalLLMGateway:
                     if "error" in response:
                         raise GatewayError(f"Gateway error: {response['error']}")
 
-                    elapsed = time.time() - start_time
-                    print(f"[GATEWAY] COLLECT completed in {elapsed:.2f}s", file=sys.stderr)
                     return response
 
                 except json.JSONDecodeError:
