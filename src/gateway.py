@@ -416,8 +416,8 @@ class LocalLLMGateway:
     def batch_embedding(self, texts: list[str]) -> list[list[float]]:
         """Process multiple embedding requests in a batch.
 
-        Uses parallel subprocess calls to submit requests quickly,
-        allowing the gateway to batch them efficiently.
+        Submits all requests first, then collects responses.
+        The gateway batches same-type requests for efficient processing.
 
         Args:
             texts: List of texts to embed
@@ -429,21 +429,14 @@ class LocalLLMGateway:
             return []
 
         batch_start = time.time()
-        logger.debug(f"batch_embedding: starting {len(texts)} requests (parallel submit)")
+        logger.debug(f"batch_embedding: starting {len(texts)} requests")
 
-        # Submit all requests in parallel using threads
+        # Submit all requests (gateway queues them for batch processing)
         submit_start = time.time()
-        handles = [None] * len(texts)
-
-        def submit_one(idx: int) -> tuple[int, str]:
-            handle = self.submit_embedding(texts[idx])
-            return idx, handle
-
-        with ThreadPoolExecutor(max_workers=min(len(texts), 10)) as executor:
-            futures = [executor.submit(submit_one, i) for i in range(len(texts))]
-            for future in futures:
-                idx, handle = future.result()
-                handles[idx] = handle
+        handles = []
+        for text in texts:
+            handle = self.submit_embedding(text)
+            handles.append(handle)
 
         submit_time = time.time() - submit_start
         logger.debug(f"batch_embedding: all {len(texts)} submitted in {submit_time:.2f}s")
