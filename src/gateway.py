@@ -140,7 +140,7 @@ class LocalLLMGateway:
         Returns:
             Number of pending requests, or -1 if queue file doesn't exist
         """
-        queue_file = self._status_dir / 'queue'
+        queue_file = self._ipc_dir / 'queue.jsonl'
         if not queue_file.exists():
             return -1
         try:
