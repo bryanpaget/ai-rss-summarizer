@@ -227,8 +227,6 @@ class LocalLLMGateway:
         Returns:
             Parsed JSON response
         """
-        import sys
-        print(f"[GATEWAY] COLLECT waiting for response...", file=sys.stderr)
         start_time = time.time()
 
         while time.time() - start_time < self.timeout:
