@@ -921,36 +921,24 @@ def _cluster_insights_by_similarity(
     return clusters
 
 
-def _analyze_cluster_for_triples(
-    cluster: list,
-    provider,
-    kb: KnowledgeBase,
-) -> tuple[list, list]:
-    """Analyze a cluster of similar insights and extract theme/relationship triples.
+def build_cluster_analysis_prompt(cluster: list) -> str:
+    """Build prompt for analyzing a cluster of similar insights.
 
     Args:
         cluster: List of (insight, embedding) tuples
-        provider: LLM provider
-        kb: Knowledge base to save triples to
 
     Returns:
-        Tuple of (new_triples, connections_found)
+        Prompt string for LLM
     """
-    import json
-    import uuid
-    from datetime import datetime
-    from .knowledge import Triple, Relationship
-    from .schema import extract_json_from_response
-
     if len(cluster) < 2:
-        return [], []
+        return ""
 
     # Build cluster content for prompt
     insights_text = ""
     for i, (ins, _) in enumerate(cluster):
         insights_text += f"\n{i+1}. [{ins.insight_type}] {ins.content}"
 
-    prompt = f"""Analyze this cluster of semantically similar insights and extract structured knowledge.
+    return f"""Analyze this cluster of semantically similar insights and extract structured knowledge.
 
 INSIGHTS IN CLUSTER:{insights_text}
 
@@ -974,10 +962,145 @@ Return as JSON:
 
 Return ONLY valid JSON."""
 
+
+def parse_cluster_analysis_response(
+    response: str,
+    cluster: list,
+    kb: KnowledgeBase,
+) -> tuple[list, list]:
+    """Parse cluster analysis response and save to knowledge base.
+
+    Args:
+        response: LLM response text
+        cluster: List of (insight, embedding) tuples
+        kb: Knowledge base to save triples to
+
+    Returns:
+        Tuple of (new_triples, connections_found)
+    """
+    import json
+    import uuid
+    from datetime import datetime
+    from .knowledge import Triple, Relationship
+    from .schema import extract_json_from_response
+
+    if not response or len(cluster) < 2:
+        return [], []
+
     try:
-        response = provider.generate(prompt, max_tokens=800)
         json_str = extract_json_from_response(response)
         data = json.loads(json_str)
+
+        new_triples = []
+        connections = []
+
+        theme = data.get("theme", "")
+        subcategories = data.get("subcategories", [])
+
+        # Create triples for theme -> subcategory relationships
+        if theme and subcategories:
+            for subcat in subcategories[:5]:  # Limit to 5 subcategories
+                triple = Triple(
+                    id=str(uuid.uuid4()),
+                    subject=theme,
+                    predicate="has_aspect",
+                    object=subcat,
+                    subject_type="concept",
+                    object_type="concept",
+                    confidence="medium",
+                )
+                if kb.save_triple(triple):
+                    new_triples.append(triple)
+
+        # Create triples from the extracted relationships
+        for t_data in data.get("triples", []):
+            if not isinstance(t_data, dict):
+                continue
+            subject = t_data.get("subject", "")
+            predicate = t_data.get("predicate", "")
+            obj = t_data.get("object", "")
+
+            if subject and predicate and obj:
+                triple = Triple(
+                    id=str(uuid.uuid4()),
+                    subject=subject,
+                    predicate=predicate,
+                    object=obj,
+                    subject_type="concept",
+                    object_type="concept",
+                    confidence="medium",
+                )
+                if kb.save_triple(triple):
+                    new_triples.append(triple)
+
+        # Create insight-to-insight relationships
+        for rel_data in data.get("insight_relationships", []):
+            if not isinstance(rel_data, dict):
+                continue
+
+            src_idx = rel_data.get("source_index", 0) - 1  # 1-indexed in prompt
+            tgt_idx = rel_data.get("target_index", 0) - 1
+            rel_type = rel_data.get("relationship", "").lower()
+
+            if src_idx < 0 or tgt_idx < 0 or src_idx >= len(cluster) or tgt_idx >= len(cluster):
+                continue
+            if rel_type not in {"confirms", "contradicts", "refines", "extends"}:
+                continue
+
+            src_ins, src_emb = cluster[src_idx]
+            tgt_ins, tgt_emb = cluster[tgt_idx]
+
+            # Compute actual similarity from embeddings
+            similarity = _cosine_similarity(src_emb, tgt_emb)
+
+            relationship = Relationship(
+                id=str(uuid.uuid4()),
+                source_insight_id=src_ins.id,
+                target_insight_id=tgt_ins.id,
+                relationship_type=rel_type,
+                strength=similarity,
+                detected_at=datetime.now(),
+            )
+            kb.save_relationship(relationship)
+            connections.append(relationship)
+
+        return new_triples, connections
+
+    except json.JSONDecodeError as e:
+        import sys
+        print(f"JSON parsing failed for cluster analysis: {e}", file=sys.stderr)
+        return [], []
+    except Exception as e:
+        import sys
+        print(f"Cluster analysis parsing failed: {e}", file=sys.stderr)
+        return [], []
+
+
+def _analyze_cluster_for_triples(
+    cluster: list,
+    provider,
+    kb: KnowledgeBase,
+) -> tuple[list, list]:
+    """Analyze a cluster of similar insights and extract theme/relationship triples.
+
+    DEPRECATED: Use build_cluster_analysis_prompt + parse_cluster_analysis_response
+    with submit/collect pattern for batching.
+
+    Args:
+        cluster: List of (insight, embedding) tuples
+        provider: LLM provider
+        kb: Knowledge base to save triples to
+
+    Returns:
+        Tuple of (new_triples, connections_found)
+    """
+    prompt = build_cluster_analysis_prompt(cluster)
+    if not prompt:
+        return [], []
+
+    try:
+        response = provider.generate(prompt, max_tokens=800)
+        return parse_cluster_analysis_response(response, cluster, kb)
 
         new_triples = []
         connections = []
