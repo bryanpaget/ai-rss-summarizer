@@ -591,25 +591,36 @@ Only include feeds you're confident are real and active."""
             response = message.content[0].text
         elif hasattr(provider, 'base_url'):
             # OpenAI-compatible provider
-            import httpx
+            # For LM Studio, use the gateway (NO FALLBACKS)
+            if "localhost:1234" in provider.base_url:
+                from .gateway import get_gateway
 
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {provider.api_key}",
-            }
-            payload = {
-                "model": provider._get_model(),
-                "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0.7,
-            }
-            resp = httpx.post(
-                f"{provider.base_url}/chat/completions",
-                headers=headers,
-                json=payload,
-                timeout=60.0,
-            )
-            data = resp.json()
-            response = data["choices"][0]["message"]["content"]
+                gateway = get_gateway()
+                if not gateway.is_available():
+                    console.print("[red]Gateway not available. LM Studio must be running.[/red]")
+                    raise typer.Exit(1)
+                response = gateway.request_text(prompt, temperature=0.7)
+            else:
+                # Other OpenAI-compatible providers (Ollama, etc.)
+                import httpx
+
+                headers = {
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {provider.api_key}",
+                }
+                payload = {
+                    "model": provider._get_model(),
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.7,
+                }
+                resp = httpx.post(
+                    f"{provider.base_url}/chat/completions",
+                    headers=headers,
+                    json=payload,
+                    timeout=60.0,
+                )
+                data = resp.json()
+                response = data["choices"][0]["message"]["content"]
         else:
             console.print("[yellow]Feed discovery not supported with this provider.[/yellow]")
             raise typer.Exit(1)
