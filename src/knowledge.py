@@ -2005,6 +2005,49 @@ Only return valid JSON, no other text."""
         return []
 
 
+def build_chunk_prompt(article: Article) -> Optional[str]:
+    """Build the prompt for semantic chunking. Returns None if article not suitable."""
+    if not article.content or len(article.content) < 200:
+        return None
+
+    return f"""Divide this article into semantically coherent chunks for embedding and knowledge extraction.
+
+Article: "{article.title}"
+
+Content:
+{article.content}
+
+Instructions:
+- Identify natural semantic boundaries (topic shifts, section breaks, conceptual units)
+- Each chunk should be a complete, coherent unit of meaning
+- Preserve all content - do not summarize or omit anything
+- Return the actual text chunks, not descriptions of them
+
+Return as JSON array of strings, where each string is a complete chunk:
+["chunk 1 full text here...", "chunk 2 full text here...", ...]
+
+Only return the JSON array, no other text."""
+
+
+def parse_chunk_response(article: Article, response: str) -> list[str]:
+    """Parse LLM response to get chunks. Returns [full_content] as fallback."""
+    try:
+        response = response.strip()
+        start_idx = response.find('[')
+        end_idx = response.rfind(']') + 1
+        if start_idx >= 0 and end_idx > start_idx:
+            json_str = response[start_idx:end_idx]
+            chunks = json.loads(json_str)
+            if isinstance(chunks, list) and all(isinstance(c, str) for c in chunks):
+                chunks = [c.strip() for c in chunks if c.strip()]
+                if chunks:
+                    return chunks
+    except (json.JSONDecodeError, Exception):
+        pass
+    # Fallback: return full content as single chunk
+    return [article.content] if article.content else []
+
+
 def build_triple_prompt(article_title: str, chunk_idx: int, total_chunks: int, chunk: str) -> str:
     """Build the prompt for triple extraction from one chunk."""
     return f"""Extract factual relationships from this text as subject-predicate-object triples.
