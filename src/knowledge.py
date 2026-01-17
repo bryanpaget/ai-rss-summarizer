@@ -2048,6 +2048,123 @@ def parse_chunk_response(article: Article, response: str) -> list[str]:
     return [article.content] if article.content else []
 
 
+def get_connection_candidates(
+    insight: Insight,
+    knowledge_base: "KnowledgeBase",
+    embedding_service: "EmbeddingService",
+    similarity_threshold: float = 0.70,
+    max_comparisons: int = 50,
+) -> list[tuple[Insight, float]]:
+    """
+    Get candidate insights for connection detection (FAISS lookup, no LLM).
+
+    Returns list of (existing_insight, similarity) tuples.
+    """
+    from .embeddings import EmbeddingError
+
+    # Get or create embedding for insight
+    try:
+        embedding = embedding_service.get_embedding(insight.id, "insight")
+        if not embedding:
+            result = embedding_service.embed_text(insight.content)
+            embedding = result.vector
+            embedding_service.save_embedding(insight.id, "insight", result)
+    except EmbeddingError:
+        return []
+
+    # Use FAISS to find similar insights
+    similar_results = embedding_service.find_similar(
+        query_vector=embedding,
+        target_type="insight",
+        threshold=similarity_threshold,
+        limit=max_comparisons,
+    )
+
+    if not similar_results:
+        return []
+
+    # Filter out self-match and get insight objects
+    candidates = []
+    for target_id, similarity in similar_results:
+        if target_id == insight.id:
+            continue
+        existing = knowledge_base.get_insight(target_id)
+        if existing:
+            candidates.append((existing, similarity))
+
+    return candidates[:10]  # Limit to top 10
+
+
+def build_connection_prompt(insight: Insight, candidates: list[tuple[Insight, float]]) -> Optional[str]:
+    """Build prompt for connection classification. Returns None if no candidates."""
+    if not candidates:
+        return None
+
+    pairs_text = ""
+    for i, (existing, similarity) in enumerate(candidates):
+        pairs_text += f"\nPair {i+1} (similarity: {similarity:.2f}):\n"
+        pairs_text += f'- Existing: "{existing.content}"\n'
+        pairs_text += f'- New: "{insight.content}"\n'
+
+    return f"""Classify the relationships between these insight pairs.
+{pairs_text}
+For each pair, determine the relationship from the NEW insight to the EXISTING insight:
+- confirms: New says essentially the same thing as existing
+- contradicts: New says the opposite of existing
+- refines: New adds nuance or detail to existing
+- extends: New builds on existing with new information
+- none: They are about similar topics but unrelated
+
+Return a JSON array with the relationship for each pair in order:
+["confirms", "none", "extends", ...]
+
+Return ONLY the JSON array, no other text."""
+
+
+def parse_connection_response(
+    insight: Insight,
+    candidates: list[tuple[Insight, float]],
+    response: str,
+    knowledge_base: "KnowledgeBase",
+) -> list["Relationship"]:
+    """Parse LLM response and save relationships to knowledge base."""
+    try:
+        from .schema import extract_json_from_response
+        json_str = extract_json_from_response(response)
+        relationship_types = json.loads(json_str)
+
+        if not isinstance(relationship_types, list):
+            relationship_types = [relationship_types]
+
+        relationships = []
+        valid_types = {"confirms", "contradicts", "refines", "extends"}
+
+        for i, (existing, similarity) in enumerate(candidates):
+            if i >= len(relationship_types):
+                break
+
+            rel_type = str(relationship_types[i]).lower().strip()
+            if rel_type not in valid_types:
+                continue
+
+            relationship = Relationship(
+                id=str(uuid.uuid4()),
+                source_insight_id=insight.id,
+                target_insight_id=existing.id,
+                relationship_type=rel_type,
+                strength=similarity,
+                detected_at=datetime.now(),
+            )
+            knowledge_base.save_relationship(relationship)
+            relationships.append(relationship)
+
+        return relationships
+
+    except Exception as e:
+        logger.warning(f"Failed to parse connection response: {e}")
+        return []
+
+
 def build_triple_prompt(article_title: str, chunk_idx: int, total_chunks: int, chunk: str) -> str:
     """Build the prompt for triple extraction from one chunk."""
     return f"""Extract factual relationships from this text as subject-predicate-object triples.
