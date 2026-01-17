@@ -388,17 +388,34 @@ class LocalLLMGateway:
         if not prompts:
             return []
 
+        batch_start = time.time()
+        logger.debug(f"batch_text: starting {len(prompts)} requests")
+
         # Submit all requests
         handles = []
-        for prompt in prompts:
+        submit_start = time.time()
+        for i, prompt in enumerate(prompts):
+            t0 = time.time()
             handle = self.submit_text(prompt, system_prompt, temperature)
             handles.append(handle)
+            queue_depth = self.get_queue_depth()
+            logger.debug(f"  submit {i+1}/{len(prompts)}: {time.time()-t0:.3f}s, queue={queue_depth}")
+
+        submit_time = time.time() - submit_start
+        logger.debug(f"batch_text: all {len(prompts)} submitted in {submit_time:.2f}s")
 
         # Collect all responses
         results = []
-        for handle in handles:
+        collect_start = time.time()
+        for i, handle in enumerate(handles):
+            t0 = time.time()
             result = self.collect_text(handle)
             results.append(result)
+            logger.debug(f"  collect {i+1}/{len(handles)}: {time.time()-t0:.3f}s")
+
+        collect_time = time.time() - collect_start
+        total_time = time.time() - batch_start
+        logger.debug(f"batch_text: collected in {collect_time:.2f}s, total={total_time:.2f}s")
 
         return results
 
