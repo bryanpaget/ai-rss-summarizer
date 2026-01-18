@@ -102,7 +102,7 @@ def call_llm(prompt):
                 # Convert back to Windows path if needed
                 if response_file.startswith('/c/'):
                     response_file = 'C:' + response_file[2:]
-                response_file = response_file.replace('/', '\')
+                response_file = response_file.replace('/', '\\')
                 
                 # Wait for response
                 import time
