@@ -106,9 +106,9 @@ class Storage:
             print(f"Running schema migration to version 1...", file=sys.stderr)
             self._migrate_to_v1(conn)
 
-        # Future migrations:
-        # if from_version < 2:
-        #     self._migrate_to_v2(conn)
+        if from_version < 2:
+            print(f"Running schema migration to version 2...", file=sys.stderr)
+            self._migrate_to_v2(conn)
 
     def _migrate_to_v1(self, conn: sqlite3.Connection) -> None:
         """Version 1: Initial schema with all current tables."""
