@@ -1160,10 +1160,16 @@ process_batch() {
     fi
 
     # Wait for ALL dispatched text/vision requests to complete
+    # Touch heartbeat periodically so Python knows we're still working
     if [[ ${#pids[@]} -gt 0 ]]; then
         log "Waiting for ${#pids[@]} requests to complete..."
         for pid in "${pids[@]}"; do
-            wait "$pid" || true
+            # Poll-wait with heartbeat instead of blocking wait
+            while kill -0 "$pid" 2>/dev/null; do
+                touch "$HEARTBEAT_FILE"
+                sleep 2
+            done
+            wait "$pid" || true  # Collect exit status
         done
         log "All requests in batch completed"
     fi
