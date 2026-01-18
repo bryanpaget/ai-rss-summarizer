@@ -2,6 +2,7 @@
 
 Uses AST for deterministic structure extraction, LLM only for descriptions.
 Supports hash-based caching to skip unchanged functions.
+Uses concurrent processing to keep multiple LLM requests in flight.
 """
 import sys
 import ast
@@ -10,9 +11,14 @@ import json
 import hashlib
 import argparse
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 
 # Add src to path for gateway import
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
+# Thread-safe print lock
+_print_lock = threading.Lock()
 
 CACHE_DIR = Path(__file__).parent.parent / ".cache"
 CACHE_FILE = CACHE_DIR / "function_docs.json"
