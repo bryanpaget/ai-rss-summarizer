@@ -322,66 +322,10 @@ Respond with JSON:
 
         return story
 
-    def _generate_story_title(self, article: Article) -> str:
-        """Generate a story title from the article."""
-        prompt = f"""You are a headline writer. Write ONE short headline (3-8 words) that captures the main topic.
-
-Article: {article.title}
-
-Headline:"""
-
-        try:
-            title = self.llm.generate(prompt, max_tokens=30).strip()
-            # Clean up the title - remove quotes, newlines, markdown, common prefixes
-            title = title.replace('"', '').replace('\n', ' ')
-            title = title.replace('**', '').replace('*', '').replace('`', '')  # Strip markdown
-            title = title.strip()
-            # Remove common LLM response patterns
-            for prefix in ["Here is", "Here's", "The headline is", "Headline:"]:
-                if title.lower().startswith(prefix.lower()):
-                    title = title[len(prefix):].strip()
-            # If still garbage, use fallback
-            if len(title) < 3 or len(title) > 100 or "few" in title.lower():
-                return article.title
-            return title
-        except Exception:
-            # Fallback: use article title
-            return article.title
-
-    def _generate_story_description(self, article: Article) -> str:
-        """Generate a brief story description."""
-        prompt = f"""Describe what this story is about in 1-2 sentences.
-
-Article: {article.title}
-Content: {article.content}
-
-Description:"""
-
-        try:
-            desc = self.llm.generate(prompt, max_tokens=150).strip()
-            return desc
-        except Exception:
-            # Fallback: use article summary or full content
-            return article.summary or article.content or ""
-
-    def _extract_keywords(self, article: Article) -> list[str]:
-        """Extract keywords from article."""
-        prompt = f"""Extract ALL key terms from this article.
-Include: people, organizations, places, main topics. The number of terms depends on content density.
-
-Article: {article.title}
-Content: {article.content}
-
-Return as comma-separated list:"""
-
-        try:
-            response = self.llm.generate(prompt, max_tokens=200).strip()
-            # Split and clean keywords
-            keywords = [kw.strip() for kw in response.split(',')]
-            return [kw for kw in keywords if kw and len(kw) > 2]
-        except Exception:
-            # Fallback: extract from title
-            return [word for word in article.title.split() if len(word) > 4]
+    # NOTE: _generate_story_title, _generate_story_description, _extract_keywords
+    # were REMOVED as part of "process once, use many times" architecture.
+    # Story creation now uses article's already-extracted headline/summary/keywords.
+    # This eliminates 3 LLM calls per story creation.
 
 
 class NewsItemExtractor:
