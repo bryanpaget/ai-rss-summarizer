@@ -551,13 +551,12 @@ class Storage:
 
     def _row_to_article(self, row: sqlite3.Row) -> Article:
         """Convert a database row to an Article object."""
-        # Check if story_id column exists in the row
-        try:
-            story_id_value = row["story_id"]
-        except (KeyError, IndexError) as e:
-            import sys
-            print(f"Legacy row missing story_id column: {e}", file=sys.stderr)
-            story_id_value = None
+        # Safe access for columns that may not exist in legacy databases
+        def safe_get(col: str):
+            try:
+                return row[col]
+            except (KeyError, IndexError):
+                return None
 
         return Article(
             id=row["id"],
@@ -567,9 +566,11 @@ class Storage:
             published=row["published"],
             content=row["content"],
             summary=row["summary"],
+            headline=safe_get("headline"),
+            keywords=safe_get("keywords"),
             trend_tags=row["trend_tags"],
             signal_tags=row["signal_tags"],
-            story_id=story_id_value,
+            story_id=safe_get("story_id"),
             created_at=row["created_at"],
         )
 
