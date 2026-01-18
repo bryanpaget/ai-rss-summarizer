@@ -540,6 +540,7 @@ def _run_llm_phase(
     tagger = SignalTagger(use_llm=True, provider=provider)
     processed_articles = []
     step_start = time.time()  # For ETA calculation
+    total_llm_calls = 0  # Track LLM calls for visibility
 
     console.print()
 
