@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Iterator, Optional
 
 # Current schema version - increment when adding migrations
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 @dataclass
@@ -24,6 +24,8 @@ class Article:
     published: Optional[datetime]
     content: str
     summary: Optional[str] = None
+    headline: Optional[str] = None  # Rewritten title (from extraction)
+    keywords: Optional[str] = None  # JSON array of key terms (from extraction)
     trend_tags: Optional[str] = None
     signal_tags: Optional[str] = None
     story_id: Optional[str] = None
