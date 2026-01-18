@@ -791,8 +791,7 @@ def _run_embedding_phase(
                     storage.save_chunk_embeddings(article.id, chunk_data)
                     batch_success += 1
                 except Exception as e:
-                    console.print(f"
-  [red]ERROR: {e}[/red]", end="")
+                    console.print(f"\n  [red]ERROR: {e}[/red]", end="")
                     stats["errors"] += 1
                     batch_errors += 1
 
