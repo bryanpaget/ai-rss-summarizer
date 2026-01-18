@@ -234,24 +234,13 @@ class LMStudioProvider(EmbeddingProvider):
         if not texts:
             return []
 
-        # Ensure embedding model is loaded via one gateway call
-        # This triggers the safe-model-load model switching if needed
-        from .gateway import get_gateway
-        gateway = get_gateway()
-        if not gateway.is_available():
-            raise EmbeddingProviderError(
-                "Gateway not available. LM Studio must be running.\n"
-                "Start LM Studio and ensure it's listening on localhost:1234"
-            )
-
-        # Trigger model load with a dummy request (gateway handles model switching)
-        # This ensures the embedding model is loaded before we make direct API calls
-        try:
-            gateway.request_embedding("model load trigger")
-        except Exception:
-            pass  # Model may already be loaded, errors are fine here
-
-        # Now make TRUE batch API call directly to LM Studio
+        # TRUE batch API call directly to LM Studio
+        # No gateway overhead - just one HTTP request with array input
+        #
+        # IMPORTANT: The embedding model must be loaded in LM Studio.
+        # If not loaded, this will fail. Use the pipeline's pre-embedding
+        # phase which calls gateway.request_embedding() once to trigger
+        # model loading before batch operations.
         # This bypasses gateway overhead for the actual batch
         try:
             response = httpx.post(
