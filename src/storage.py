@@ -484,6 +484,30 @@ class Storage:
             )
             conn.commit()
 
+    def update_headline(self, article_id: str, headline: str) -> None:
+        """Update an article's headline (rewritten title from extraction)."""
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE articles SET headline = ? WHERE id = ?",
+                (headline, article_id),
+            )
+            conn.commit()
+
+    def update_keywords(self, article_id: str, keywords: list[str]) -> None:
+        """Update an article's keywords (from extraction).
+
+        Args:
+            article_id: Article ID
+            keywords: List of keyword strings (stored as JSON)
+        """
+        import json
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE articles SET keywords = ? WHERE id = ?",
+                (json.dumps(keywords), article_id),
+            )
+            conn.commit()
+
     def get_articles_by_signal_tags(
         self,
         include_tags: Optional[list[str]] = None,
