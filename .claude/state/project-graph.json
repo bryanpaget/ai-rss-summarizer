@@ -1,14 +1,14 @@
 ﻿{
     "adjacency":  {
                       "keywords":  {
-                                       "out":  [
-
-                                               ],
                                        "in":  [
                                                   18,
                                                   21,
                                                   22
-                                              ]
+                                              ],
+                                       "out":  [
+
+                                               ]
                                    },
                       "queue: 12651ms":  {
                                              "in":  [
@@ -26,6 +26,14 @@
 
                                                           ]
                                               },
+                      "CREATE NEW with 3 LLM calls":  {
+                                                          "out":  [
+
+                                                                  ],
+                                                          "in":  [
+                                                                     25
+                                                                 ]
+                                                      },
                       "queue: 11910ms":  {
                                              "in":  [
 
@@ -51,6 +59,14 @@
                                                          3
                                                      ]
                                          },
+                      "LLM to analyze clusters":  {
+                                                      "out":  [
+
+                                                              ],
+                                                      "in":  [
+                                                                 24
+                                                             ]
+                                                  },
                       "temperature=0.3":  {
                                               "in":  [
                                                          14
@@ -133,6 +149,14 @@
 
                                              ]
                                  },
+                      "find similar stories":  {
+                                                   "out":  [
+                                                               25
+                                                           ],
+                                                   "in":  [
+
+                                                          ]
+                                               },
                       "stream: false":  {
                                             "in":  [
                                                        12
@@ -150,14 +174,14 @@
                                                    ]
                                        },
                       "title":  {
+                                    "in":  [
+
+                                           ],
                                     "out":  [
                                                 18,
                                                 21,
                                                 22
-                                            ],
-                                    "in":  [
-
-                                           ]
+                                            ]
                                 },
                       "\"article\"":  {
                                           "in":  [
@@ -184,6 +208,14 @@
                                                          5
                                                      ]
                                          },
+                      "cluster insights":  {
+                                               "out":  [
+                                                           24
+                                                       ],
+                                               "in":  [
+
+                                                      ]
+                                           },
                       "tags":  {
                                    "in":  [
                                               8
@@ -234,6 +266,14 @@
                                                   16
                                               ]
                                   },
+                      "summary":  {
+                                      "out":  [
+                                                  23
+                                              ],
+                                      "in":  [
+
+                                             ]
+                                  },
                       "article.id":  {
                                          "in":  [
 
@@ -255,6 +295,14 @@
 
                                                      ]
                                          },
+                      "triples":  {
+                                      "out":  [
+
+                                              ],
+                                      "in":  [
+                                                 23
+                                             ]
+                                  },
                       "this uses embeddings":  {
                                                    "in":  [
 
@@ -271,16 +319,16 @@
     "project_root":  "C:/Users/jpswi/personal projects/RSSsummarizer",
     "sessions":  {
                      "b83ca0cf-6f48-4726-b27f-0daeab98089d":  {
-                                                                  "last_turn":  39,
-                                                                  "last_active":  "2026-01-17T17:02:11.3425705-08:00",
+                                                                  "last_turn":  40,
+                                                                  "last_active":  "2026-01-17T17:08:44.8468713-08:00",
                                                                   "last_dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer"
                                                               }
                  },
     "metadata":  {
-                     "last_turn":  39,
+                     "last_turn":  40,
                      "cycles_found":  0,
-                     "total_connected":  9,
-                     "total_orphans":  11
+                     "total_connected":  10,
+                     "total_orphans":  13
                  },
     "edges":  [
                   {
@@ -511,6 +559,36 @@
                       "sub":  "title",
                       "obj":  "keywords",
                       "pred":  "desc",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  40,
+                      "timestamp":  "2026-01-17T17:08:44.8468713-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "summary",
+                      "obj":  "triples",
+                      "pred":  "insights",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  40,
+                      "timestamp":  "2026-01-17T17:08:44.8468713-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "double",
+                      "sub":  "cluster insights",
+                      "obj":  "LLM to analyze clusters",
+                      "pred":  "is",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  40,
+                      "timestamp":  "2026-01-17T17:08:44.8468713-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "double",
+                      "sub":  "find similar stories",
+                      "obj":  "CREATE NEW with 3 LLM calls",
+                      "pred":  "is",
                       "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
                   }
               ]
