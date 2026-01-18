@@ -438,14 +438,15 @@ function Process-SingleFile {
     $totalLines = $fileLines.Count
     $totalChars = $fileContent.Length
     $estimatedTokens = [math]::Ceiling($totalChars / $CharsPerToken)
+    $fileExtension = [System.IO.Path]::GetExtension($FilePath)
 
     Write-Host "    Lines: $totalLines, Tokens: ~$estimatedTokens"
 
     $allSections = @()
 
     if ($estimatedTokens -le $ChunkTokens) {
-        # Single chunk
-        $prompt = $filePromptTemplate -replace "\{FILENAME\}", $RelativePath -replace "\{CONTENT\}", $fileContent
+        # Single chunk - use file-type specific prompt with sandwich structure
+        $prompt = Build-FilePrompt -FileName $RelativePath -Content $fileContent -Extension $fileExtension
 
         for ($retry = 0; $retry -le $MaxRetries; $retry++) {
             try {
@@ -479,11 +480,17 @@ function Process-SingleFile {
             $chunkNumber++
             $chunk = Get-ChunkByTokens -Lines $fileLines -StartLine $currentLine -MaxTokens $ChunkTokens -CharsPerToken $CharsPerToken
 
-            $chunkPrompt = $filePromptTemplate -replace "\{FILENAME\}", "$RelativePath (chunk $chunkNumber)" -replace "\{CONTENT\}", $chunk.Content
-
+            # Build chunk note for context
+            $chunkNote = "CHUNK $chunkNumber of file (lines $($chunk.StartLineNumber)-$($chunk.EndLineNumber))"
             if ($currentLine -gt 0) {
-                $chunkPrompt += "`n`nNOTE: This is chunk $chunkNumber. Lines numbered from original file. First ~$OverlapTokens tokens overlap with previous chunk."
+                $chunkNote += "`nNOTE: First ~$OverlapTokens tokens overlap with previous chunk."
             }
+            if ($chunk.EndLine -lt ($totalLines - 1)) {
+                $chunkNote += "`nNOTE: File continues after this chunk."
+            }
+
+            # Use file-type specific prompt with sandwich structure
+            $chunkPrompt = Build-FilePrompt -FileName $RelativePath -Content $chunk.Content -Extension $fileExtension -ChunkNote $chunkNote
 
             for ($retry = 0; $retry -le $MaxRetries; $retry++) {
                 try {
