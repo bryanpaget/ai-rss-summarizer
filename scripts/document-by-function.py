@@ -386,25 +386,116 @@ Keep it under 300 words. Be specific to THIS codebase."""
     }
 
 
-def process_directory(directory, cache, force=False, output_file=None):
-    """Process all Python files in a directory."""
+def process_directory(directory, cache, force=False, output_file=None, workers=3):
+    """Process all Python files in a directory with concurrent LLM calls."""
     py_files = find_python_files(directory)
     print(f"Found {len(py_files)} Python files in {directory}")
 
-    all_results = {}
+    # Phase 1: Extract all functions from all files (fast, no LLM)
+    print("\n=== Phase 1: Extracting functions (AST) ===")
+    all_extractions = {}  # filepath -> list of functions
+    for i, filepath in enumerate(py_files):
+        rel_path = os.path.relpath(filepath, directory)
+        try:
+            functions = extract_functions(filepath)
+            all_extractions[filepath] = functions
+            print(f"  [{i+1}/{len(py_files)}] {rel_path}: {len(functions)} items")
+        except Exception as e:
+            print(f"  [{i+1}/{len(py_files)}] {rel_path}: ERROR - {e}")
+            all_extractions[filepath] = []
+
+    # Phase 2: Build work queue (items needing LLM)
+    print("\n=== Phase 2: Building work queue ===")
+    work_queue = []  # list of (filepath, func, code_hash, cached_desc)
     total_stats = {'cached': 0, 'new': 0, 'changed': 0}
 
-    for i, filepath in enumerate(py_files):
-        print(f"\n[{i+1}/{len(py_files)}] Processing {os.path.relpath(filepath, directory)}...")
-        try:
-            results, stats = process_file(filepath, cache, force=force)
-            all_results[filepath] = results
-            total_stats['cached'] += stats['cached']
-            total_stats['new'] += stats['new']
-            total_stats['changed'] += stats['changed']
-        except Exception as e:
-            print(f"  ERROR: {e}")
-            all_results[filepath] = []
+    for filepath, functions in all_extractions.items():
+        file_cache = cache.get(str(Path(filepath).resolve()), {})
+        for func in functions:
+            code_hash = hash_code(func['code'])
+            cached_entry = file_cache.get(func['name'], {})
+            cached_hash = cached_entry.get('hash', '')
+            cached_desc = cached_entry.get('description', '')
+
+            if func['type'] == 'import-block':
+                func['_description'] = "Module imports"
+                func['_status'] = 'skip'
+                total_stats['cached'] += 1
+            elif func['type'] == 'global' and func['name'] == 'module_docstring':
+                func['_description'] = "Module docstring"
+                func['_status'] = 'skip'
+                total_stats['cached'] += 1
+            elif not force and cached_hash == code_hash and cached_desc:
+                func['_description'] = cached_desc
+                func['_status'] = 'cached'
+                total_stats['cached'] += 1
+            else:
+                status = 'FORCED' if force else ('CHANGED' if cached_hash else 'NEW')
+                func['_status'] = status
+                func['_hash'] = code_hash
+                work_queue.append((filepath, func))
+                if status == 'NEW':
+                    total_stats['new'] += 1
+                elif status == 'CHANGED':
+                    total_stats['changed'] += 1
+
+    print(f"  {len(work_queue)} items need LLM, {total_stats['cached']} cached")
+
+    # Phase 3: Concurrent LLM processing
+    if work_queue:
+        print(f"\n=== Phase 3: LLM descriptions ({workers} workers) ===")
+        completed = [0]  # Use list for closure mutation
+
+        def process_item(item):
+            filepath, func = item
+            desc = describe_function(func)
+            return filepath, func, desc
+
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            futures = {executor.submit(process_item, item): item for item in work_queue}
+
+            for future in as_completed(futures):
+                filepath, func, desc = future.result()
+                func['_description'] = desc
+                completed[0] += 1
+                with _print_lock:
+                    rel_path = os.path.relpath(filepath, directory)
+                    print(f"  [{completed[0]}/{len(work_queue)}] {rel_path}:{func['name']} - done")
+
+    # Phase 4: Assemble results and update cache
+    print("\n=== Phase 4: Assembling results ===")
+    all_results = {}
+    for filepath, functions in all_extractions.items():
+        filepath_resolved = str(Path(filepath).resolve())
+        file_cache = cache.get(filepath_resolved, {})
+        results = []
+
+        for func in functions:
+            code_hash = func.get('_hash', hash_code(func['code']))
+            desc = func.get('_description', '')
+            status = func.get('_status', 'unknown')
+
+            # Update cache
+            file_cache[func['name']] = {
+                'hash': code_hash,
+                'description': desc,
+                'start': func['start'],
+                'end': func['end'],
+                'type': func['type']
+            }
+
+            results.append({
+                'start': func['start'],
+                'end': func['end'],
+                'type': func['type'],
+                'name': func['name'],
+                'hash': code_hash,
+                'status': status,
+                'description': desc
+            })
+
+        cache[filepath_resolved] = file_cache
+        all_results[filepath] = results
 
     save_cache(cache)
 
