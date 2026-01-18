@@ -590,10 +590,16 @@ def _run_llm_phase(
                 stats["triples_existing"] += len(extraction.existing_triples)
             stats["triples"] += len(extraction.new_triples) + len(extraction.existing_triples)
 
-            # Save summary (BUG FIX: summary was extracted but not saved)
+            # Save extracted metadata (process once, use many times)
             if extraction.summary:
                 storage.update_summary(article.id, extraction.summary)
                 article.summary = extraction.summary
+            if extraction.headline:
+                storage.update_headline(article.id, extraction.headline)
+                article.headline = extraction.headline
+            if extraction.keywords:
+                storage.update_keywords(article.id, extraction.keywords)
+                article.keywords = json.dumps(extraction.keywords)
         except Exception as e:
             error_msg = f"Extraction failed: {e}"
             article_errors.append(error_msg)
