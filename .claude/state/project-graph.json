@@ -1,13 +1,22 @@
 ﻿{
     "adjacency":  {
                       "temperature=0.3":  {
-                                              "in":  [
-                                                         14
-                                                     ],
                                               "out":  [
 
-                                                      ]
+                                                      ],
+                                              "in":  [
+                                                         14,
+                                                         68
+                                                     ]
                                           },
+                      "clustering and analysis":  {
+                                                      "out":  [
+
+                                                              ],
+                                                      "in":  [
+                                                                 64
+                                                             ]
+                                                  },
                       "embeddings":  {
                                          "in":  [
 
@@ -32,6 +41,14 @@
 
                                                   ]
                                       },
+                      "`request_text`":  {
+                                             "in":  [
+
+                                                    ],
+                                             "out":  [
+                                                         3
+                                                     ]
+                                         },
                       "article_embedding":  {
                                                 "in":  [
 
@@ -42,12 +59,12 @@
                                                             57
                                                         ]
                                             },
-                      "`request_text`":  {
+                      "lost semantics":  {
                                              "in":  [
 
                                                     ],
                                              "out":  [
-                                                         3
+                                                         33
                                                      ]
                                          },
                       "cluster":  {
@@ -83,6 +100,14 @@
                                                             13
                                                         ]
                                             },
+                      "detection":  {
+                                        "out":  [
+                                                    64
+                                                ],
+                                        "in":  [
+
+                                               ]
+                                    },
                       "no LLM":  {
                                      "in":  [
                                                 19,
@@ -108,6 +133,14 @@
                                                            30
                                                        ]
                                            },
+                      "connection detection":  {
+                                                   "out":  [
+
+                                                           ],
+                                                   "in":  [
+                                                              63
+                                                          ]
+                                               },
                       "semantic space mismatch":  {
                                                       "in":  [
                                                                  27
@@ -116,6 +149,31 @@
 
                                                               ]
                                                   },
+                      "function":  {
+                                       "out":  [
+                                                   63
+                                               ],
+                                       "in":  [
+
+                                              ]
+                                   },
+                      "text: str":  {
+                                        "out":  [
+
+                                                ],
+                                        "in":  [
+                                                   69,
+                                                   70
+                                               ]
+                                    },
+                      "result":  {
+                                     "out":  [
+
+                                             ],
+                                     "in":  [
+                                                74
+                                            ]
+                                 },
                       "queue: 12256ms":  {
                                              "in":  [
 
@@ -148,6 +206,14 @@
 
                                                       ]
                                           },
+                      "FAISS math":  {
+                                         "out":  [
+                                                     66
+                                                 ],
+                                         "in":  [
+
+                                                ]
+                                     },
                       "entity relationships":  {
                                                    "in":  [
                                                               11
@@ -157,12 +223,13 @@
                                                            ]
                                                },
                       "prompt":  {
+                                     "out":  [
+                                                 14,
+                                                 68
+                                             ],
                                      "in":  [
 
-                                            ],
-                                     "out":  [
-                                                 14
-                                             ]
+                                            ]
                                  },
                       "result.vector":  {
                                             "in":  [
@@ -182,6 +249,14 @@
                                                         37
                                                     ]
                                         },
+                      "analysis":  {
+                                       "out":  [
+                                                   65
+                                               ],
+                                       "in":  [
+
+                                              ]
+                                   },
                       "type: embedding":  {
                                               "in":  [
 
@@ -223,6 +298,14 @@
 
                                                                  ]
                                                      },
+                      "writing prompt":  {
+                                             "out":  [
+                                                         72
+                                                     ],
+                                             "in":  [
+
+                                                    ]
+                                         },
                       "chunk_text":  {
                                          "in":  [
 
@@ -248,14 +331,6 @@
 
                                                                   ]
                                                       },
-                      "subtopic detection":  {
-                                                 "in":  [
-                                                            40
-                                                        ],
-                                                 "out":  [
-
-                                                         ]
-                                             },
                       "one vector":  {
                                          "in":  [
 
@@ -264,6 +339,14 @@
                                                      32
                                                  ]
                                      },
+                      "function calling LLM":  {
+                                                   "out":  [
+
+                                                           ],
+                                                   "in":  [
+                                                              62
+                                                          ]
+                                               },
                       "queue: 11910ms":  {
                                              "in":  [
 
@@ -288,6 +371,14 @@
                                                          7
                                                      ]
                                          },
+                      "LLM calls":  {
+                                        "out":  [
+                                                    62
+                                                ],
+                                        "in":  [
+
+                                               ]
+                                    },
                       "if any chunk matches well":  {
                                                         "in":  [
 
@@ -329,6 +420,14 @@
 
                                               ]
                                   },
+                      "FAISS":  {
+                                    "out":  [
+                                                67
+                                            ],
+                                    "in":  [
+
+                                           ]
+                                },
                       "partial overlap":  {
                                               "in":  [
                                                          42
@@ -397,6 +496,22 @@
                                                          4
                                                      ]
                                          },
+                      "reading response":  {
+                                               "out":  [
+
+                                                       ],
+                                               "in":  [
+                                                          72
+                                                      ]
+                                           },
+                      "step":  {
+                                   "out":  [
+                                               60
+                                           ],
+                                   "in":  [
+
+                                          ]
+                               },
                       "coverage":  {
                                        "in":  [
 
@@ -421,23 +536,22 @@
                                                            24
                                                        ]
                                            },
-                      "lost semantics":  {
-                                             "in":  [
-
+                      "\"embedding\"":  {
+                                            "out":  [
+                                                        71
                                                     ],
-                                             "out":  [
-                                                         33
-                                                     ]
-                                         },
-                      "knowledge extraction":  {
-                                                   "in":  [
-                                                              9,
-                                                              10
-                                                          ],
-                                                   "out":  [
+                                            "in":  [
 
-                                                           ]
-                                               },
+                                                   ]
+                                        },
+                      "ins.id":  {
+                                     "out":  [
+                                                 74
+                                             ],
+                                     "in":  [
+
+                                            ]
+                                 },
                       "story":  {
                                     "in":  [
                                                53,
@@ -515,6 +629,14 @@
 
                                                              ]
                                                  },
+                      "article_id":  {
+                                         "in":  [
+
+                                                ],
+                                         "out":  [
+                                                     44
+                                                 ]
+                                     },
                       "matching":  {
                                        "in":  [
 
@@ -524,6 +646,14 @@
                                                    29
                                                ]
                                    },
+                      "LLM calls in wrong phase":  {
+                                                       "out":  [
+
+                                                               ],
+                                                       "in":  [
+                                                                  61
+                                                              ]
+                                                   },
                       "\"article\"":  {
                                           "in":  [
                                                      1
@@ -544,6 +674,23 @@
                                                      47
                                                  ]
                                      },
+                      "no model":  {
+                                       "out":  [
+
+                                               ],
+                                       "in":  [
+                                                  66,
+                                                  67
+                                              ]
+                                   },
+                      "switching":  {
+                                        "out":  [
+                                                    61
+                                                ],
+                                        "in":  [
+
+                                               ]
+                                    },
                       "lost granularity":  {
                                                "in":  [
 
@@ -552,14 +699,6 @@
                                                            35
                                                        ]
                                            },
-                      "find similar stories":  {
-                                                   "in":  [
-
-                                                          ],
-                                                   "out":  [
-                                                               25
-                                                           ]
-                                               },
                       "handle":  {
                                      "in":  [
                                                 15,
@@ -570,12 +709,14 @@
                                              ]
                                  },
                       "self":  {
+                                   "out":  [
+                                               54,
+                                               69,
+                                               70
+                                           ],
                                    "in":  [
 
-                                          ],
-                                   "out":  [
-                                               54
-                                           ]
+                                          ]
                                },
                       "mismatch":  {
                                        "in":  [
@@ -594,6 +735,14 @@
                                                     56,
                                                     58
                                                 ]
+                                    },
+                      "Batch 1/2":  {
+                                        "out":  [
+                                                    73
+                                                ],
+                                        "in":  [
+
+                                               ]
                                     },
                       "process: 572ms":  {
                                              "in":  [
@@ -670,30 +819,22 @@
 
                                                     ]
                                         },
-                      "summary":  {
-                                      "in":  [
+                      "model switching":  {
+                                              "out":  [
 
-                                             ],
-                                      "out":  [
-                                                  23
-                                              ]
-                                  },
-                      "insights":  {
-                                       "in":  [
+                                                      ],
+                                              "in":  [
+                                                         60
+                                                     ]
+                                          },
+                      "text":  {
+                                   "out":  [
 
-                                              ],
-                                       "out":  [
-                                                   11
-                                               ]
-                                   },
-                      "article_id":  {
-                                         "in":  [
-
-                                                ],
-                                         "out":  [
-                                                     44
-                                                 ]
-                                     },
+                                           ],
+                                   "in":  [
+                                              71
+                                          ]
+                               },
                       "chunk preservation":  {
                                                  "in":  [
                                                             43
@@ -702,6 +843,22 @@
 
                                                          ]
                                              },
+                      "summary":  {
+                                      "in":  [
+
+                                             ],
+                                      "out":  [
+                                                  23
+                                              ]
+                                  },
+                      "Batch 2/2":  {
+                                        "out":  [
+
+                                                ],
+                                        "in":  [
+                                                   73
+                                               ]
+                                    },
                       "fine-grained":  {
                                            "in":  [
 
@@ -709,7 +866,48 @@
                                            "out":  [
                                                        40
                                                    ]
-                                       }
+                                       },
+                      "LLM":  {
+                                  "out":  [
+
+                                          ],
+                                  "in":  [
+                                             65
+                                         ]
+                              },
+                      "insights":  {
+                                       "in":  [
+
+                                              ],
+                                       "out":  [
+                                                   11
+                                               ]
+                                   },
+                      "find similar stories":  {
+                                                   "in":  [
+
+                                                          ],
+                                                   "out":  [
+                                                               25
+                                                           ]
+                                               },
+                      "subtopic detection":  {
+                                                 "in":  [
+                                                            40
+                                                        ],
+                                                 "out":  [
+
+                                                         ]
+                                             },
+                      "knowledge extraction":  {
+                                                   "in":  [
+                                                              9,
+                                                              10
+                                                          ],
+                                                   "out":  [
+
+                                                           ]
+                                               }
                   },
     "validation_queue":  [
 
@@ -718,16 +916,16 @@
     "project_root":  "C:/Users/jpswi/personal projects/RSSsummarizer",
     "sessions":  {
                      "b83ca0cf-6f48-4726-b27f-0daeab98089d":  {
-                                                                  "last_turn":  43,
-                                                                  "last_active":  "2026-01-17T20:13:21.2599397-08:00",
+                                                                  "last_turn":  44,
+                                                                  "last_active":  "2026-01-17T23:29:54.9055294-08:00",
                                                                   "last_dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer"
                                                               }
                  },
     "metadata":  {
-                     "last_turn":  43,
+                     "last_turn":  44,
                      "cycles_found":  1,
-                     "total_connected":  22,
-                     "total_orphans":  35
+                     "total_connected":  24,
+                     "total_orphans":  48
                  },
     "edges":  [
                   {
@@ -1328,6 +1526,156 @@
                       "sub":  "using extracted metadata",
                       "obj":  "0 LLM calls",
                       "pred":  "is",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  44,
+                      "timestamp":  "2026-01-17T23:29:54.9055294-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "step",
+                      "obj":  "model switching",
+                      "pred":  "exhibits",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  44,
+                      "timestamp":  "2026-01-17T23:29:54.9055294-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "switching",
+                      "obj":  "LLM calls in wrong phase",
+                      "pred":  "caused by",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  44,
+                      "timestamp":  "2026-01-17T23:29:54.9055294-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "LLM calls",
+                      "obj":  "function calling LLM",
+                      "pred":  "caused by",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  44,
+                      "timestamp":  "2026-01-17T23:29:54.9055294-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "function",
+                      "obj":  "connection detection",
+                      "pred":  "could be",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  44,
+                      "timestamp":  "2026-01-17T23:29:54.9055294-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "detection",
+                      "obj":  "clustering and analysis",
+                      "pred":  "involves",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  44,
+                      "timestamp":  "2026-01-17T23:29:54.9055294-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "analysis",
+                      "obj":  "LLM",
+                      "pred":  "might use",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  44,
+                      "timestamp":  "2026-01-17T23:29:54.9055294-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "double",
+                      "sub":  "FAISS math",
+                      "obj":  "no model",
+                      "pred":  "is",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  44,
+                      "timestamp":  "2026-01-17T23:29:54.9055294-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "double",
+                      "sub":  "FAISS",
+                      "obj":  "no model",
+                      "pred":  "is",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  44,
+                      "timestamp":  "2026-01-17T23:29:54.9055294-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "double",
+                      "sub":  "prompt",
+                      "obj":  "temperature=0.3",
+                      "pred":  "is",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  44,
+                      "timestamp":  "2026-01-17T23:29:54.9055294-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "double",
+                      "sub":  "self",
+                      "obj":  "text: str",
+                      "pred":  "is",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  44,
+                      "timestamp":  "2026-01-17T23:29:54.9055294-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "double",
+                      "sub":  "self",
+                      "obj":  "text: str",
+                      "pred":  "is",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  44,
+                      "timestamp":  "2026-01-17T23:29:54.9055294-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "double",
+                      "sub":  "\"embedding\"",
+                      "obj":  "text",
+                      "pred":  "is",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  44,
+                      "timestamp":  "2026-01-17T23:29:54.9055294-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "double",
+                      "sub":  "writing prompt",
+                      "obj":  "reading response",
+                      "pred":  "is",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  44,
+                      "timestamp":  "2026-01-17T23:29:54.9055294-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "double",
+                      "sub":  "Batch 1/2",
+                      "obj":  "Batch 2/2",
+                      "pred":  "is",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  44,
+                      "timestamp":  "2026-01-17T23:29:54.9055294-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "ins.id",
+                      "obj":  "result",
+                      "pred":  "\"insight\"",
                       "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
                   }
               ]
