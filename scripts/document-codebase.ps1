@@ -39,25 +39,224 @@ if (-not (Test-Path $Directory)) {
     exit 1
 }
 
-# File analysis prompt template
-$filePromptTemplate = @"
-You are analyzing source code to create detailed documentation.
+# File-type specific prompt configurations
+# Each has: types, examples, and language-specific guidance
+$fileTypeConfigs = @{
+    ".py" = @{
+        Name = "Python"
+        Types = @"
+- class: Class definition (look for ``class Name:``)
+- function: Top-level function (``def name()`` at module level)
+- method: Method within a class (``def name(self)`` indented under class)
+- decorator: Decorated functions/classes (lines with ``@decorator``)
+- constant: Module-level UPPERCASE variables
+- import-block: Import statements (``import x`` or ``from x import y``)
+- dataclass: Classes with ``@dataclass`` decorator
+- type-alias: Type definitions (``TypeName = ...``)
+- global: Module-level code that executes on import
+"@
+        Examples = @"
+Lines 1-8: import-block ``imports`` - Standard library (os, sys, json) and third-party (httpx, dataclasses)
+Lines 10-12: constant ``DEFAULT_TIMEOUT`` - Module constant, timeout value in seconds (60)
+Lines 14-45: class ``EmbeddingProvider`` - Abstract base class for embedding backends. Defines embed() and embed_batch() interface
+Lines 16-20: method ``EmbeddingProvider.embed`` - Abstract method: generates embedding vector for single text input
+Lines 22-30: method ``EmbeddingProvider.embed_batch`` - Abstract method: batch embedding, returns list of vectors
+Lines 47-120: class ``LMStudioProvider`` - Concrete provider using LM Studio API at localhost:1234
+Lines 49-58: method ``LMStudioProvider.__init__`` - Initializes with url, model, timeout. Sets up model loading flag
+Lines 60-75: method ``LMStudioProvider.embed`` - Single text embedding via gateway. Raises EmbeddingProviderError on failure
+Lines 77-120: method ``LMStudioProvider.embed_batch`` - TRUE batch embedding: one API call for all texts. Critical for performance
+Lines 122-140: function ``get_provider`` - Factory function: returns appropriate provider based on availability
+"@
+        Guidance = @"
+PYTHON-SPECIFIC RULES:
+- Identify decorators (@property, @staticmethod, @dataclass) and note them
+- For async functions, note ``async def`` in description
+- Note if methods modify self (mutator) vs return new value (pure)
+- Identify dunder methods (__init__, __str__, etc.) and their purpose
+- Track inheritance: note parent class if ``class X(Parent):``
+"@
+    }
+    ".js" = @{
+        Name = "JavaScript"
+        Types = @"
+- class: ES6 class definition
+- function: Named function declaration (``function name()``)
+- arrow: Arrow function assigned to const/let (``const name = () => {}``)
+- method: Method within a class
+- constant: const declarations at module level
+- import-block: import/require statements
+- export: Exported functions/classes/values
+- type-definition: JSDoc type definitions or TypeScript-style comments
+"@
+        Examples = @"
+Lines 1-5: import-block ``imports`` - ES6 imports from react, lodash, local modules
+Lines 7-10: constant ``CONFIG`` - Frozen configuration object with API endpoints
+Lines 12-45: class ``DataService`` - Service class for API communication. Handles auth and retry logic
+Lines 14-20: method ``DataService.constructor`` - Initializes axios instance with base URL and interceptors
+Lines 22-35: method ``DataService.fetch`` - Async GET request with error handling. Returns parsed JSON
+Lines 47-60: arrow ``processItems`` - Transforms array of items. Maps and filters based on status
+Lines 62-80: function ``createStore`` - Factory function creating Redux-like store with dispatch/subscribe
+"@
+        Guidance = @"
+JAVASCRIPT-SPECIFIC RULES:
+- Distinguish function declarations from arrow functions (different ``this`` binding)
+- Note async/await usage
+- Identify React components (function returning JSX)
+- Track exports (default vs named)
+- Note closure patterns where inner functions capture outer scope
+"@
+    }
+    ".ts" = @{
+        Name = "TypeScript"
+        Types = @"
+- class: Class definition
+- function: Named function declaration
+- arrow: Arrow function with type annotations
+- method: Method within a class
+- interface: Interface definition
+- type: Type alias (``type Name = ...``)
+- enum: Enum definition
+- constant: const with type annotation
+- import-block: import statements
+- export: Exported items
+- generic: Generic function/class (``<T>``)
+"@
+        Examples = @"
+Lines 1-8: import-block ``imports`` - Type imports and module imports
+Lines 10-18: interface ``UserConfig`` - Configuration shape: url (string), timeout (number), retries (optional number)
+Lines 20-22: type ``RequestHandler`` - Function type alias: (req: Request) => Promise<Response>
+Lines 24-60: class ``ApiClient<T>`` - Generic API client. T is response type. Handles typed requests
+Lines 26-32: method ``ApiClient.constructor`` - Takes config: UserConfig, validates and stores
+Lines 34-50: method ``ApiClient.get`` - Generic GET: returns Promise<T>. Includes retry logic
+Lines 52-60: method ``ApiClient.post`` - Generic POST: takes body of type Partial<T>
+Lines 62-70: function ``createClient`` - Factory with type inference. Returns configured ApiClient
+"@
+        Guidance = @"
+TYPESCRIPT-SPECIFIC RULES:
+- Document generic type parameters (``<T>``, ``<K, V>``)
+- Note type guards (``is`` keyword in return type)
+- Identify utility types used (Partial, Required, Pick, Omit)
+- Track interface inheritance and type intersections
+- Note access modifiers (public, private, protected)
+"@
+    }
+    ".sh" = @{
+        Name = "Bash/Shell"
+        Types = @"
+- function: Shell function definition
+- variable: Important variable assignments
+- main: Main script logic (not in function)
+- case-block: Case statement blocks
+- loop: Significant for/while loops
+- conditional: Important if/then blocks
+- source-block: Source/dot commands loading other scripts
+"@
+        Examples = @"
+Lines 1-10: variable ``CONFIG`` - Script configuration: paths, defaults, error codes
+Lines 12-30: function ``log_message`` - Logging utility. Takes level and message, writes to stderr with timestamp
+Lines 32-50: function ``validate_input`` - Input validation. Checks required args exist, validates file paths
+Lines 52-80: function ``process_file`` - Main processing. Reads file, transforms content, writes output
+Lines 82-100: main ``script_body`` - Argument parsing with getopts, calls validate_input then process_file
+Lines 102-110: case-block ``error_handler`` - Trap handler for EXIT. Cleans up temp files, reports status
+"@
+        Guidance = @"
+BASH-SPECIFIC RULES:
+- Note if functions use local variables vs global
+- Identify trap handlers and what signals they catch
+- Track exit codes and their meanings
+- Note subshell usage (command substitution, pipelines)
+- Identify external command dependencies
+"@
+    }
+    ".ps1" = @{
+        Name = "PowerShell"
+        Types = @"
+- function: Function definition
+- param: Parameter block
+- variable: Important variable assignments
+- main: Main script execution block
+- filter: Filter definition
+- class: PowerShell class (v5+)
+- workflow: Workflow definition
+"@
+        Examples = @"
+Lines 1-15: param ``script_parameters`` - Script parameters: Directory (mandatory string), OutputFile (optional string), MaxRetries (int, default 2)
+Lines 17-25: function ``Write-DebugLog`` - Logging helper. Takes message, appends to log file with timestamp
+Lines 27-50: function ``Invoke-LocalLLM`` - Calls LLM gateway. Takes prompt, returns response text. Handles JSON parsing
+Lines 52-80: function ``Process-SingleFile`` - Processes one file. Chunks if needed, calls LLM, parses response
+Lines 82-120: main ``script_execution`` - Main flow: enumerate files, process each, merge results, write output
+"@
+        Guidance = @"
+POWERSHELL-SPECIFIC RULES:
+- Note cmdlet binding and parameter attributes
+- Identify pipeline input/output (``process`` block)
+- Track error handling (try/catch/finally)
+- Note use of PowerShell classes vs functions
+- Identify WMI/CIM queries and their targets
+"@
+    }
+    "default" = @{
+        Name = "Generic"
+        Types = @"
+- class: Class definition
+- function: Function/procedure definition
+- method: Method within a class
+- constant: Constants and configuration
+- import-block: Import/include statements
+- type-definition: Type definitions
+- global: Module-level executable code
+"@
+        Examples = @"
+Lines 1-5: import-block ``imports`` - Module dependencies
+Lines 7-15: class ``ConfigManager`` - Configuration management with validation
+Lines 9-12: method ``ConfigManager.init`` - Initialization from file path
+Lines 14-15: method ``ConfigManager.get`` - Returns config value by key
+Lines 17-30: function ``process_data`` - Main entry point, orchestrates pipeline
+"@
+        Guidance = @"
+GENERAL RULES:
+- Document every function and class
+- Note input parameters and return types
+- Identify dependencies between functions
+"@
+    }
+}
 
-TASK: Document every function, class, method, and significant code block in this file.
+function Get-FileTypeConfig {
+    param([string]$Extension)
 
+    $ext = $Extension.ToLower()
+    if ($fileTypeConfigs.ContainsKey($ext)) {
+        return $fileTypeConfigs[$ext]
+    }
+    return $fileTypeConfigs["default"]
+}
+
+function Build-FilePrompt {
+    param(
+        [string]$FileName,
+        [string]$Content,
+        [string]$Extension,
+        [string]$ChunkNote = ""
+    )
+
+    $config = Get-FileTypeConfig -Extension $Extension
+
+    # SANDWICH PROMPT: Instructions BEFORE content
+    $prompt = @"
+You are analyzing $($config.Name) source code to create detailed documentation.
+
+=== YOUR TASK ===
+Document every function, class, method, and significant code block in this file.
+
+=== OUTPUT FORMAT ===
 For each item, output ONE LINE in this exact format:
 Lines [START]-[END]: [TYPE] ``[NAME]`` - [DESCRIPTION]
 
-TYPES to use:
-- class: Class definition
-- function: Top-level function
-- method: Method within a class
-- constant: Module-level constants
-- import-block: Import statements
-- type-definition: Type aliases, dataclasses, enums
-- global: Module-level code that runs on import
+=== TYPES FOR $($config.Name.ToUpper()) ===
+$($config.Types)
 
-RULES:
+=== RULES ===
 1. Document EVERY function and class, no matter how small
 2. Include the full line range (start to end of definition)
 3. Description should explain WHAT it does and WHY (purpose)
@@ -65,19 +264,28 @@ RULES:
 5. For methods, prefix the name with the class: ``ClassName.method_name``
 6. Note dependencies on other functions/modules when visible
 
-EXAMPLE OUTPUT:
-Lines 1-5: import-block ``imports`` - Standard library and third-party imports
-Lines 7-15: class ``ConfigManager`` - Manages application configuration with validation
-Lines 9-12: method ``ConfigManager.__init__`` - Initializes config from file path, validates schema
-Lines 14-15: method ``ConfigManager.get`` - Returns config value by key, raises KeyError if missing
-Lines 17-30: function ``process_data`` - Main entry point, orchestrates data pipeline. Calls validate_input then transform
+$($config.Guidance)
 
+=== EXAMPLE OUTPUT FOR $($config.Name.ToUpper()) ===
+$($config.Examples)
+
+=== BEGIN FILE CONTENT ===
+FILE: $FileName
+$ChunkNote
 ---
+$Content
+---
+=== END FILE CONTENT ===
 
-FILE: {FILENAME}
-CONTENT:
-{CONTENT}
+=== REMINDER: OUTPUT FORMAT ===
+For each item, output ONE LINE:
+Lines [START]-[END]: [TYPE] ``[NAME]`` - [DESCRIPTION]
+
+Document ALL items. Start from line 1. Include every function, class, and method.
 "@
+
+    return $prompt
+}
 
 # Meta-summary prompt
 $metaPromptTemplate = @"
