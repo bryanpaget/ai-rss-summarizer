@@ -1243,6 +1243,13 @@ Only return valid JSON, no other text."""
 
         data = json.loads(response)
 
+        # Extract summary, headline, keywords (process once, use many times)
+        result.summary = data.get("summary", "")
+        result.headline = data.get("headline", "")
+        result.keywords = data.get("keywords", [])
+        if not isinstance(result.keywords, list):
+            result.keywords = []
+
         # Process insights
         for insight_data in data.get("insights", []):
             insight_id = str(uuid.uuid4())
