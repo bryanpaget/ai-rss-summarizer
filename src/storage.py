@@ -223,6 +223,25 @@ class Storage:
         conn.commit()
         print("Schema migrated to version 1", file=sys.stderr)
 
+    def _migrate_to_v2(self, conn: sqlite3.Connection) -> None:
+        """Version 2: Add headline and keywords columns to articles.
+
+        These fields are extracted during the LLM phase and used for
+        story creation (process once, use many times architecture).
+        """
+        columns_to_add = [
+            ("headline", "TEXT"),  # Rewritten title for story creation
+            ("keywords", "TEXT"),  # JSON array of key terms
+        ]
+        for col_name, col_type in columns_to_add:
+            try:
+                conn.execute(f"ALTER TABLE articles ADD COLUMN {col_name} {col_type}")
+            except sqlite3.OperationalError:
+                pass  # Column already exists
+
+        conn.commit()
+        print("Schema migrated to version 2", file=sys.stderr)
+
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
         """Context manager for database connections."""
