@@ -57,7 +57,7 @@ $fileTypeConfigs = @{
 - type-alias: Type definitions (``TypeName = ...``)
 - global: Module-level code that executes on import
 "@
-        Examples = ""
+        Examples = "See format example after file content."
         Guidance = @"
 PYTHON-SPECIFIC RULES:
 - Identify decorators (@property, @staticmethod, @dataclass) and note them
@@ -267,9 +267,15 @@ $Content
 ---
 === END FILE CONTENT ===
 
-=== REMINDER: OUTPUT FORMAT ===
-For each item, output ONE LINE:
+=== FORMAT EXAMPLE (for reference only - do NOT copy these items) ===
+Lines 1-1: global ``module_docstring`` - Module docstring
+Lines 10-25: function ``some_function`` - Description of what it does
+
+=== YOUR OUTPUT INSTRUCTIONS ===
+For each item in the ACTUAL FILE above, output ONE LINE:
 Lines [START]-[END]: [TYPE] ``[NAME]`` - [DESCRIPTION]
+
+Only document items that EXIST in the file above. Do NOT output "module_docstring" unless line 1 actually has a docstring.
 
 CRITICAL: The examples above are FORMAT DEMONSTRATIONS ONLY. Do NOT copy content from examples.
 Analyze ONLY the actual file content between BEGIN/END markers.
