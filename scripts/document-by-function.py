@@ -79,7 +79,8 @@ def extract_functions(filepath):
 
 def call_llm(prompt):
     """Call LLM via gateway."""
-    script_path = os.path.expanduser("~/.claude/scripts/safe-model-load.sh")
+    # Use project's gateway script (required for portability per CLAUDE.md)
+    script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "safe-model-load.sh")
     
     with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
         f.write(prompt)
