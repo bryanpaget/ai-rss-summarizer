@@ -263,6 +263,31 @@ class Storage:
         conn.commit()
         print("Schema migrated to version 2", file=sys.stderr)
 
+    def _migrate_to_v3(self, conn: sqlite3.Connection) -> None:
+        """Version 3: Add article_chunks table for fine-grained embeddings.
+
+        Instead of averaging chunk embeddings into one vector per article
+        (which loses subtopic granularity), we store each chunk separately.
+        This enables matching articles that share subtopics even if their
+        overall embeddings differ.
+        """
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS article_chunks (
+                id TEXT PRIMARY KEY,
+                article_id TEXT NOT NULL,
+                chunk_index INTEGER NOT NULL,
+                chunk_text TEXT NOT NULL,
+                embedding TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (article_id) REFERENCES articles(id),
+                UNIQUE (article_id, chunk_index)
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_chunks_article ON article_chunks(article_id)")
+
+        conn.commit()
+        print("Schema migrated to version 3", file=sys.stderr)
+
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
         """Context manager for database connections."""
