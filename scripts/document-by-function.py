@@ -78,52 +78,24 @@ def extract_functions(filepath):
     return results
 
 def call_llm(prompt):
-    """Call LLM via gateway."""
-    # Use project's gateway script (required for portability per CLAUDE.md)
-    script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "safe-model-load.sh")
-    
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
-        f.write(prompt)
-        prompt_file = f.name
-    
-    try:
-        # Convert path for bash and escape spaces
-        unix_prompt = prompt_file.replace('\\', '/').replace('C:', '/c').replace(' ', '\\ ')
-        unix_script = script_path.replace('\\', '/').replace('C:', '/c').replace(' ', '\\ ')
+    """Call LLM directly via LM Studio API."""
+    import httpx
 
-        # Use bash -c with escaped paths
-        cmd = f'{unix_script} request text --prompt-file {unix_prompt}'
-        result = subprocess.run(
-            ['bash', '-c', cmd],
-            capture_output=True, text=True, timeout=120
+    try:
+        response = httpx.post(
+            "http://localhost:1234/v1/chat/completions",
+            json={
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.3,
+                "max_tokens": 500
+            },
+            timeout=120.0
         )
-        
-        # Parse FILE= from output
-        for line in result.stdout.split('\n'):
-            if line.startswith('FILE='):
-                response_file = line[5:]
-                # Convert back to Windows path if needed
-                if response_file.startswith('/c/'):
-                    response_file = 'C:' + response_file[2:]
-                response_file = response_file.replace('/', '\\')
-                
-                # Wait for response
-                import time
-                for _ in range(60):
-                    if os.path.exists(response_file) and os.path.getsize(response_file) > 0:
-                        with open(response_file) as rf:
-                            content = rf.read()
-                            try:
-                                data = json.loads(content)
-                                if 'choices' in data:
-                                    return data['choices'][0]['message']['content']
-                            except:
-                                return content
-                    time.sleep(1)
-        
-        return f"Error: {result.stderr}"
-    finally:
-        os.unlink(prompt_file)
+        response.raise_for_status()
+        data = response.json()
+        return data['choices'][0]['message']['content']
+    except Exception as e:
+        return f"Error: {e}"
 
 def describe_function(func):
     """Get LLM to describe a single function."""
