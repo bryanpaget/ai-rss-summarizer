@@ -424,7 +424,7 @@ function Get-ChunkByTokens {
     return @{
         StartLine = $StartLine
         EndLine = $endLine
-        Content = ($Lines[$StartLine..$endLine] -join "`n")
+        Content = (($StartLine..$endLine) | ForEach-Object { "$($_ + 1)`t$($Lines[$_])" }) -join "`n"
         StartLineNumber = $StartLine + 1
         EndLineNumber = $endLine + 1
     }
