@@ -2676,6 +2676,8 @@ def extract_all_from_article(
             existing_triples=[],
             signal_tags=[],
             summary="",
+            headline="",
+            keywords=[],
             is_ad=False,
             chunks_processed=0,
         )
@@ -2809,6 +2811,8 @@ Return ONLY valid JSON, no other text."""
             existing_triples=[],
             signal_tags=[],
             summary="",
+            headline="",
+            keywords=[],
             is_ad=False,
             chunks_processed=0,
         )
