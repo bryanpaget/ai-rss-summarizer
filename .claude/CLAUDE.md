@@ -144,6 +144,53 @@ These invariants are enforced by `tests/test_pipeline_architecture.py`:
 - `analyze_article()` uses STORED article embedding via `get_embedding()`, never creates new
 - If you see `embed_text()` during trend tagging, that's a violation
 
+## CRITICAL: Extraction Architecture (BROKEN - NEEDS FIX)
+
+**Problem: The extraction system is incomplete and inconsistent.**
+
+### What Exists
+
+1. **schema.py** has `CombinedExtractionResult` with:
+   - `chunks: list[SemanticChunk]` - each chunk has content, insights, triples
+   - `summary: str`
+   - `signal_tags: list[SignalTag]`
+
+2. **knowledge.py** has `ConsolidatedExtractionResult` (DIFFERENT!) with only:
+   - `insights: list[Insight]`
+   - `new_triples: list[Triple]`
+   - `existing_triples: list[Triple]`
+   - NO summary, NO chunks, NO headline, NO keywords
+
+3. **report.py** line 594 references `extraction.summary` but that field doesn't exist on `ConsolidatedExtractionResult` - this code is silently broken.
+
+4. **The CLAUDE.md itself says** (line 72): "Semantic chunking: Send full content to LLM, ask it to identify boundaries AND return chunks directly" - but the current `extract_all_from_article` prompt does NOT ask for chunks.
+
+### What Should Happen
+
+ONE extraction call should return:
+- `summary` - 1-2 sentence description
+- `headline` - rewritten title (for stories)
+- `keywords` - key terms (for stories)
+- `chunks` - semantically chunked content
+- `insights` - per chunk
+- `triples` - per chunk
+
+Then:
+- Embed the CHUNKS (not whole article)
+- Story creation uses already-extracted headline/summary/keywords (NO additional LLM calls)
+- Story matching uses chunk embeddings
+
+### Why Story Matching Is Broken
+
+1. Stories are created with LLM-generated title/description (3 LLM calls)
+2. Story embedding = embed(LLM_title + LLM_description)
+3. Article embedding = embed(article.title + article.content)
+4. These are DIFFERENT semantic spaces - they will never match!
+
+**Fix:** Story metadata should come from article extraction, not separate LLM calls.
+
+---
+
 ## CRITICAL: Validate Changes by Running Actual Commands
 
 **Unit tests passing does NOT mean the code works. Always run the actual user-facing command.**
