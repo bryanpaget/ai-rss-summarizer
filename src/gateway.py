@@ -266,6 +266,44 @@ class LocalLLMGateway:
 
         raise GatewayError(f"Timeout waiting for gateway response after {self.timeout}s")
 
+    def is_response_ready(self, response_path: str) -> bool:
+        """Check if a response is ready without blocking.
+
+        Args:
+            response_path: Path to response file
+
+        Returns:
+            True if response file exists and has content
+        """
+        if not os.path.exists(response_path):
+            return False
+        try:
+            file_size = os.path.getsize(response_path)
+            if file_size == 0:
+                return False
+            with open(response_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            if not content.strip():
+                return False
+            # Try to parse JSON to verify it's complete
+            json.loads(content)
+            return True
+        except (json.JSONDecodeError, OSError):
+            return False
+
+    def try_collect_text(self, response_path: str) -> Optional[str]:
+        """Try to collect a text response without blocking.
+
+        Args:
+            response_path: Path to response file
+
+        Returns:
+            Generated text if ready, None otherwise
+        """
+        if not self.is_response_ready(response_path):
+            return None
+        return self.collect_text(response_path)
+
     # =========================================================================
     # TEXT REQUESTS
     # =========================================================================
