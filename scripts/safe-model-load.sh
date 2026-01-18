@@ -23,6 +23,7 @@ LOG_FILE="${IPC_DIR}/gateway.log"
 PID_FILE="${IPC_DIR}/processor.pid"
 HEARTBEAT_FILE="${IPC_DIR}/processor.heartbeat"
 LOCK_FILE="${IPC_DIR}/processor.lock"
+QUEUE_LOCK_FILE="${IPC_DIR}/queue.lock"  # For atomic queue file operations
 STALE_THRESHOLD_SECONDS=10
 CONFIG_FILE="${HOME}/.claude/config/safe-auto-load.json"
 LM_STUDIO_URL="http://localhost:1234/v1"
