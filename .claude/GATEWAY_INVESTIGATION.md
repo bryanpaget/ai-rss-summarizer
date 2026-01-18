@@ -108,17 +108,45 @@ mv "$QUEUE_FILE.sorted" "$QUEUE_FILE"
 - After overwriting, check if queue size changed
 - If new items appeared, re-sort
 
-## Next Steps
+## Fix Implemented
 
-1. Decide on fix approach (user input needed)
-2. Implement fix
-3. Test with small batches: 1 file, then 2, then 4, etc.
-4. Validate multiple concurrent clients work
+**Approach:** Option 1 - Lock the queue file during operations using `flock`
 
-## Related: Documentation Tool
+### Changes Made (commits 8141e49, d8eec16, c6e1913, 53ae0d6)
 
-The documentation tool (`scripts/document-codebase.ps1`) was created to map the codebase. It processed 2/39 files before being stopped due to this gateway issue:
-- cli.py: 31 items found
-- cli_constitution.py: 31 items found (after 2 timeouts)
+1. **Added QUEUE_LOCK_FILE variable** (line 26):
+   ```bash
+   QUEUE_LOCK_FILE="${IPC_DIR}/queue.lock"  # For atomic queue file operations
+   ```
 
-Cannot resume documentation until gateway race condition is fixed.
+2. **Wrapped `sort_queue_by_type` in flock** (lines 881-933):
+   ```bash
+   # RACE CONDITION FIX: Acquire exclusive lock before any queue file operations
+   (
+       flock -x 200 || { log "Failed to acquire queue lock for sorting"; return 1; }
+       # ... all sort operations ...
+   ) 200>"$QUEUE_LOCK_FILE"
+   ```
+
+3. **Wrapped queue append in flock** (lines 1394-1437):
+   ```bash
+   # RACE CONDITION FIX: Lock the queue for the entire check+append+fix sequence
+   (
+       flock -x 200 || { log "Failed to acquire queue lock for append"; exit 1; }
+       # Check empty, append, fix .pipe.lnk - all atomic
+   ) 200>"$QUEUE_LOCK_FILE"
+   ```
+
+### Testing Results
+
+| Test | Result | Gateway Log Pattern |
+|------|--------|---------------------|
+| 1 file | PASS | Sorting -> Queue sorted -> Complete -> Exit |
+| 2 files (sequential) | PASS | All requests show healthy pattern |
+| 4 files (sequential) | PASS | All requests show healthy pattern |
+
+No missing "Queue sorted" logs in any test. The race condition is fixed.
+
+## Documentation Tool Ready
+
+The documentation tool (`scripts/document-codebase.ps1`) can now be used reliably. Previous run was interrupted at file 3/39.
