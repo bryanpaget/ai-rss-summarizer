@@ -2631,12 +2631,18 @@ Mention which insights support your answer."""
 
 @dataclass
 class CombinedExtractionOutput:
-    """Output from combined extraction operation."""
+    """Output from combined extraction operation.
+    
+    Process once, use many times: headline/summary/keywords are used
+    for story creation without additional LLM calls.
+    """
     insights: list[Insight]
     new_triples: list[Triple]  # Triples newly saved to KB
     existing_triples: list[Triple]  # Triples that already existed
     signal_tags: list[dict]  # {"tag": str, "confidence": float}
     summary: str
+    headline: str  # Rewritten title for story creation
+    keywords: list[str]  # Key terms for story
     is_ad: bool
     chunks_processed: int
 
