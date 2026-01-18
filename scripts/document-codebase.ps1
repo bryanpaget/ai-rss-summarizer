@@ -391,9 +391,12 @@ function Invoke-LocalLLM {
             Start-Sleep -Seconds $pollIntervalSeconds
             $elapsed += $pollIntervalSeconds
 
-            # Progress indicator
+            # Progress indicator with elapsed time
             if ($elapsed % 10 -eq 0) {
                 Write-Host "." -NoNewline
+                if ($elapsed -ge 60) {
+                    Write-Host " ${elapsed}s" -NoNewline -ForegroundColor DarkGray
+                }
             }
         }
 
@@ -561,6 +564,24 @@ function Process-SingleFile {
 }
 
 # === MAIN EXECUTION ===
+
+# Pre-flight check: verify LLM is responsive
+Write-Host ""
+Write-Host "Checking LLM availability..." -NoNewline
+try {
+    $testPrompt = "Reply with only: OK"
+    $testResponse = Invoke-LocalLLM -Prompt $testPrompt
+    if ($testResponse -match "OK") {
+        Write-Host " ready" -ForegroundColor Green
+    } else {
+        Write-Host " responded but unexpected output" -ForegroundColor Yellow
+    }
+} catch {
+    Write-Host " FAILED" -ForegroundColor Red
+    Write-Error "LLM is not available. Error: $_"
+    Write-Host "Make sure LM Studio is running and a model is loaded."
+    exit 1
+}
 
 Write-Host ""
 Write-Host "=== Codebase Documentation Generator ===" -ForegroundColor Magenta
