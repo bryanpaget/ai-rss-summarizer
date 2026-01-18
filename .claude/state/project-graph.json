@@ -6,7 +6,8 @@
                                                ],
                                        "in":  [
                                                   18,
-                                                  21
+                                                  21,
+                                                  22
                                               ]
                                    },
                       "queue: 12651ms":  {
@@ -51,12 +52,12 @@
                                                      ]
                                          },
                       "temperature=0.3":  {
-                                              "out":  [
-
-                                                      ],
                                               "in":  [
                                                          14
-                                                     ]
+                                                     ],
+                                              "out":  [
+
+                                                      ]
                                           },
                       "queue: 11572ms":  {
                                              "in":  [
@@ -83,12 +84,12 @@
                                                       ]
                                           },
                       "prompt":  {
-                                     "out":  [
-                                                 14
-                                             ],
                                      "in":  [
 
-                                            ]
+                                            ],
+                                     "out":  [
+                                                 14
+                                             ]
                                  },
                       "summaries":  {
                                         "in":  [
@@ -99,47 +100,38 @@
                                                 ]
                                     },
                       "e.g.":  {
-                                   "out":  [
-                                               17
-                                           ],
                                    "in":  [
 
-                                          ]
+                                          ],
+                                   "out":  [
+                                               17
+                                           ]
                                },
                       "1 second LLM call":  {
-                                                "out":  [
-                                                            13
-                                                        ],
                                                 "in":  [
 
-                                                       ]
+                                                       ],
+                                                "out":  [
+                                                            13
+                                                        ]
                                             },
-                      "cluster":  {
-                                      "out":  [
-                                                  15,
-                                                  16
-                                              ],
-                                      "in":  [
-
-                                             ]
-                                  },
-                      "handle":  {
-                                     "out":  [
-
-                                             ],
-                                     "in":  [
-                                                15,
-                                                16
-                                            ]
-                                 },
                       "no LLM":  {
-                                     "out":  [
-
-                                             ],
                                      "in":  [
                                                 19,
                                                 20
-                                            ]
+                                            ],
+                                     "out":  [
+
+                                             ]
+                                 },
+                      "handle":  {
+                                     "in":  [
+                                                15,
+                                                16
+                                            ],
+                                     "out":  [
+
+                                             ]
                                  },
                       "stream: false":  {
                                             "in":  [
@@ -150,17 +142,18 @@
                                                     ]
                                         },
                       "50 at a time":  {
-                                           "out":  [
-
-                                                   ],
                                            "in":  [
                                                       17
-                                                  ]
+                                                  ],
+                                           "out":  [
+
+                                                   ]
                                        },
                       "title":  {
                                     "out":  [
                                                 18,
-                                                21
+                                                21,
+                                                22
                                             ],
                                     "in":  [
 
@@ -200,20 +193,20 @@
                                            ]
                                },
                       "embedding-only":  {
-                                             "out":  [
-                                                         20
-                                                     ],
                                              "in":  [
 
-                                                    ]
+                                                    ],
+                                             "out":  [
+                                                         20
+                                                     ]
                                          },
                       "then 10 seconds waiting":  {
-                                                      "out":  [
-
-                                                              ],
                                                       "in":  [
                                                                  13
-                                                             ]
+                                                             ],
+                                                      "out":  [
+
+                                                              ]
                                                   },
                       "knowledge extraction":  {
                                                    "in":  [
@@ -232,6 +225,15 @@
                                                    11
                                                ]
                                    },
+                      "cluster":  {
+                                      "in":  [
+
+                                             ],
+                                      "out":  [
+                                                  15,
+                                                  16
+                                              ]
+                                  },
                       "article.id":  {
                                          "in":  [
 
@@ -254,12 +256,12 @@
                                                      ]
                                          },
                       "this uses embeddings":  {
-                                                   "out":  [
-                                                               19
-                                                           ],
                                                    "in":  [
 
-                                                          ]
+                                                          ],
+                                                   "out":  [
+                                                               19
+                                                           ]
                                                }
                   },
     "validation_queue":  [
@@ -269,13 +271,13 @@
     "project_root":  "C:/Users/jpswi/personal projects/RSSsummarizer",
     "sessions":  {
                      "b83ca0cf-6f48-4726-b27f-0daeab98089d":  {
-                                                                  "last_turn":  38,
-                                                                  "last_active":  "2026-01-17T16:58:49.2372784-08:00",
+                                                                  "last_turn":  39,
+                                                                  "last_active":  "2026-01-17T17:02:11.3425705-08:00",
                                                                   "last_dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer"
                                                               }
                  },
     "metadata":  {
-                     "last_turn":  38,
+                     "last_turn":  39,
                      "cycles_found":  0,
                      "total_connected":  9,
                      "total_orphans":  11
@@ -499,6 +501,16 @@
                       "sub":  "title",
                       "obj":  "keywords",
                       "pred":  "description",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  39,
+                      "timestamp":  "2026-01-17T17:02:11.3425705-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "title",
+                      "obj":  "keywords",
+                      "pred":  "desc",
                       "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
                   }
               ]
