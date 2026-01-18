@@ -486,6 +486,88 @@ class Storage:
                 return json.loads(row["embedding"])
             return None
 
+    # Chunk embedding methods (for fine-grained matching)
+
+    def save_chunk_embeddings(
+        self,
+        article_id: str,
+        chunks: list[tuple[str, list[float]]],
+    ) -> int:
+        """Save chunk embeddings for an article.
+
+        Args:
+            article_id: The article these chunks belong to
+            chunks: List of (chunk_text, embedding_vector) tuples
+
+        Returns:
+            Number of chunks saved
+        """
+        import uuid
+        with self._connect() as conn:
+            # Delete existing chunks for this article (idempotent)
+            conn.execute(
+                "DELETE FROM article_chunks WHERE article_id = ?",
+                (article_id,),
+            )
+
+            # Insert new chunks
+            for idx, (text, embedding) in enumerate(chunks):
+                conn.execute(
+                    """
+                    INSERT INTO article_chunks (id, article_id, chunk_index, chunk_text, embedding)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        str(uuid.uuid4()),
+                        article_id,
+                        idx,
+                        text,
+                        json.dumps(embedding),
+                    ),
+                )
+            conn.commit()
+            return len(chunks)
+
+    def get_chunk_embeddings(self, article_id: str) -> list[ArticleChunk]:
+        """Get all chunk embeddings for an article.
+
+        Returns:
+            List of ArticleChunk objects ordered by chunk_index
+        """
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM article_chunks
+                WHERE article_id = ?
+                ORDER BY chunk_index
+                """,
+                (article_id,),
+            ).fetchall()
+            return [self._row_to_chunk(row) for row in rows]
+
+    def get_articles_with_chunks(self) -> list[str]:
+        """Get article IDs that have chunk embeddings stored.
+
+        Returns:
+            List of article IDs
+        """
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT DISTINCT article_id FROM article_chunks WHERE embedding IS NOT NULL"
+            ).fetchall()
+            return [row["article_id"] for row in rows]
+
+    def _row_to_chunk(self, row: "sqlite3.Row") -> ArticleChunk:
+        """Convert a database row to an ArticleChunk object."""
+        return ArticleChunk(
+            id=row["id"],
+            article_id=row["article_id"],
+            chunk_index=row["chunk_index"],
+            chunk_text=row["chunk_text"],
+            embedding=row["embedding"],
+            created_at=row["created_at"],
+        )
+
     def get_articles_with_embeddings_not_analyzed(self, exclude_spam: bool = True) -> list[Article]:
         """Get articles that have embeddings but haven't been fully analyzed.
 
