@@ -454,7 +454,7 @@ function Process-SingleFile {
 
     if ($estimatedTokens -le $ChunkTokens) {
         # Single chunk - use file-type specific prompt with sandwich structure
-        $prompt = Build-FilePrompt -FileName $RelativePath -Content $fileContent -Extension $fileExtension
+        $prompt = Build-FilePrompt -FileName $RelativePath -Content $numberedContent -Extension $fileExtension
 
         for ($retry = 0; $retry -le $MaxRetries; $retry++) {
             try {
