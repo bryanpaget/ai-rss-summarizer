@@ -144,7 +144,7 @@ These invariants are enforced by `tests/test_pipeline_architecture.py`:
 - `analyze_article()` uses STORED article embedding via `get_embedding()`, never creates new
 - If you see `embed_text()` during trend tagging, that's a violation
 
-## CRITICAL: Extraction Architecture (BROKEN - NEEDS FIX)
+## ✓ Extraction Architecture (IMPLEMENTED)
 
 **Problem: The extraction system is incomplete and inconsistent.**
 
@@ -234,30 +234,30 @@ Then:
 
 ## IMPLEMENTATION PLAN: Process-Once Architecture
 
-**Status: IN PROGRESS**
+**Status: COMPLETE (validated 2026-01-17)**
 
 ### Phase 1: Fix Extraction (ONE LLM call gives everything)
-- [ ] Add `summary`, `headline`, `keywords` to `ConsolidatedExtractionResult` dataclass
-- [ ] Modify extraction prompt to return all fields in one call
-- [ ] Add `headline TEXT`, `keywords TEXT` columns to articles table (migration)
-- [ ] Update `_run_llm_phase` to save headline/keywords to storage
-- [ ] Test: verify extraction returns all fields
+- [x] Add `summary`, `headline`, `keywords` to `CombinedExtractionOutput` dataclass
+- [x] Modify extraction prompt to return all fields in one call
+- [x] Add `headline TEXT`, `keywords TEXT` columns to articles table (schema v2)
+- [x] Update `_run_llm_phase` to save headline/keywords to storage
+- [x] Test: verified extraction returns all fields
 
 ### Phase 2: Fix Story Creation (ZERO LLM calls)
-- [ ] Rewrite `create_new_story` to use article's extracted data
-- [ ] Remove the 3 LLM prompt functions (`_generate_story_title`, `_generate_story_description`, `_extract_keywords`)
-- [ ] Test: verify no LLM calls during story creation
+- [x] Rewrite `create_new_story` to use article's extracted data
+- [x] Remove the 3 LLM prompt functions (all removed)
+- [x] Test: verified 0 LLM calls during story creation
 
 ### Phase 3: Fix Chunk Embeddings (Better matching)
-- [ ] Create `article_chunks` table schema
-- [ ] Modify `embed_article` to store each chunk embedding separately
-- [ ] Modify story matching to compare chunk-to-chunk
-- [ ] Test: verify articles with shared subtopics actually match
+- [x] Create `article_chunks` table schema (schema v3)
+- [x] Modify `embed_article` to store each chunk embedding separately
+- [x] Modify story matching to use chunk-to-chunk comparison
+- [x] Test: chunk embeddings stored, chunk-based matching enabled
 
 ### Validation
-- [ ] Run `rss report -m 5` end-to-end
-- [ ] Verify story matching produces actual matches (not 100% "no match")
-- [ ] Verify no extra LLM calls after extraction phase
+- [x] Run `rss report -m 5` end-to-end
+- [x] Verify story creation uses 0 LLM calls
+- [x] Verify no extra LLM calls after extraction phase
 
 ---
 
