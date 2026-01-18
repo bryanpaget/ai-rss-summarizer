@@ -56,8 +56,9 @@ $fileTypeConfigs = @{
 - global: Module-level code that executes on import
 "@
         Examples = @"
-Lines 1-8: import-block ``imports`` - Standard library (os, sys, json) and third-party (httpx, dataclasses)
-Lines 10-12: constant ``DEFAULT_TIMEOUT`` - Module constant, timeout value in seconds (60)
+Lines 1-1: global ``module_docstring`` - Module-level docstring describing purpose
+Lines 3-5: import-block ``imports`` - Standard library imports (when present)
+Lines 7-9: constant ``DEFAULT_TIMEOUT`` - Module constant (when present)
 Lines 14-45: class ``EmbeddingProvider`` - Abstract base class for embedding backends. Defines embed() and embed_batch() interface
 Lines 16-20: method ``EmbeddingProvider.embed`` - Abstract method: generates embedding vector for single text input
 Lines 22-30: method ``EmbeddingProvider.embed_batch`` - Abstract method: batch embedding, returns list of vectors
