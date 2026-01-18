@@ -291,34 +291,193 @@ def process_file(filepath, cache, force=False):
     return results, stats
 
 
+def find_python_files(directory, exclude_patterns=None):
+    """Recursively find all Python files in directory."""
+    exclude_patterns = exclude_patterns or ['.venv', 'venv', '__pycache__', '.git', 'build', 'htmlcov', 'archive', '.auto-claude']
+    py_files = []
+
+    for root, dirs, files in os.walk(directory):
+        # Filter out excluded directories
+        dirs[:] = [d for d in dirs if d not in exclude_patterns]
+
+        for f in files:
+            if f.endswith('.py'):
+                py_files.append(os.path.join(root, f))
+
+    return sorted(py_files)
+
+
+def generate_overview(all_results, directory):
+    """Generate system architecture overview from all file documentation."""
+    # Collect data for overview
+    files_data = []
+    total_functions = 0
+    total_classes = 0
+    total_lines = 0
+
+    for filepath, results in all_results.items():
+        rel_path = os.path.relpath(filepath, directory)
+        functions = [r for r in results if r['type'] == 'function']
+        classes = [r for r in results if r['type'] == 'class']
+        max_line = max(r['end'] for r in results) if results else 0
+
+        # Extract imports to understand dependencies
+        imports = [r for r in results if r['type'] == 'import-block']
+
+        files_data.append({
+            'path': rel_path,
+            'functions': functions,
+            'classes': classes,
+            'line_count': max_line,
+            'imports': imports
+        })
+
+        total_functions += len(functions)
+        total_classes += len(classes)
+        total_lines += max_line
+
+    # Build overview prompt
+    file_summaries = []
+    for fd in files_data:
+        func_names = [f['name'] for f in fd['functions'][:10]]
+        class_names = [c['name'] for c in fd['classes']]
+        summary = f"- **{fd['path']}** ({fd['line_count']} lines): "
+        if class_names:
+            summary += f"Classes: {', '.join(class_names)}. "
+        if func_names:
+            summary += f"Functions: {', '.join(func_names[:5])}"
+            if len(func_names) > 5:
+                summary += f" (+{len(func_names)-5} more)"
+        file_summaries.append(summary)
+
+    overview_prompt = f"""You are a software architect creating a system overview document.
+
+TASK: Create a concise architecture overview for this Python project.
+
+PROJECT STATS:
+- {len(files_data)} Python files
+- {total_functions} functions
+- {total_classes} classes
+- ~{total_lines} total lines
+
+FILE SUMMARIES:
+{chr(10).join(file_summaries)}
+
+Create a brief architecture overview with these sections:
+1. **Purpose**: What does this project do? (1-2 sentences)
+2. **Key Modules**: List 3-5 most important files and their roles
+3. **Entry Points**: Where does execution start?
+4. **Data Flow**: How do the main components interact?
+
+Keep it under 300 words. Be specific to THIS codebase."""
+
+    overview = call_llm(overview_prompt)
+    return overview, {
+        'files': len(files_data),
+        'functions': total_functions,
+        'classes': total_classes,
+        'lines': total_lines
+    }
+
+
+def process_directory(directory, cache, force=False, output_file=None):
+    """Process all Python files in a directory."""
+    py_files = find_python_files(directory)
+    print(f"Found {len(py_files)} Python files in {directory}")
+
+    all_results = {}
+    total_stats = {'cached': 0, 'new': 0, 'changed': 0}
+
+    for i, filepath in enumerate(py_files):
+        print(f"\n[{i+1}/{len(py_files)}] Processing {os.path.relpath(filepath, directory)}...")
+        try:
+            results, stats = process_file(filepath, cache, force=force)
+            all_results[filepath] = results
+            total_stats['cached'] += stats['cached']
+            total_stats['new'] += stats['new']
+            total_stats['changed'] += stats['changed']
+        except Exception as e:
+            print(f"  ERROR: {e}")
+            all_results[filepath] = []
+
+    save_cache(cache)
+
+    # Generate overview
+    print("\n=== Generating System Overview ===")
+    overview, project_stats = generate_overview(all_results, directory)
+
+    # Write output
+    if output_file:
+        from datetime import datetime
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write(f"# Project Documentation\n\n")
+            f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+            f.write(f"**Stats:** {project_stats['files']} files, {project_stats['functions']} functions, ")
+            f.write(f"{project_stats['classes']} classes, ~{project_stats['lines']} lines\n\n")
+            f.write(f"**Cache:** {total_stats['cached']} cached, {total_stats['new']} new, {total_stats['changed']} changed\n\n")
+            f.write(f"---\n\n")
+            f.write(f"## System Overview\n\n{overview}\n\n")
+            f.write(f"---\n\n")
+            f.write(f"## File Documentation\n\n")
+
+            for filepath in sorted(all_results.keys()):
+                results = all_results[filepath]
+                rel_path = os.path.relpath(filepath, directory)
+                max_line = max(r['end'] for r in results) if results else 0
+
+                f.write(f"### {rel_path}\n\n")
+                f.write(f"**Lines:** {max_line}\n\n")
+
+                for r in results:
+                    f.write(f"- Lines {r['start']}-{r['end']}: {r['type']} `{r['name']}` - {r['description']}\n")
+                f.write(f"\n---\n\n")
+
+        print(f"\nWritten to {output_file}")
+
+    return all_results, total_stats, overview
+
+
 def main():
     parser = argparse.ArgumentParser(description='Document Python files by function')
-    parser.add_argument('filepath', help='Python file to document')
+    parser.add_argument('path', help='Python file or directory to document')
     parser.add_argument('-o', '--output', help='Output file path')
     parser.add_argument('-f', '--force', action='store_true', help='Force reprocess all (ignore cache)')
     args = parser.parse_args()
 
     cache = load_cache()
-    results, stats = process_file(args.filepath, cache, force=args.force)
-    save_cache(cache)
 
-    # Output
-    print(f"\n=== RESULTS ({stats['cached']} cached, {stats['new']} new, {stats['changed']} changed) ===\n")
-    print(f"{'Function':<30} {'Hash':<10} {'Status':<10} {'Lines':<12} Description")
-    print("-" * 100)
-    for r in results:
-        name = r['name'][:28]
-        desc = r['description'][:40] + "..." if len(r['description']) > 40 else r['description']
-        print(f"{name:<30} {r['hash']:<10} {r['status']:<10} {r['start']}-{r['end']:<8} {desc}")
+    path = Path(args.path)
 
-    if args.output:
-        with open(args.output, 'w') as f:
-            f.write(f"# Documentation: {args.filepath}\n\n")
-            f.write(f"| Function | Lines | Hash | Description |\n")
-            f.write(f"|----------|-------|------|-------------|\n")
-            for r in results:
-                f.write(f"| `{r['name']}` | {r['start']}-{r['end']} | {r['hash']} | {r['description']} |\n")
-        print(f"\nWritten to {args.output}")
+    if path.is_dir():
+        # Directory mode - process all files and generate overview
+        all_results, total_stats, overview = process_directory(
+            str(path), cache, force=args.force, output_file=args.output
+        )
+        print(f"\n=== SUMMARY ===")
+        print(f"Files: {len(all_results)}")
+        print(f"Cache: {total_stats['cached']} cached, {total_stats['new']} new, {total_stats['changed']} changed")
+    else:
+        # Single file mode
+        results, stats = process_file(str(path), cache, force=args.force)
+        save_cache(cache)
+
+        # Output
+        print(f"\n=== RESULTS ({stats['cached']} cached, {stats['new']} new, {stats['changed']} changed) ===\n")
+        print(f"{'Function':<30} {'Hash':<10} {'Status':<10} {'Lines':<12} Description")
+        print("-" * 100)
+        for r in results:
+            name = r['name'][:28]
+            desc = r['description'][:40] + "..." if len(r['description']) > 40 else r['description']
+            print(f"{name:<30} {r['hash']:<10} {r['status']:<10} {r['start']}-{r['end']:<8} {desc}")
+
+        if args.output:
+            with open(args.output, 'w') as f:
+                f.write(f"# Documentation: {args.path}\n\n")
+                f.write(f"| Function | Lines | Hash | Description |\n")
+                f.write(f"|----------|-------|------|-------------|\n")
+                for r in results:
+                    f.write(f"| `{r['name']}` | {r['start']}-{r['end']} | {r['hash']} | {r['description']} |\n")
+            print(f"\nWritten to {args.output}")
 
 
 if __name__ == '__main__':
