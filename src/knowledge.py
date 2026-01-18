@@ -1182,10 +1182,11 @@ def extract_all_from_article(
     # Get user's analysis principles if configured
     constitution_context = get_constitution_context()
 
-    # Single consolidated prompt
+    # Single consolidated prompt - extracts EVERYTHING in one call
+    # This is the "process once, use many times" architecture
     prompt = f"""{constitution_context}
 === ARTICLE TO ANALYZE ===
-Extract insights and factual relationships from ONLY the article content below.
+Extract all metadata from ONLY the article content below.
 
 Article: "{article.title}"
 
@@ -1193,19 +1194,28 @@ Content: {article.content}
 
 === EXTRACTION INSTRUCTIONS ===
 
-1. INSIGHTS: Extract key learnings. For each:
+1. SUMMARY: Write 1-2 sentences describing what this article is about.
+
+2. HEADLINE: Rewrite the title as a clear 3-8 word headline capturing the main topic.
+
+3. KEYWORDS: Extract key terms (people, organizations, places, topics). Return as array.
+
+4. INSIGHTS: Extract key learnings. For each:
    - content: one clear sentence
    - type: technical/tool/statistic/opinion
    - confidence: high/medium/low
    - reason: why this confidence level
 
-2. TRIPLES: Extract factual subject-predicate-object relationships.
+5. TRIPLES: Extract factual subject-predicate-object relationships.
    - Subjects/objects must be PROPER NOUNS (specific names, companies, places)
    - NEVER use generic nouns like 'man', 'woman', 'article'
    - Common predicates: developed_by, acquired, partnered_with, announced, competes_with, located_in, costs, uses
 
 Return as JSON:
 {{
+  "summary": "1-2 sentence description",
+  "headline": "Clear 3-8 word headline",
+  "keywords": ["term1", "term2", "term3"],
   "insights": [
     {{"content": "...", "type": "technical", "confidence": "high", "reason": "..."}}
   ],
