@@ -209,6 +209,27 @@ Then:
 - Articles match if ANY chunks align, not just overall average
 - More aligned chunks = stronger correlation
 
+### Current Schema (storage.py)
+
+**Article fields:**
+- id, feed_url, title, link, published, content
+- summary (TEXT) - exists but not being populated correctly
+- trend_tags, signal_tags (TEXT)
+- story_id (TEXT)
+- embedding (TEXT) - single serialized vector
+- NO headline field
+- NO keywords field
+
+**Story fields:**
+- id, title, description, keywords
+- first_seen, last_updated, lifecycle_state
+- article_ids, news_item_ids
+
+**Schema changes needed:**
+1. Add `headline TEXT` to articles table
+2. Add `keywords TEXT` to articles table (JSON array)
+3. Consider: chunk embeddings table (article_id, chunk_index, chunk_text, embedding)
+
 ---
 
 ## CRITICAL: Validate Changes by Running Actual Commands
