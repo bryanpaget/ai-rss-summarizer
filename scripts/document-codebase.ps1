@@ -286,6 +286,8 @@ Analyze ONLY the actual file content between BEGIN/END markers.
 If the file has no imports, do not document imports.
 If the file has no constants, do not document constants.
 Every line number you output MUST exist in the actual file content above.
+VERIFY: Line 1 shows the ACTUAL first line. If it is NOT an import statement, do NOT output import-block.
+Read line 1 literally. If line 1 is a docstring like `"""..."""`, that is a docstring, NOT imports.
 
 Document ALL items. Start from line 1. Include every function, class, and method.
 "@
