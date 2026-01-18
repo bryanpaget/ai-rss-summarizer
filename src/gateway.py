@@ -66,7 +66,7 @@ class LocalLLMGateway:
     # Git Bash path for Windows
     GIT_BASH = "C:/Program Files/Git/usr/bin/bash.exe"
 
-    def __init__(self, timeout: int = 120):
+    def __init__(self, timeout: int = 300):
         """Initialize gateway interface.
 
         Args:
