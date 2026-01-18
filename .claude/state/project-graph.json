@@ -1,83 +1,115 @@
 ﻿{
     "adjacency":  {
-                      "temperature=0.3":  {
-                                              "in":  [
-                                                         14,
-                                                         68
-                                                     ],
-                                              "out":  [
+                      "while queue not empty":  {
+                                                    "out":  [
 
-                                                      ]
-                                          },
-                      "FAISS math":  {
+                                                            ],
+                                                    "in":  [
+                                                               119
+                                                           ]
+                                                },
+                      "insights":  {
+                                       "in":  [
+
+                                              ],
+                                       "out":  [
+                                                   11
+                                               ]
+                                   },
+                      "find similar stories":  {
+                                                   "in":  [
+
+                                                          ],
+                                                   "out":  [
+                                                               25
+                                                           ]
+                                               },
+                      "3.8/sec":  {
+                                      "in":  [
+                                                 90,
+                                                 95
+                                             ],
+                                      "out":  [
+
+                                              ]
+                                  },
+                      "e.g.":  {
+                                   "in":  [
+
+                                          ],
+                                   "out":  [
+                                               17
+                                           ]
+                               },
+                      "article.id":  {
                                          "in":  [
 
                                                 ],
                                          "out":  [
-                                                     66
+                                                     0,
+                                                     1,
+                                                     2,
+                                                     46,
+                                                     47
                                                  ]
                                      },
-                      "queue.jsonl":  {
-                                          "in":  [
+                      "article_id":  {
+                                         "in":  [
 
-                                                 ],
-                                          "out":  [
-                                                      82
-                                                  ]
-                                      },
-                      "API contract":  {
-                                           "in":  [
-                                                      37
-                                                  ],
-                                           "out":  [
+                                                ],
+                                         "out":  [
+                                                     44
+                                                 ]
+                                     },
+                      "function":  {
+                                       "in":  [
 
-                                                   ]
-                                       },
-                      "0 LLM calls":  {
-                                          "in":  [
-                                                     59,
-                                                     75,
-                                                     81
-                                                 ],
-                                          "out":  [
+                                              ],
+                                       "out":  [
+                                                   63
+                                               ]
+                                   },
+                      "92s total":  {
+                                        "in":  [
 
-                                                  ]
-                                      },
-                      "article_embedding":  {
-                                                "in":  [
+                                               ],
+                                        "out":  [
+                                                    80
+                                                ]
+                                    },
+                      "parallel":  {
+                                       "in":  [
+                                                  85
+                                              ],
+                                       "out":  [
 
-                                                       ],
-                                                "out":  [
-                                                            53,
-                                                            55,
-                                                            57
-                                                        ]
-                                            },
-                      "`request_text`":  {
+                                               ]
+                                   },
+                      "detection":  {
+                                        "out":  [
+                                                    64,
+                                                    106
+                                                ],
+                                        "in":  [
+
+                                               ]
+                                    },
+                      "CREATE NEW with 3 LLM calls":  {
+                                                          "in":  [
+                                                                     25
+                                                                 ],
+                                                          "out":  [
+
+                                                                  ]
+                                                      },
+                      "response files":  {
                                              "in":  [
-
+                                                        82
                                                     ],
                                              "out":  [
-                                                         3
+
                                                      ]
                                          },
-                      "cluster":  {
-                                      "in":  [
-
-                                             ],
-                                      "out":  [
-                                                  15,
-                                                  16
-                                              ]
-                                  },
-                      "tags":  {
-                                   "in":  [
-                                              8
-                                          ],
-                                   "out":  [
-
-                                           ]
-                               },
                       "using extracted metadata":  {
                                                        "in":  [
 
@@ -88,14 +120,23 @@
                                                                    81
                                                                ]
                                                    },
-                      "1 second LLM call":  {
+                      "collect all texts":  {
                                                 "in":  [
 
                                                        ],
                                                 "out":  [
-                                                            13
+                                                            86
                                                         ]
                                             },
+                      "handle":  {
+                                     "in":  [
+                                                15,
+                                                16
+                                            ],
+                                     "out":  [
+
+                                             ]
+                                 },
                       "original_idx":  {
                                            "in":  [
 
@@ -105,123 +146,89 @@
                                                        98
                                                    ]
                                        },
-                      "no LLM":  {
-                                     "in":  [
-                                                19,
-                                                20
-                                            ],
-                                     "out":  [
+                      "intentional design":  {
+                                                 "out":  [
 
-                                             ]
-                                 },
-                      "chunk_embedding":  {
-                                              "in":  [
-                                                         49
-                                                     ],
-                                              "out":  [
+                                                         ],
+                                                 "in":  [
+                                                            104
+                                                        ]
+                                             },
+                      "averaged embeddings":  {
+                                                  "in":  [
+                                                             30
+                                                         ],
+                                                  "out":  [
 
-                                                      ]
-                                          },
-                      "poor granularity":  {
-                                               "in":  [
-                                                          29
-                                                      ],
-                                               "out":  [
-                                                           30
-                                                       ]
-                                           },
-                      "connection detection":  {
-                                                   "in":  [
-                                                              63
-                                                          ],
-                                                   "out":  [
+                                                          ]
+                                              },
+                      "title":  {
+                                    "in":  [
 
-                                                           ]
-                                               },
-                      "semantic space mismatch":  {
-                                                      "in":  [
-                                                                 27
-                                                             ],
-                                                      "out":  [
+                                           ],
+                                    "out":  [
+                                                18,
+                                                21,
+                                                22
+                                            ]
+                                },
+                      "0 LLM calls":  {
+                                          "in":  [
+                                                     59,
+                                                     75,
+                                                     81
+                                                 ],
+                                          "out":  [
 
-                                                              ]
-                                                  },
-                      "function":  {
+                                                  ]
+                                      },
+                      "response":  {
                                        "in":  [
 
                                               ],
                                        "out":  [
-                                                   63
+                                                   78,
+                                                   79
                                                ]
                                    },
-                      "result":  {
-                                     "in":  [
-                                                74
-                                            ],
-                                     "out":  [
+                      "idx":  {
+                                  "in":  [
 
-                                             ]
-                                 },
-                      "queue: 12256ms":  {
-                                             "in":  [
+                                         ],
+                                  "out":  [
+                                              99,
+                                              100
+                                          ]
+                              },
+                      "self":  {
+                                   "in":  [
 
-                                                    ],
-                                             "out":  [
-                                                         5
-                                                     ]
-                                         },
-                      "f\"\\n\u0027` and line 794 is `\u0027  [red]ERROR: {e}[/red]\"":  {
-                                                                                             "in":  [
+                                          ],
+                                   "out":  [
+                                               54,
+                                               69,
+                                               70
+                                           ]
+                               },
+                      "next client":  {
+                                          "out":  [
 
-                                                                                                    ],
-                                                                                             "out":  [
-                                                                                                         51
-                                                                                                     ]
-                                                                                         },
-                      "embeddings":  {
-                                         "in":  [
-
-                                                ],
-                                         "out":  [
-                                                     34
+                                                  ],
+                                          "in":  [
+                                                     107
                                                  ]
-                                     },
-                      "but then batch calls work":  {
-                                                        "in":  [
-                                                                   87,
-                                                                   92
-                                                               ],
-                                                        "out":  [
+                                      },
+                      "one-to-one mapping":  {
+                                                 "in":  [
+                                                            38
+                                                        ],
+                                                 "out":  [
 
-                                                                ]
-                                                    },
-                      "stream: false":  {
-                                            "in":  [
-                                                       12
-                                                   ],
-                                            "out":  [
-
-                                                    ]
-                                        },
-                      "entity relationships":  {
-                                                   "in":  [
-                                                              11
-                                                          ],
-                                                   "out":  [
-
-                                                           ]
-                                               },
-                      "ins.id":  {
-                                     "in":  [
-
-                                            ],
-                                     "out":  [
-                                                 74
-                                             ]
-                                 },
-                      "`request_embedding`":  {
+                                                         ]
+                                             },
+                      "single return value":  {
                                                   "in":  [
-                                                             3
+                                                             36
                                                          ],
                                                   "out":  [
 
@@ -236,805 +243,6 @@
                                                                     92
                                                                 ]
                                                     },
-                      "fast":  {
-                                   "in":  [
-
-                                          ],
-                                   "out":  [
-                                               85
-                                           ]
-                               },
-                      "prompt":  {
-                                     "in":  [
-
-                                            ],
-                                     "out":  [
-                                                 14,
-                                                 68
-                                             ]
-                                 },
-                      "result.vector":  {
-                                            "in":  [
-                                                       0,
-                                                       2,
-                                                       47
-                                                   ],
-                                            "out":  [
-
-                                                    ]
-                                        },
-                      "single return":  {
-                                            "in":  [
-
-                                                   ],
-                                            "out":  [
-                                                        37
-                                                    ]
-                                        },
-                      "type: embedding":  {
-                                              "in":  [
-
-                                                     ],
-                                              "out":  [
-                                                          12
-                                                      ]
-                                          },
-                      "then 10 seconds waiting":  {
-                                                      "in":  [
-                                                                 13
-                                                             ],
-                                                      "out":  [
-
-                                                              ]
-                                                  },
-                      "260ms each":  {
-                                         "in":  [
-
-                                                ],
-                                         "out":  [
-                                                     90,
-                                                     95
-                                                 ]
-                                     },
-                      "granularity":  {
-                                          "in":  [
-                                                     34
-                                                 ],
-                                          "out":  [
-
-                                                  ]
-                                      },
-                      "analysis":  {
-                                       "in":  [
-
-                                              ],
-                                       "out":  [
-                                                   65
-                                               ]
-                                   },
-                      "API":  {
-                                  "in":  [
-
-                                         ],
-                                  "out":  [
-                                              38
-                                          ]
-                              },
-                      "current embedding approach":  {
-                                                         "in":  [
-                                                                    31
-                                                                ],
-                                                         "out":  [
-
-                                                                 ]
-                                                     },
-                      "writing prompt":  {
-                                             "in":  [
-
-                                                    ],
-                                             "out":  [
-                                                         72
-                                                     ]
-                                         },
-                      "response files":  {
-                                             "in":  [
-                                                        82
-                                                    ],
-                                             "out":  [
-
-                                                     ]
-                                         },
-                      "chunk_text":  {
-                                         "in":  [
-
-                                                ],
-                                         "out":  [
-                                                     48,
-                                                     49
-                                                 ]
-                                     },
-                      "embedding-only":  {
-                                             "in":  [
-
-                                                    ],
-                                             "out":  [
-                                                         20
-                                                     ]
-                                         },
-                      "CREATE NEW with 3 LLM calls":  {
-                                                          "in":  [
-                                                                     25
-                                                                 ],
-                                                          "out":  [
-
-                                                                  ]
-                                                      },
-                      "subtopic detection":  {
-                                                 "in":  [
-                                                            40
-                                                        ],
-                                                 "out":  [
-
-                                                         ]
-                                             },
-                      "one vector":  {
-                                         "in":  [
-
-                                                ],
-                                         "out":  [
-                                                     32
-                                                 ]
-                                     },
-                      "direct API":  {
-                                         "in":  [
-                                                    88,
-                                                    89,
-                                                    93,
-                                                    94
-                                                ],
-                                         "out":  [
-
-                                                 ]
-                                     },
-                      "f\"\\n  [red]ERROR: {e}[/red]\"":  {
-                                                              "in":  [
-
-                                                                     ],
-                                                              "out":  [
-                                                                          50
-                                                                      ]
-                                                          },
-                      "function calling LLM":  {
-                                                   "in":  [
-                                                              62
-                                                          ],
-                                                   "out":  [
-
-                                                           ]
-                                               },
-                      "one at a time":  {
-                                            "in":  [
-
-                                                   ],
-                                            "out":  [
-                                                        84
-                                                    ]
-                                        },
-                      "queue: 11910ms":  {
-                                             "in":  [
-
-                                                    ],
-                                             "out":  [
-                                                         6
-                                                     ]
-                                         },
-                      "50 at a time":  {
-                                           "in":  [
-                                                      17
-                                                  ],
-                                           "out":  [
-
-                                                   ]
-                                       },
-                      "detection":  {
-                                        "in":  [
-
-                                               ],
-                                        "out":  [
-                                                    64
-                                                ]
-                                    },
-                      "Batch 1/2":  {
-                                        "in":  [
-
-                                               ],
-                                        "out":  [
-                                                    73
-                                                ]
-                                    },
-                      "save each":  {
-                                        "in":  [
-                                                   86
-                                               ],
-                                        "out":  [
-
-                                                ]
-                                    },
-                      "article: Article":  {
-                                               "in":  [
-                                                          54
-                                                      ],
-                                               "out":  [
-
-                                                       ]
-                                           },
-                      "cli_constitution.py with 31 items after 2 timeouts":  {
-                                                                                 "out":  [
-
-                                                                                         ],
-                                                                                 "in":  [
-                                                                                            101
-                                                                                        ]
-                                                                             },
-                      "end=\"\"":  {
-                                       "in":  [
-                                                  50,
-                                                  51
-                                              ],
-                                       "out":  [
-
-                                               ]
-                                   },
-                      "one-to-one mapping":  {
-                                                 "in":  [
-                                                            38
-                                                        ],
-                                                 "out":  [
-
-                                                         ]
-                                             },
-                      "parallel":  {
-                                       "in":  [
-                                                  85
-                                              ],
-                                       "out":  [
-
-                                               ]
-                                   },
-                      "partial overlap":  {
-                                              "in":  [
-                                                         42
-                                                     ],
-                                              "out":  [
-                                                          43
-                                                      ]
-                                          },
-                      "design":  {
-                                     "in":  [
-
-                                            ],
-                                     "out":  [
-                                                 39
-                                             ]
-                                 },
-                      "knowledge extraction":  {
-                                                   "in":  [
-                                                              9,
-                                                              10
-                                                          ],
-                                                   "out":  [
-
-                                                           ]
-                                               },
-                      "184ms each":  {
-                                         "in":  [
-
-                                                ],
-                                         "out":  [
-                                                     91,
-                                                     96
-                                                 ]
-                                     },
-                      "cli.py with 31 items":  {
-                                                   "out":  [
-                                                               101
-                                                           ],
-                                                   "in":  [
-
-                                                          ]
-                                               },
-                      "title":  {
-                                    "in":  [
-
-                                           ],
-                                    "out":  [
-                                                18,
-                                                21,
-                                                22
-                                            ]
-                                },
-                      "keywords":  {
-                                       "in":  [
-                                                  18,
-                                                  21,
-                                                  22
-                                              ],
-                                       "out":  [
-
-                                               ]
-                                   },
-                      "kb":  {
-                                 "in":  [
-                                            45,
-                                            76,
-                                            77,
-                                            78,
-                                            79
-                                        ],
-                                 "out":  [
-
-                                         ]
-                             },
-                      "queue: 12651ms":  {
-                                             "in":  [
-
-                                                    ],
-                                             "out":  [
-                                                         4
-                                                     ]
-                                         },
-                      "reading response":  {
-                                               "in":  [
-                                                          72
-                                                      ],
-                                               "out":  [
-
-                                                       ]
-                                           },
-                      "step":  {
-                                   "in":  [
-
-                                          ],
-                                   "out":  [
-                                               60
-                                           ]
-                               },
-                      "3.8/sec":  {
-                                      "in":  [
-                                                 90,
-                                                 95
-                                             ],
-                                      "out":  [
-
-                                              ]
-                                  },
-                      "coverage":  {
-                                       "in":  [
-
-                                              ],
-                                       "out":  [
-                                                   42
-                                               ]
-                                   },
-                      "no matches":  {
-                                         "in":  [
-                                                    26
-                                                ],
-                                         "out":  [
-                                                     27
-                                                 ]
-                                     },
-                      "tagging":  {
-                                      "in":  [
-
-                                             ],
-                                      "out":  [
-                                                  9,
-                                                  10
-                                              ]
-                                  },
-                      "queue: 11572ms":  {
-                                             "in":  [
-
-                                                    ],
-                                             "out":  [
-                                                         7
-                                                     ]
-                                         },
-                      "response":  {
-                                       "in":  [
-
-                                              ],
-                                       "out":  [
-                                                   78,
-                                                   79
-                                               ]
-                                   },
-                      "lost semantics":  {
-                                             "in":  [
-
-                                                    ],
-                                             "out":  [
-                                                         33
-                                                     ]
-                                         },
-                      "\"embedding\"":  {
-                                            "in":  [
-
-                                                   ],
-                                            "out":  [
-                                                        71,
-                                                        83
-                                                    ]
-                                        },
-                      "so ~46s per article including tagging":  {
-                                                                    "in":  [
-                                                                               80
-                                                                           ],
-                                                                    "out":  [
-
-                                                                            ]
-                                                                },
-                      "chunk semantics":  {
-                                              "in":  [
-                                                         32
-                                                     ],
-                                              "out":  [
-
-                                                      ]
-                                          },
-                      "story":  {
-                                    "in":  [
-                                               53,
-                                               55,
-                                               56,
-                                               57,
-                                               58
-                                           ],
-                                    "out":  [
-
-                                            ]
-                                },
-                      "article":  {
-                                      "in":  [
-
-                                             ],
-                                      "out":  [
-                                                  45,
-                                                  76,
-                                                  77
-                                              ]
-                                  },
-                      "multi-angle coverage":  {
-                                                   "in":  [
-                                                              41
-                                                          ],
-                                                   "out":  [
-
-                                                           ]
-                                               },
-                      "cluster insights":  {
-                                               "in":  [
-
-                                                      ],
-                                               "out":  [
-                                                           24
-                                                       ]
-                                           },
-                      "LLM to analyze clusters":  {
-                                                      "in":  [
-                                                                 24
-                                                             ],
-                                                      "out":  [
-
-                                                              ]
-                                                  },
-                      "single return value":  {
-                                                  "in":  [
-                                                             36
-                                                         ],
-                                                  "out":  [
-
-                                                          ]
-                                              },
-                      "FAISS":  {
-                                    "in":  [
-
-                                           ],
-                                    "out":  [
-                                                67
-                                            ]
-                                },
-                      "92s total":  {
-                                        "in":  [
-
-                                               ],
-                                        "out":  [
-                                                    80
-                                                ]
-                                    },
-                      "averaged embeddings":  {
-                                                  "in":  [
-                                                             30
-                                                         ],
-                                                  "out":  [
-
-                                                          ]
-                                              },
-                      "triples":  {
-                                      "in":  [
-                                                 23
-                                             ],
-                                      "out":  [
-
-                                              ]
-                                  },
-                      "averaging":  {
-                                        "in":  [
-                                                   35
-                                               ],
-                                        "out":  [
-                                                    31,
-                                                    36
-                                                ]
-                                    },
-                      "collect all texts":  {
-                                                "in":  [
-
-                                                       ],
-                                                "out":  [
-                                                            86
-                                                        ]
-                                            },
-                      "idx":  {
-                                  "in":  [
-
-                                         ],
-                                  "out":  [
-                                              99,
-                                              100
-                                          ]
-                              },
-                      "different text sources":  {
-                                                     "in":  [
-                                                                28
-                                                            ],
-                                                     "out":  [
-
-                                                             ]
-                                                 },
-                      "long running":  {
-                                           "in":  [
-                                                      84
-                                                  ],
-                                           "out":  [
-
-                                                   ]
-                                       },
-                      "matching":  {
-                                       "in":  [
-
-                                              ],
-                                       "out":  [
-                                                   26,
-                                                   29
-                                               ]
-                                   },
-                      "LLM calls in wrong phase":  {
-                                                       "in":  [
-                                                                  61
-                                                              ],
-                                                       "out":  [
-
-                                                               ]
-                                                   },
-                      "\"article\"":  {
-                                          "in":  [
-                                                     1
-                                                 ],
-                                          "out":  [
-
-                                                  ]
-                                      },
-                      "article.id":  {
-                                         "in":  [
-
-                                                ],
-                                         "out":  [
-                                                     0,
-                                                     1,
-                                                     2,
-                                                     46,
-                                                     47
-                                                 ]
-                                     },
-                      "no model":  {
-                                       "in":  [
-                                                  66,
-                                                  67
-                                              ],
-                                       "out":  [
-
-                                               ]
-                                   },
-                      "switching":  {
-                                        "in":  [
-
-                                               ],
-                                        "out":  [
-                                                    61
-                                                ]
-                                    },
-                      "5.4/sec":  {
-                                      "in":  [
-                                                 91,
-                                                 96
-                                             ],
-                                      "out":  [
-
-                                              ]
-                                  },
-                      "this uses embeddings":  {
-                                                   "in":  [
-
-                                                          ],
-                                                   "out":  [
-                                                               19
-                                                           ]
-                                               },
-                      "find similar stories":  {
-                                                   "in":  [
-
-                                                          ],
-                                                   "out":  [
-                                                               25
-                                                           ]
-                                               },
-                      "handle":  {
-                                     "in":  [
-                                                15,
-                                                16
-                                            ],
-                                     "out":  [
-
-                                             ]
-                                 },
-                      "self":  {
-                                   "in":  [
-
-                                          ],
-                                   "out":  [
-                                               54,
-                                               69,
-                                               70
-                                           ]
-                               },
-                      "mismatch":  {
-                                       "in":  [
-
-                                              ],
-                                       "out":  [
-                                                   28
-                                               ]
-                                   },
-                      "embedding":  {
-                                        "in":  [
-                                                   46,
-                                                   48
-                                               ],
-                                        "out":  [
-                                                    56,
-                                                    58
-                                                ]
-                                    },
-                      "e.g.":  {
-                                   "in":  [
-
-                                          ],
-                                   "out":  [
-                                               17
-                                           ]
-                               },
-                      "process: 572ms":  {
-                                             "in":  [
-                                                        4,
-                                                        5,
-                                                        6,
-                                                        7
-                                                    ],
-                                             "out":  [
-
-                                                     ]
-                                         },
-                      "overlap":  {
-                                      "in":  [
-
-                                             ],
-                                      "out":  [
-                                                  41
-                                              ]
-                                  },
-                      "chunk_index":  {
-                                          "in":  [
-                                                     44
-                                                 ],
-                                          "out":  [
-
-                                                  ]
-                                      },
-                      "chunk matching":  {
-                                             "in":  [
-                                                        39
-                                                    ],
-                                             "out":  [
-
-                                                     ]
-                                         },
-                      "summaries":  {
-                                        "in":  [
-
-                                               ],
-                                        "out":  [
-                                                    8
-                                                ]
-                                    },
-                      "partial matches":  {
-                                              "in":  [
-                                                         33
-                                                     ],
-                                              "out":  [
-
-                                                      ]
-                                          },
-                      "LLM calls":  {
-                                        "in":  [
-
-                                               ],
-                                        "out":  [
-                                                    62
-                                                ]
-                                    },
-                      "clustering and analysis":  {
-                                                      "in":  [
-                                                                 64
-                                                             ],
-                                                      "out":  [
-
-                                                              ]
-                                                  },
-                      "lost granularity":  {
-                                               "in":  [
-
-                                                      ],
-                                               "out":  [
-                                                           35
-                                                       ]
-                                           },
-                      "text: str":  {
-                                        "in":  [
-                                                   69,
-                                                   70
-                                               ],
-                                        "out":  [
-
-                                                ]
-                                    },
-                      "articles are related":  {
-                                                   "in":  [
-                                                              52
-                                                          ],
-                                                   "out":  [
-
-                                                           ]
-                                               },
-                      "model switching":  {
-                                              "in":  [
-                                                         60
-                                                     ],
-                                              "out":  [
-
-                                                      ]
-                                          },
                       "text":  {
                                    "in":  [
                                               71,
@@ -1048,6 +256,47 @@
 
                                            ]
                                },
+                      "requestor ensures detection":  {
+                                                          "out":  [
+
+                                                                  ],
+                                                          "in":  [
+                                                                     105
+                                                                 ]
+                                                      },
+                      "LLM calls":  {
+                                        "in":  [
+
+                                               ],
+                                        "out":  [
+                                                    62
+                                                ]
+                                    },
+                      "request":  {
+                                      "out":  [
+                                                  107,
+                                                  112
+                                              ],
+                                      "in":  [
+
+                                             ]
+                                  },
+                      "API":  {
+                                  "in":  [
+
+                                         ],
+                                  "out":  [
+                                              38
+                                          ]
+                              },
+                      "function calling LLM":  {
+                                                   "in":  [
+                                                              62
+                                                          ],
+                                                   "out":  [
+
+                                                           ]
+                                               },
                       "summary":  {
                                       "in":  [
 
@@ -1056,6 +305,621 @@
                                                   23
                                               ]
                                   },
+                      "Batch 1/2":  {
+                                        "in":  [
+
+                                               ],
+                                        "out":  [
+                                                    73
+                                                ]
+                                    },
+                      "lost granularity":  {
+                                               "in":  [
+
+                                                      ],
+                                               "out":  [
+                                                           35
+                                                       ]
+                                           },
+                      "poor granularity":  {
+                                               "in":  [
+                                                          29
+                                                      ],
+                                               "out":  [
+                                                           30
+                                                       ]
+                                           },
+                      "save each":  {
+                                        "in":  [
+                                                   86
+                                               ],
+                                        "out":  [
+
+                                                ]
+                                    },
+                      "queue: 11572ms":  {
+                                             "in":  [
+
+                                                    ],
+                                             "out":  [
+                                                         7
+                                                     ]
+                                         },
+                      "partial overlap":  {
+                                              "in":  [
+                                                         42
+                                                     ],
+                                              "out":  [
+                                                          43
+                                                      ]
+                                          },
+                      "semantic space mismatch":  {
+                                                      "in":  [
+                                                                 27
+                                                             ],
+                                                      "out":  [
+
+                                                              ]
+                                                  },
+                      "connection detection":  {
+                                                   "in":  [
+                                                              63
+                                                          ],
+                                                   "out":  [
+
+                                                           ]
+                                               },
+                      "lock check":  {
+                                         "out":  [
+                                                     116
+                                                 ],
+                                         "in":  [
+
+                                                ]
+                                     },
+                      "chunk_index":  {
+                                          "in":  [
+                                                     44
+                                                 ],
+                                          "out":  [
+
+                                                  ]
+                                      },
+                      "dir existence + kill -0":  {
+                                                      "out":  [
+
+                                                              ],
+                                                      "in":  [
+                                                                 116
+                                                             ]
+                                                  },
+                      "lock state":  {
+                                         "out":  [
+
+                                                 ],
+                                         "in":  [
+                                                    115
+                                                ]
+                                     },
+                      "granularity":  {
+                                          "in":  [
+                                                     34
+                                                 ],
+                                          "out":  [
+
+                                                  ]
+                                      },
+                      "stream: false":  {
+                                            "in":  [
+                                                       12
+                                                   ],
+                                            "out":  [
+
+                                                    ]
+                                        },
+                      "issue":  {
+                                    "out":  [
+                                                108
+                                            ],
+                                    "in":  [
+
+                                           ]
+                                },
+                      "cli.py with 31 items":  {
+                                                   "in":  [
+
+                                                          ],
+                                                   "out":  [
+                                                               101
+                                                           ]
+                                               },
+                      "fine-grained":  {
+                                           "in":  [
+
+                                                  ],
+                                           "out":  [
+                                                       40
+                                                   ]
+                                       },
+                      "embedding":  {
+                                        "in":  [
+                                                   46,
+                                                   48
+                                               ],
+                                        "out":  [
+                                                    56,
+                                                    58
+                                                ]
+                                    },
+                      "step":  {
+                                   "in":  [
+
+                                          ],
+                                   "out":  [
+                                               60
+                                           ]
+                               },
+                      "clients":  {
+                                      "out":  [
+                                                  109
+                                              ],
+                                      "in":  [
+
+                                             ]
+                                  },
+                      "embeddings":  {
+                                         "in":  [
+
+                                                ],
+                                         "out":  [
+                                                     34
+                                                 ]
+                                     },
+                      "one at a time":  {
+                                            "in":  [
+
+                                                   ],
+                                            "out":  [
+                                                        84
+                                                    ]
+                                        },
+                      "article":  {
+                                      "in":  [
+
+                                             ],
+                                      "out":  [
+                                                  45,
+                                                  76,
+                                                  77
+                                              ]
+                                  },
+                      "spawn or wake":  {
+                                            "out":  [
+
+                                                    ],
+                                            "in":  [
+                                                       106
+                                                   ]
+                                        },
+                      "orphaned requests":  {
+                                                "out":  [
+
+                                                        ],
+                                                "in":  [
+                                                           108
+                                                       ]
+                                            },
+                      "documentation run":  {
+                                                "out":  [
+
+                                                        ],
+                                                "in":  [
+                                                           102
+                                                       ]
+                                            },
+                      "5.4/sec":  {
+                                      "in":  [
+                                                 91,
+                                                 96
+                                             ],
+                                      "out":  [
+
+                                              ]
+                                  },
+                      "overlap":  {
+                                      "in":  [
+
+                                             ],
+                                      "out":  [
+                                                  41
+                                              ]
+                                  },
+                      "process: 572ms":  {
+                                             "in":  [
+                                                        4,
+                                                        5,
+                                                        6,
+                                                        7
+                                                    ],
+                                             "out":  [
+
+                                                     ]
+                                         },
+                      "coverage":  {
+                                       "in":  [
+
+                                              ],
+                                       "out":  [
+                                                   42
+                                               ]
+                                   },
+                      "processor":  {
+                                        "out":  [
+                                                    118,
+                                                    119
+                                                ],
+                                        "in":  [
+
+                                               ]
+                                    },
+                      "no model":  {
+                                       "in":  [
+                                                  66,
+                                                  67
+                                              ],
+                                       "out":  [
+
+                                               ]
+                                   },
+                      "single return":  {
+                                            "in":  [
+
+                                                   ],
+                                            "out":  [
+                                                        37
+                                                    ]
+                                        },
+                      "reading response":  {
+                                               "in":  [
+                                                          72
+                                                      ],
+                                               "out":  [
+
+                                                       ]
+                                           },
+                      "direct API":  {
+                                         "in":  [
+                                                    88,
+                                                    89,
+                                                    93,
+                                                    94
+                                                ],
+                                         "out":  [
+
+                                                 ]
+                                     },
+                      "commit to exit":  {
+                                             "out":  [
+
+                                                     ],
+                                             "in":  [
+                                                        121
+                                                    ]
+                                         },
+                      "FAISS math":  {
+                                         "in":  [
+
+                                                ],
+                                         "out":  [
+                                                     66
+                                                 ]
+                                     },
+                      "LLM calls in wrong phase":  {
+                                                       "in":  [
+                                                                  61
+                                                              ],
+                                                       "out":  [
+
+                                                               ]
+                                                   },
+                      "partial matches":  {
+                                              "in":  [
+                                                         33
+                                                     ],
+                                              "out":  [
+
+                                                      ]
+                                          },
+                      "184ms each":  {
+                                         "in":  [
+
+                                                ],
+                                         "out":  [
+                                                     91,
+                                                     96
+                                                 ]
+                                     },
+                      "article_embedding":  {
+                                                "in":  [
+
+                                                       ],
+                                                "out":  [
+                                                            53,
+                                                            55,
+                                                            57
+                                                        ]
+                                            },
+                      "API contract":  {
+                                           "in":  [
+                                                      37
+                                                  ],
+                                           "out":  [
+
+                                                   ]
+                                       },
+                      "timing windows":  {
+                                             "out":  [
+
+                                                     ],
+                                             "in":  [
+                                                        109
+                                                    ]
+                                         },
+                      "batch":  {
+                                    "out":  [
+                                                120
+                                            ],
+                                    "in":  [
+
+                                           ]
+                                },
+                      "tags":  {
+                                   "in":  [
+                                              8
+                                          ],
+                                   "out":  [
+
+                                           ]
+                               },
+                      "cluster":  {
+                                      "in":  [
+
+                                             ],
+                                      "out":  [
+                                                  15,
+                                                  16
+                                              ]
+                                  },
+                      "lifecycle":  {
+                                        "out":  [
+                                                    111
+                                                ],
+                                        "in":  [
+
+                                               ]
+                                    },
+                      "clustering and analysis":  {
+                                                      "in":  [
+                                                                 64
+                                                             ],
+                                                      "out":  [
+
+                                                              ]
+                                                  },
+                      "windows":  {
+                                      "out":  [
+                                                  110
+                                              ],
+                                      "in":  [
+
+                                             ]
+                                  },
+                      "mismatch":  {
+                                       "in":  [
+
+                                              ],
+                                       "out":  [
+                                                   28
+                                               ]
+                                   },
+                      "embedding-only":  {
+                                             "in":  [
+
+                                                    ],
+                                             "out":  [
+                                                         20
+                                                     ]
+                                         },
+                      "`request_text`":  {
+                                             "in":  [
+
+                                                    ],
+                                             "out":  [
+                                                         3
+                                                     ]
+                                         },
+                      "\"embedding\"":  {
+                                            "in":  [
+
+                                                   ],
+                                            "out":  [
+                                                        71,
+                                                        83
+                                                    ]
+                                        },
+                      "writing prompt":  {
+                                             "in":  [
+
+                                                    ],
+                                             "out":  [
+                                                         72
+                                                     ]
+                                         },
+                      "`request_embedding`":  {
+                                                  "in":  [
+                                                             3
+                                                         ],
+                                                  "out":  [
+
+                                                          ]
+                                              },
+                      "tagging":  {
+                                      "in":  [
+
+                                             ],
+                                      "out":  [
+                                                  9,
+                                                  10
+                                              ]
+                                  },
+                      "queue: 11910ms":  {
+                                             "in":  [
+
+                                                    ],
+                                             "out":  [
+                                                         6
+                                                     ]
+                                         },
+                      "then 10 seconds waiting":  {
+                                                      "in":  [
+                                                                 13
+                                                             ],
+                                                      "out":  [
+
+                                                              ]
+                                                  },
+                      "queue state before add":  {
+                                                     "out":  [
+
+                                                             ],
+                                                     "in":  [
+                                                                113
+                                                            ]
+                                                 },
+                      "long running":  {
+                                           "in":  [
+                                                      84
+                                                  ],
+                                           "out":  [
+
+                                                   ]
+                                       },
+                      "queue.jsonl":  {
+                                          "in":  [
+
+                                                 ],
+                                          "out":  [
+                                                      82
+                                                  ]
+                                      },
+                      "no LLM":  {
+                                     "in":  [
+                                                19,
+                                                20
+                                            ],
+                                     "out":  [
+
+                                             ]
+                                 },
+                      "knowledge extraction":  {
+                                                   "in":  [
+                                                              9,
+                                                              10
+                                                          ],
+                                                   "out":  [
+
+                                                           ]
+                                               },
+                      "Batch 2/2":  {
+                                        "in":  [
+                                                   73
+                                               ],
+                                        "out":  [
+
+                                                ]
+                                    },
+                      "cli_constitution.py with 31 items after 2 timeouts":  {
+                                                                                 "in":  [
+                                                                                            101
+                                                                                        ],
+                                                                                 "out":  [
+
+                                                                                         ]
+                                                                             },
+                      "model switching":  {
+                                              "in":  [
+                                                         60
+                                                     ],
+                                              "out":  [
+
+                                                      ]
+                                          },
+                      "entity relationships":  {
+                                                   "in":  [
+                                                              11
+                                                          ],
+                                                   "out":  [
+
+                                                           ]
+                                               },
+                      "investigation":  {
+                                            "out":  [
+
+                                                    ],
+                                            "in":  [
+                                                       111
+                                                   ]
+                                        },
+                      "articles are related":  {
+                                                   "in":  [
+                                                              52
+                                                          ],
+                                                   "out":  [
+
+                                                           ]
+                                               },
+                      "queue: 12651ms":  {
+                                             "in":  [
+
+                                                    ],
+                                             "out":  [
+                                                         4
+                                                     ]
+                                         },
+                      "analysis":  {
+                                       "in":  [
+
+                                              ],
+                                       "out":  [
+                                                   65
+                                               ]
+                                   },
+                      "premature processor exit":  {
+                                                       "out":  [
+
+                                                               ],
+                                                       "in":  [
+                                                                  103
+                                                              ]
+                                                   },
+                      "keywords":  {
+                                       "in":  [
+                                                  18,
+                                                  21,
+                                                  22
+                                              ],
+                                       "out":  [
+
+                                               ]
+                                   },
+                      "lost semantics":  {
+                                             "in":  [
+
+                                                    ],
+                                             "out":  [
+                                                         33
+                                                     ]
+                                         },
                       "model already loaded":  {
                                                    "in":  [
 
@@ -1067,46 +931,120 @@
                                                                94
                                                            ]
                                                },
-                      "Batch 2/2":  {
-                                        "in":  [
-                                                   73
-                                               ],
-                                        "out":  [
+                      "script":  {
+                                     "out":  [
+                                                 113
+                                             ],
+                                     "in":  [
 
-                                                ]
-                                    },
-                      "fine-grained":  {
-                                           "in":  [
+                                            ]
+                                 },
+                      "subtopic detection":  {
+                                                 "in":  [
+                                                            40
+                                                        ],
+                                                 "out":  [
 
-                                                  ],
+                                                         ]
+                                             },
+                      "atomic mkdir":  {
                                            "out":  [
-                                                       40
-                                                   ]
+
+                                                   ],
+                                           "in":  [
+                                                      118
+                                                  ]
                                        },
-                      "LLM":  {
-                                  "in":  [
-                                             65
-                                         ],
+                      "gap":  {
                                   "out":  [
+                                              102,
+                                              103
+                                          ],
+                                  "in":  [
 
-                                          ]
+                                         ]
                               },
-                      "insights":  {
+                      "end=\"\"":  {
                                        "in":  [
-
+                                                  50,
+                                                  51
                                               ],
                                        "out":  [
-                                                   11
+
                                                ]
                                    },
-                      "article_id":  {
-                                         "in":  [
+                      "cluster insights":  {
+                                               "in":  [
 
-                                                ],
-                                         "out":  [
-                                                     44
-                                                 ]
-                                     },
+                                                      ],
+                                               "out":  [
+                                                           24
+                                                       ]
+                                           },
+                      "multi-angle coverage":  {
+                                                   "in":  [
+                                                              41
+                                                          ],
+                                                   "out":  [
+
+                                                           ]
+                                               },
+                      "so ~46s per article including tagging":  {
+                                                                    "in":  [
+                                                                               80
+                                                                           ],
+                                                                    "out":  [
+
+                                                                            ]
+                                                                },
+                      "article: Article":  {
+                                               "in":  [
+                                                          54
+                                                      ],
+                                               "out":  [
+
+                                                       ]
+                                           },
+                      "50 at a time":  {
+                                           "in":  [
+                                                      17
+                                                  ],
+                                           "out":  [
+
+                                                   ]
+                                       },
+                      "chunk matching":  {
+                                             "in":  [
+                                                        39
+                                                    ],
+                                             "out":  [
+
+                                                     ]
+                                         },
+                      "empty queue + first position":  {
+                                                           "out":  [
+
+                                                                   ],
+                                                           "in":  [
+                                                                      114
+                                                                  ]
+                                                       },
+                      "spawn":  {
+                                    "out":  [
+
+                                            ],
+                                    "in":  [
+                                               117
+                                           ]
+                                },
+                      "orphan detection":  {
+                                               "out":  [
+                                                           117
+                                                       ],
+                                               "in":  [
+
+                                                      ]
+                                           },
                       "chunk preservation":  {
                                                  "in":  [
                                                             43
@@ -1115,6 +1053,133 @@
 
                                                          ]
                                              },
+                      "spawn condition":  {
+                                              "out":  [
+                                                          114
+                                                      ],
+                                              "in":  [
+
+                                                     ]
+                                          },
+                      "current embedding approach":  {
+                                                         "in":  [
+                                                                    31
+                                                                ],
+                                                         "out":  [
+
+                                                                 ]
+                                                     },
+                      "fast":  {
+                                   "in":  [
+
+                                          ],
+                                   "out":  [
+                                               85
+                                           ]
+                               },
+                      "non-empty queue":  {
+                                              "out":  [
+                                                          115
+                                                      ],
+                                              "in":  [
+
+                                                     ]
+                                          },
+                      "chunk semantics":  {
+                                              "in":  [
+                                                         32
+                                                     ],
+                                              "out":  [
+
+                                                      ]
+                                          },
+                      "summaries":  {
+                                        "in":  [
+
+                                               ],
+                                        "out":  [
+                                                    8
+                                                ]
+                                    },
+                      "design":  {
+                                     "out":  [
+                                                 39,
+                                                 105
+                                             ],
+                                     "in":  [
+
+                                            ]
+                                 },
+                      "averaging":  {
+                                        "in":  [
+                                                   35
+                                               ],
+                                        "out":  [
+                                                    31,
+                                                    36
+                                                ]
+                                    },
+                      "chunk_text":  {
+                                         "in":  [
+
+                                                ],
+                                         "out":  [
+                                                     48,
+                                                     49
+                                                 ]
+                                     },
+                      "LLM to analyze clusters":  {
+                                                      "in":  [
+                                                                 24
+                                                             ],
+                                                      "out":  [
+
+                                                              ]
+                                                  },
+                      "temperature=0.3":  {
+                                              "in":  [
+                                                         14,
+                                                         68
+                                                     ],
+                                              "out":  [
+
+                                                      ]
+                                          },
+                      "processor exit":  {
+                                             "out":  [
+                                                         104
+                                                     ],
+                                             "in":  [
+
+                                                    ]
+                                         },
+                      "one vector":  {
+                                         "in":  [
+
+                                                ],
+                                         "out":  [
+                                                     32
+                                                 ]
+                                     },
+                      "matching":  {
+                                       "in":  [
+
+                                              ],
+                                       "out":  [
+                                                   26,
+                                                   29
+                                               ]
+                                   },
+                      "result.vector":  {
+                                            "in":  [
+                                                       0,
+                                                       2,
+                                                       47
+                                                   ],
+                                            "out":  [
+
+                                                    ]
+                                        },
                       "if any chunk matches well":  {
                                                         "in":  [
 
@@ -1122,7 +1187,227 @@
                                                         "out":  [
                                                                     52
                                                                 ]
-                                                    }
+                                                    },
+                      "story":  {
+                                    "in":  [
+                                               53,
+                                               55,
+                                               56,
+                                               57,
+                                               58
+                                           ],
+                                    "out":  [
+
+                                            ]
+                                },
+                      "f\"\\n\u0027` and line 794 is `\u0027  [red]ERROR: {e}[/red]\"":  {
+                                                                                             "in":  [
+
+                                                                                                    ],
+                                                                                             "out":  [
+                                                                                                         51
+                                                                                                     ]
+                                                                                         },
+                      "\"article\"":  {
+                                          "in":  [
+                                                     1
+                                                 ],
+                                          "out":  [
+
+                                                  ]
+                                      },
+                      "type: embedding":  {
+                                              "in":  [
+
+                                                     ],
+                                              "out":  [
+                                                          12
+                                                      ]
+                                          },
+                      "LLM":  {
+                                  "in":  [
+                                             65
+                                         ],
+                                  "out":  [
+
+                                          ]
+                              },
+                      "no matches":  {
+                                         "in":  [
+                                                    26
+                                                ],
+                                         "out":  [
+                                                     27
+                                                 ]
+                                     },
+                      "last item":  {
+                                        "out":  [
+                                                    121
+                                                ],
+                                        "in":  [
+
+                                               ]
+                                    },
+                      "queue file via jq append":  {
+                                                       "out":  [
+
+                                                               ],
+                                                       "in":  [
+                                                                  112
+                                                              ]
+                                                   },
+                      "1 second LLM call":  {
+                                                "in":  [
+
+                                                       ],
+                                                "out":  [
+                                                            13
+                                                        ]
+                                            },
+                      "ins.id":  {
+                                     "in":  [
+
+                                            ],
+                                     "out":  [
+                                                 74
+                                             ]
+                                 },
+                      "260ms each":  {
+                                         "in":  [
+
+                                                ],
+                                         "out":  [
+                                                     90,
+                                                     95
+                                                 ]
+                                     },
+                      "but then batch calls work":  {
+                                                        "in":  [
+                                                                   87,
+                                                                   92
+                                                               ],
+                                                        "out":  [
+
+                                                                ]
+                                                    },
+                      "this uses embeddings":  {
+                                                   "in":  [
+
+                                                          ],
+                                                   "out":  [
+                                                               19
+                                                           ]
+                                               },
+                      "kb":  {
+                                 "in":  [
+                                            45,
+                                            76,
+                                            77,
+                                            78,
+                                            79
+                                        ],
+                                 "out":  [
+
+                                         ]
+                             },
+                      "chunk_embedding":  {
+                                              "in":  [
+                                                         49
+                                                     ],
+                                              "out":  [
+
+                                                      ]
+                                          },
+                      "slipped requests":  {
+                                               "out":  [
+
+                                                       ],
+                                               "in":  [
+                                                          110
+                                                      ]
+                                           },
+                      "text: str":  {
+                                        "in":  [
+                                                   69,
+                                                   70
+                                               ],
+                                        "out":  [
+
+                                                ]
+                                    },
+                      "f\"\\n  [red]ERROR: {e}[/red]\"":  {
+                                                              "in":  [
+
+                                                                     ],
+                                                              "out":  [
+                                                                          50
+                                                                      ]
+                                                          },
+                      "result":  {
+                                     "in":  [
+                                                74
+                                            ],
+                                     "out":  [
+
+                                             ]
+                                 },
+                      "switching":  {
+                                        "in":  [
+
+                                               ],
+                                        "out":  [
+                                                    61
+                                                ]
+                                    },
+                      "FAISS":  {
+                                    "in":  [
+
+                                           ],
+                                    "out":  [
+                                                67
+                                            ]
+                                },
+                      "queue: 12256ms":  {
+                                             "in":  [
+
+                                                    ],
+                                             "out":  [
+                                                         5
+                                                     ]
+                                         },
+                      "last item flag":  {
+                                             "out":  [
+
+                                                     ],
+                                             "in":  [
+                                                        120
+                                                    ]
+                                         },
+                      "triples":  {
+                                      "in":  [
+                                                 23
+                                             ],
+                                      "out":  [
+
+                                              ]
+                                  },
+                      "prompt":  {
+                                     "in":  [
+
+                                            ],
+                                     "out":  [
+                                                 14,
+                                                 68
+                                             ]
+                                 },
+                      "different text sources":  {
+                                                     "in":  [
+                                                                28
+                                                            ],
+                                                     "out":  [
+
+                                                             ]
+                                                 }
                   },
     "validation_queue":  [
 
@@ -1131,16 +1416,16 @@
     "project_root":  "C:/Users/jpswi/personal projects/RSSsummarizer",
     "sessions":  {
                      "b83ca0cf-6f48-4726-b27f-0daeab98089d":  {
-                                                                  "last_turn":  55,
-                                                                  "last_active":  "2026-01-18T09:53:42.3617728-08:00",
+                                                                  "last_turn":  56,
+                                                                  "last_active":  "2026-01-18T09:57:21.7771989-08:00",
                                                                   "last_dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer"
                                                               }
                  },
     "metadata":  {
-                     "last_turn":  55,
+                     "last_turn":  56,
                      "cycles_found":  1,
-                     "total_connected":  36,
-                     "total_orphans":  62
+                     "total_connected":  40,
+                     "total_orphans":  78
                  },
     "edges":  [
                   {
@@ -2161,6 +2446,206 @@
                       "sub":  "cli.py with 31 items",
                       "obj":  "cli_constitution.py with 31 items after 2 timeouts",
                       "pred":  "is",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  56,
+                      "timestamp":  "2026-01-18T09:57:21.7771989-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "gap",
+                      "obj":  "documentation run",
+                      "pred":  "occurred in",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  56,
+                      "timestamp":  "2026-01-18T09:57:21.7771989-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "gap",
+                      "obj":  "premature processor exit",
+                      "pred":  "caused by",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  56,
+                      "timestamp":  "2026-01-18T09:57:21.7771989-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "processor exit",
+                      "obj":  "intentional design",
+                      "pred":  "is",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  56,
+                      "timestamp":  "2026-01-18T09:57:21.7771989-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "design",
+                      "obj":  "requestor ensures detection",
+                      "pred":  "requires",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  56,
+                      "timestamp":  "2026-01-18T09:57:21.7771989-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "detection",
+                      "obj":  "spawn or wake",
+                      "pred":  "happens via",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  56,
+                      "timestamp":  "2026-01-18T09:57:21.7771989-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "request",
+                      "obj":  "next client",
+                      "pred":  "sits until",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  56,
+                      "timestamp":  "2026-01-18T09:57:21.7771989-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "issue",
+                      "obj":  "orphaned requests",
+                      "pred":  "is",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  56,
+                      "timestamp":  "2026-01-18T09:57:21.7771989-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "clients",
+                      "obj":  "timing windows",
+                      "pred":  "cause",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  56,
+                      "timestamp":  "2026-01-18T09:57:21.7771989-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "windows",
+                      "obj":  "slipped requests",
+                      "pred":  "allow",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  56,
+                      "timestamp":  "2026-01-18T09:57:21.7771989-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "lifecycle",
+                      "obj":  "investigation",
+                      "pred":  "needs",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  56,
+                      "timestamp":  "2026-01-18T09:57:21.7771989-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "request",
+                      "obj":  "queue file via jq append",
+                      "pred":  "added to",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  56,
+                      "timestamp":  "2026-01-18T09:57:21.7771989-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "script",
+                      "obj":  "queue state before add",
+                      "pred":  "checks",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  56,
+                      "timestamp":  "2026-01-18T09:57:21.7771989-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "spawn condition",
+                      "obj":  "empty queue + first position",
+                      "pred":  "requires",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  56,
+                      "timestamp":  "2026-01-18T09:57:21.7771989-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "non-empty queue",
+                      "obj":  "lock state",
+                      "pred":  "checks",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  56,
+                      "timestamp":  "2026-01-18T09:57:21.7771989-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "lock check",
+                      "obj":  "dir existence + kill -0",
+                      "pred":  "uses",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  56,
+                      "timestamp":  "2026-01-18T09:57:21.7771989-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "orphan detection",
+                      "obj":  "spawn",
+                      "pred":  "triggers",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  56,
+                      "timestamp":  "2026-01-18T09:57:21.7771989-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "processor",
+                      "obj":  "atomic mkdir",
+                      "pred":  "acquires lock via",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  56,
+                      "timestamp":  "2026-01-18T09:57:21.7771989-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "processor",
+                      "obj":  "while queue not empty",
+                      "pred":  "processes",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  56,
+                      "timestamp":  "2026-01-18T09:57:21.7771989-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "batch",
+                      "obj":  "last item flag",
+                      "pred":  "tracks",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  56,
+                      "timestamp":  "2026-01-18T09:57:21.7771989-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "last item",
+                      "obj":  "commit to exit",
+                      "pred":  "triggers",
                       "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
                   }
               ]
