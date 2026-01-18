@@ -82,26 +82,82 @@ The safe-model-load gateway (`scripts/safe-model-load.sh` in this project) handl
 3. **Race condition prevention** - Coordinates concurrent requests safely
 
 ### Rules
-1. **NEVER make direct API calls to LM Studio/Ollama** - No `httpx.post(...localhost:1234...)` for text
-2. **Use gateway for ALL request types** - Text, embedding, vision all go through gateway
-3. **Batch by phase, not by item** - Submit ALL text requests first, then ALL embeddings
-4. **Gateway handles model switching** - Don't add your own `ensure_text_model()` calls
+1. **Text requests go through gateway** - Use `gateway.request_text()` or `gateway.submit_text()`
+2. **Single embeddings go through gateway** - Use `gateway.request_embedding()` for model loading
+3. **Batch embeddings use DIRECT API** - See "CRITICAL: Embedding Batching" section below
+4. **Batch by phase, not by item** - Submit ALL text requests first, then ALL embeddings
+5. **Gateway handles model switching** - Don't add your own `ensure_text_model()` calls
 
 ### Correct Pattern
 ```python
 from .gateway import get_gateway
 
-# WRONG: Direct API call
-response = httpx.post("http://localhost:1234/v1/chat/completions", ...)
-
-# RIGHT: Gateway request
+# TEXT: Always use gateway
 gateway = get_gateway()
 response = gateway.request_text("Your prompt here")
 
-# RIGHT: Batched requests (efficient)
-results = gateway.batch_text(list_of_prompts)
-embeddings = gateway.batch_embedding(list_of_texts)
+# EMBEDDING (single): Use gateway to trigger model loading
+embedding = gateway.request_embedding(text)
+
+# EMBEDDING (batch): Use EmbeddingService.embed_batch() which calls LM Studio API directly
+# This is the ONLY exception to "use gateway for everything"
+from .embeddings import EmbeddingService
+service = EmbeddingService()
+results = service.embed_batch(list_of_texts)  # ONE API call for ALL texts
 ```
+
+## CRITICAL: Embedding Batching Architecture
+
+**Embeddings are the #1 bottleneck. This section explains why and how to fix it.**
+
+### The Problem (DO NOT REPEAT THIS MISTAKE)
+
+Gateway subprocess calls have ~7 seconds overhead PER request:
+1. Python writes prompt to temp file
+2. Subprocess spawns bash script
+3. Bash script reads file, makes API call, writes response
+4. Python polls for response file, reads it
+
+If you call `gateway.request_embedding()` 10 times, that's 70+ seconds of overhead for embeddings that take milliseconds each.
+
+**Symptoms of this bug:**
+- LM Studio shows "ready" 99% of the time during embedding phase
+- Embeddings complete instantly (one frame) then nothing for 7+ seconds
+- Batch of 10 embeddings takes 70+ seconds instead of <3 seconds
+
+### The Solution: TRUE Server-Side Batching
+
+The OpenAI-compatible `/v1/embeddings` API accepts an ARRAY of texts:
+```json
+{"input": ["text1", "text2", "text3", ...], "model": "model-name"}
+```
+
+And returns ALL embeddings in ONE response. This is TRUE batching.
+
+**Implementation** (`embedding_providers.py:LMStudioProvider.embed_batch`):
+1. Makes ONE direct `httpx.post()` call to LM Studio with `input` as array
+2. Gets ALL embeddings back in one response
+3. No subprocess overhead, no file-based IPC
+
+**Performance:**
+- Gateway approach: ~7 seconds per embedding (subprocess overhead)
+- Direct batch API: ~260ms per embedding (10 in 2.6 seconds)
+- That's a **27x improvement**
+
+### Rules for Embedding Code
+
+1. **Use `embedding_service.embed_batch(texts)`** - This calls the API directly with array input
+2. **NEVER loop with `embed_text()` one at a time** - Each call has 7s gateway overhead
+3. **Model loading**: Call `gateway.request_embedding("trigger")` ONCE before batch operations to ensure embedding model is loaded
+4. **The pipeline's pre-embedding phase handles model loading** - `ensure_categories_initialized()` makes a gateway call
+
+### Where Batch Embedding is Used
+
+- `_run_pre_embedding_phase()` - insights and stories (Step 2)
+- `_run_embedding_phase()` - articles (Step 4)
+- `_run_connection_detection()` - new insights (Step 4.5)
+
+**If you see a loop calling `embed_text()` individually, that's a bug. Fix it to use `embed_batch()`.**
 
 ### Pipeline Structure
 The report pipeline MUST be structured in phases:
