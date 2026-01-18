@@ -430,6 +430,7 @@ def _run_pre_embedding_phase(
         console.print(f"  [green]Using {provider_info.get('provider', 'unknown')}[/green]")
 
     # Initialize category embeddings (seeded once, then loaded from FAISS)
+    # This also triggers embedding model loading via gateway
     console.print("  [dim]Initializing trend categories...[/dim]", end="")
     if ensure_categories_initialized(embedding_service):
         console.print(" [green]ready[/green]")
@@ -437,6 +438,7 @@ def _run_pre_embedding_phase(
         console.print(" [yellow]failed (trend tagging will be limited)[/yellow]")
 
     # Embed insights first (these are what detect_connections compares against)
+    # Uses TRUE batch embedding - one API call per batch, not one per insight
     insights = kb.get_insights()
     insights_needing_embedding = [i for i in insights if not embedding_service.get_embedding(i.id, "insight")]
 
@@ -450,18 +452,28 @@ def _run_pre_embedding_phase(
             batch_errors = 0
             limit_reached = False
 
-            for insight in batch:
-                if limit > 0 and progress.total_processed + batch_success >= limit:
-                    limit_reached = True
-                    break
-                try:
-                    result = embedding_service.embed_text(insight.content)
+            # Check limit before processing batch
+            if limit > 0 and progress.total_processed >= limit:
+                limit_reached = True
+                progress.end_batch(0, 0, stopped=True)
+                break
+
+            try:
+                # TRUE batch embedding - one API call for all texts in batch
+                texts = [insight.content for insight in batch]
+                results = embedding_service.embed_batch(texts)
+
+                # Save each result
+                for insight, result in zip(batch, results):
+                    if limit > 0 and progress.total_processed + batch_success >= limit:
+                        limit_reached = True
+                        break
                     embedding_service.save_embedding(insight.id, "insight", result)
                     batch_success += 1
-                except Exception as e:
-                    console.print(f"\n  [red]ERROR: {e}[/red]", end="")
-                    stats["errors"] += 1
-                    batch_errors += 1
+            except Exception as e:
+                console.print(f"\n  [red]Batch embedding failed: {e}[/red]", end="")
+                stats["errors"] += len(batch)
+                batch_errors = len(batch)
 
             progress.end_batch(batch_success, batch_errors, stopped=limit_reached)
             if limit_reached:
