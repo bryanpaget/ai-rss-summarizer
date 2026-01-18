@@ -91,8 +91,10 @@ def call_llm(prompt):
         unix_prompt = prompt_file.replace('\\', '/').replace('C:', '/c')
         unix_script = script_path.replace('\\', '/').replace('C:', '/c')
         
+        # Use bash -c with quoted paths to handle spaces in path
+        cmd = f'"{unix_script}" request text --prompt-file "{unix_prompt}"'
         result = subprocess.run(
-            ['bash', unix_script, 'request', 'text', '--prompt-file', unix_prompt],
+            ['bash', '-c', cmd],
             capture_output=True, text=True, timeout=120
         )
         
