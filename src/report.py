@@ -793,12 +793,6 @@ def _run_embedding_phase(
                 except Exception as e:
                     console.print(f"
   [red]ERROR: {e}[/red]", end="")
-                except Exception as e:
-                    console.print(f"
-  [red]ERROR: {e}[/red]", end="")
-                except Exception as e:
-                    console.print(f"
-  [red]ERROR: {e}[/red]", end="")
                     stats["errors"] += 1
                     batch_errors += 1
 
