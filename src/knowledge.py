@@ -2706,6 +2706,8 @@ Instructions:
    - Signal tags (topics, themes, categories)
    - Whether this appears to be an advertisement/sponsored content
    - A concise summary (2-3 sentences)
+   - A headline (rewritten title that captures the core story, for grouping related articles)
+   - Keywords (5-10 key terms/entities from the article)
 
 Return as JSON with this exact structure:
 {{
