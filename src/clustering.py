@@ -80,7 +80,7 @@ class StoryClusterer:
         best_score = 0.0
 
         for story in active_stories:
-            score = self._calculate_similarity(article_embedding, story)
+            score = self._calculate_similarity(article_embedding, story, article.id)
             if score > best_score:
                 best_score = score
                 best_match = story
@@ -109,7 +109,7 @@ class StoryClusterer:
         best_score = 0.0
 
         for story in active_stories:
-            score = self._calculate_similarity(embedding, story)
+            score = self._calculate_similarity(embedding, story, article.id)
             if score > best_score:
                 best_score = score
                 best_match = story
