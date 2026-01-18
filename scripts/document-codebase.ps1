@@ -281,6 +281,12 @@ $Content
 For each item, output ONE LINE:
 Lines [START]-[END]: [TYPE] ``[NAME]`` - [DESCRIPTION]
 
+CRITICAL: The examples above are FORMAT DEMONSTRATIONS ONLY. Do NOT copy content from examples.
+Analyze ONLY the actual file content between BEGIN/END markers.
+If the file has no imports, do not document imports.
+If the file has no constants, do not document constants.
+Every line number you output MUST exist in the actual file content above.
+
 Document ALL items. Start from line 1. Include every function, class, and method.
 "@
 
