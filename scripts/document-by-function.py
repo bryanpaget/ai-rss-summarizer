@@ -78,22 +78,13 @@ def extract_functions(filepath):
     return results
 
 def call_llm(prompt):
-    """Call LLM directly via LM Studio API."""
-    import httpx
+    """Call LLM via project's gateway (handles model loading)."""
+    from gateway import get_gateway
 
     try:
-        response = httpx.post(
-            "http://localhost:1234/v1/chat/completions",
-            json={
-                "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0.3,
-                "max_tokens": 500
-            },
-            timeout=120.0
-        )
-        response.raise_for_status()
-        data = response.json()
-        return data['choices'][0]['message']['content']
+        gateway = get_gateway()
+        response = gateway.request_text(prompt)
+        return response
     except Exception as e:
         return f"Error: {e}"
 
