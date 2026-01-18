@@ -232,6 +232,35 @@ Then:
 
 ---
 
+## IMPLEMENTATION PLAN: Process-Once Architecture
+
+**Status: IN PROGRESS**
+
+### Phase 1: Fix Extraction (ONE LLM call gives everything)
+- [ ] Add `summary`, `headline`, `keywords` to `ConsolidatedExtractionResult` dataclass
+- [ ] Modify extraction prompt to return all fields in one call
+- [ ] Add `headline TEXT`, `keywords TEXT` columns to articles table (migration)
+- [ ] Update `_run_llm_phase` to save headline/keywords to storage
+- [ ] Test: verify extraction returns all fields
+
+### Phase 2: Fix Story Creation (ZERO LLM calls)
+- [ ] Rewrite `create_new_story` to use article's extracted data
+- [ ] Remove the 3 LLM prompt functions (`_generate_story_title`, `_generate_story_description`, `_extract_keywords`)
+- [ ] Test: verify no LLM calls during story creation
+
+### Phase 3: Fix Chunk Embeddings (Better matching)
+- [ ] Create `article_chunks` table schema
+- [ ] Modify `embed_article` to store each chunk embedding separately
+- [ ] Modify story matching to compare chunk-to-chunk
+- [ ] Test: verify articles with shared subtopics actually match
+
+### Validation
+- [ ] Run `rss report -m 5` end-to-end
+- [ ] Verify story matching produces actual matches (not 100% "no match")
+- [ ] Verify no extra LLM calls after extraction phase
+
+---
+
 ## CRITICAL: Validate Changes by Running Actual Commands
 
 **Unit tests passing does NOT mean the code works. Always run the actual user-facing command.**
