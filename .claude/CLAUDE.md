@@ -189,6 +189,26 @@ Then:
 
 **Fix:** Story metadata should come from article extraction, not separate LLM calls.
 
+### Embedding Architecture Problem
+
+**Current behavior** (`embeddings.py:embed_text`):
+1. If text > 2000 chars, chunk at sentence boundaries
+2. Embed each chunk separately
+3. AVERAGE the chunk embeddings into ONE vector
+4. DISCARD the individual chunk embeddings
+
+**Problem:** Averaging destroys fine-grained matching:
+- Article about topics A, B, C gets averaged into mush
+- Another article about topics C, D, E also averaged
+- The shared topic C is diluted by the other topics
+- Match score is low even though they share content
+
+**What should happen:**
+- Store EACH chunk embedding separately
+- Match by finding chunks that are similar
+- Articles match if ANY chunks align, not just overall average
+- More aligned chunks = stronger correlation
+
 ---
 
 ## CRITICAL: Validate Changes by Running Actual Commands
