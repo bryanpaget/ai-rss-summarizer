@@ -56,17 +56,16 @@ $fileTypeConfigs = @{
 - global: Module-level code that executes on import
 "@
         Examples = @"
-Lines 1-1: global ``module_docstring`` - Module-level docstring describing purpose
-Lines 3-5: import-block ``imports`` - Standard library imports (when present)
-Lines 7-9: constant ``DEFAULT_TIMEOUT`` - Module constant (when present)
-Lines 14-45: class ``EmbeddingProvider`` - Abstract base class for embedding backends. Defines embed() and embed_batch() interface
-Lines 16-20: method ``EmbeddingProvider.embed`` - Abstract method: generates embedding vector for single text input
-Lines 22-30: method ``EmbeddingProvider.embed_batch`` - Abstract method: batch embedding, returns list of vectors
-Lines 47-120: class ``LMStudioProvider`` - Concrete provider using LM Studio API at localhost:1234
-Lines 49-58: method ``LMStudioProvider.__init__`` - Initializes with url, model, timeout. Sets up model loading flag
-Lines 60-75: method ``LMStudioProvider.embed`` - Single text embedding via gateway. Raises EmbeddingProviderError on failure
-Lines 77-120: method ``LMStudioProvider.embed_batch`` - TRUE batch embedding: one API call for all texts. Critical for performance
-Lines 122-140: function ``get_provider`` - Factory function: returns appropriate provider based on availability
+--- EXAMPLE INPUT ---
+1	"""Calculator module."""
+2	
+3	def add(a, b):
+4	    return a + b
+--- END EXAMPLE INPUT ---
+
+Correct output:
+Lines 1-1: global ``module_docstring`` - Module docstring
+Lines 3-4: function ``add`` - Adds two numbers
 "@
         Guidance = @"
 PYTHON-SPECIFIC RULES:
