@@ -1,5 +1,13 @@
 ﻿{
     "adjacency":  {
+                      "not reading instructions":  {
+                                                       "out":  [
+
+                                                               ],
+                                                       "in":  [
+                                                                  135
+                                                              ]
+                                                   },
                       "while queue not empty":  {
                                                     "in":  [
                                                                119
@@ -8,6 +16,14 @@
 
                                                             ]
                                                 },
+                      "f\"\\n\u0027` and line 794 is `\u0027  [red]ERROR: {e}[/red]\"":  {
+                                                                                             "in":  [
+
+                                                                                                    ],
+                                                                                             "out":  [
+                                                                                                         51
+                                                                                                     ]
+                                                                                         },
                       "insights":  {
                                        "in":  [
 
@@ -33,15 +49,6 @@
 
                                               ]
                                   },
-                      "e.g.":  {
-                                   "in":  [
-
-                                          ],
-                                   "out":  [
-                                               17,
-                                               125
-                                           ]
-                               },
                       "clustering and analysis":  {
                                                       "in":  [
                                                                  64
@@ -99,6 +106,14 @@
 
                                                                   ]
                                                       },
+                      "sudo command":  {
+                                           "out":  [
+
+                                                   ],
+                                           "in":  [
+                                                      127
+                                                  ]
+                                       },
                       "response files":  {
                                              "in":  [
                                                         82
@@ -107,6 +122,14 @@
 
                                                      ]
                                          },
+                      "agent environment":  {
+                                                "out":  [
+
+                                                        ],
+                                                "in":  [
+                                                           133
+                                                       ]
+                                            },
                       "collect all texts":  {
                                                 "in":  [
 
@@ -124,13 +147,21 @@
 
                                              ]
                                  },
+                      "sudo absence":  {
+                                           "out":  [
+                                                       128
+                                                   ],
+                                           "in":  [
+
+                                                  ]
+                                       },
                       "right-click":  {
-                                          "out":  [
-                                                      126
-                                                  ],
                                           "in":  [
 
-                                                 ]
+                                                 ],
+                                          "out":  [
+                                                      126
+                                                  ]
                                       },
                       "small batches: 1":  {
                                                "in":  [
@@ -149,14 +180,14 @@
                                                        98
                                                    ]
                                        },
-                      "intentional design":  {
-                                                 "in":  [
-                                                            104
-                                                        ],
-                                                 "out":  [
+                      "Windows security model":  {
+                                                     "out":  [
 
-                                                         ]
-                                             },
+                                                             ],
+                                                     "in":  [
+                                                                129
+                                                            ]
+                                                 },
                       "averaged embeddings":  {
                                                   "in":  [
                                                              30
@@ -183,6 +214,15 @@
 
                                                           ]
                                               },
+                      "but then batch calls work":  {
+                                                        "in":  [
+                                                                   87,
+                                                                   92
+                                                               ],
+                                                        "out":  [
+
+                                                                ]
+                                                    },
                       "idx":  {
                                   "in":  [
 
@@ -277,6 +317,14 @@
                                                   112
                                               ]
                                   },
+                      "explicit documentation":  {
+                                                     "out":  [
+
+                                                             ],
+                                                     "in":  [
+                                                                134
+                                                            ]
+                                                 },
                       "using extracted metadata":  {
                                                        "in":  [
 
@@ -311,14 +359,23 @@
                                                            35
                                                        ]
                                            },
-                      "documentation run":  {
-                                                "in":  [
-                                                           102
-                                                       ],
-                                                "out":  [
+                      "poor granularity":  {
+                                               "in":  [
+                                                          29
+                                                      ],
+                                               "out":  [
+                                                           30
+                                                       ]
+                                           },
+                      "tagging":  {
+                                      "in":  [
 
-                                                        ]
-                                            },
+                                             ],
+                                      "out":  [
+                                                  9,
+                                                  10
+                                              ]
+                                  },
                       "save each":  {
                                         "in":  [
                                                    86
@@ -327,6 +384,14 @@
 
                                                 ]
                                     },
+                      "FAISS":  {
+                                    "in":  [
+
+                                           ],
+                                    "out":  [
+                                                67
+                                            ]
+                                },
                       "queue: 11572ms":  {
                                              "in":  [
 
@@ -367,14 +432,6 @@
                                                      116
                                                  ]
                                      },
-                      "chunk_index":  {
-                                          "in":  [
-                                                     44
-                                                 ],
-                                          "out":  [
-
-                                                  ]
-                                      },
                       "dir existence + kill -0":  {
                                                       "in":  [
                                                                  116
@@ -407,14 +464,14 @@
 
                                                     ]
                                         },
-                      "Run as Administrator":  {
-                                                   "out":  [
+                      "user":  {
+                                   "out":  [
+                                               127
+                                           ],
+                                   "in":  [
 
-                                                           ],
-                                                   "in":  [
-                                                              126
-                                                          ]
-                                               },
+                                          ]
+                               },
                       "issue":  {
                                     "in":  [
 
@@ -474,6 +531,14 @@
                                                   109
                                               ]
                                   },
+                      "environment confusion":  {
+                                                    "out":  [
+
+                                                            ],
+                                                    "in":  [
+                                                               131
+                                                           ]
+                                                },
                       "embeddings":  {
                                          "in":  [
 
@@ -482,6 +547,22 @@
                                                      34
                                                  ]
                                      },
+                      "triples":  {
+                                      "in":  [
+                                                 23
+                                             ],
+                                      "out":  [
+
+                                              ]
+                                  },
+                      "bash-centric thinking":  {
+                                                    "out":  [
+
+                                                            ],
+                                                    "in":  [
+                                                               132
+                                                           ]
+                                                },
                       "one at a time":  {
                                             "in":  [
 
@@ -508,6 +589,14 @@
 
                                                    ]
                                        },
+                      "bash thinking":  {
+                                            "out":  [
+                                                        133
+                                                    ],
+                                            "in":  [
+
+                                                   ]
+                                        },
                       "orphaned requests":  {
                                                 "in":  [
                                                            108
@@ -516,6 +605,14 @@
 
                                                         ]
                                             },
+                      "failure":  {
+                                      "out":  [
+                                                  135
+                                              ],
+                                      "in":  [
+                                                 136
+                                             ]
+                                  },
                       "5.4/sec":  {
                                       "in":  [
                                                  91,
@@ -577,6 +674,14 @@
 
                                                       ]
                                           },
+                      "Windows security":  {
+                                               "out":  [
+                                                           130
+                                                       ],
+                                               "in":  [
+
+                                                      ]
+                                           },
                       "processor":  {
                                         "in":  [
 
@@ -603,14 +708,6 @@
                                                         37
                                                     ]
                                         },
-                      "tags":  {
-                                   "in":  [
-                                              8
-                                          ],
-                                   "out":  [
-
-                                           ]
-                               },
                       "reading response":  {
                                                "in":  [
                                                           72
@@ -630,6 +727,14 @@
 
                                                  ]
                                      },
+                      "confusion":  {
+                                        "out":  [
+                                                    132
+                                                ],
+                                        "in":  [
+
+                                               ]
+                                    },
                       "FAISS math":  {
                                          "in":  [
 
@@ -787,15 +892,15 @@
 
                                                           ]
                                               },
-                      "tagging":  {
-                                      "in":  [
+                      "end=\"\"":  {
+                                       "in":  [
+                                                  50,
+                                                  51
+                                              ],
+                                       "out":  [
 
-                                             ],
-                                      "out":  [
-                                                  9,
-                                                  10
-                                              ]
-                                  },
+                                               ]
+                                   },
                       "LLM to analyze clusters":  {
                                                       "in":  [
                                                                  24
@@ -812,6 +917,14 @@
 
                                                               ]
                                                   },
+                      "assumption":  {
+                                         "out":  [
+                                                     136
+                                                 ],
+                                         "in":  [
+
+                                                ]
+                                     },
                       "long running":  {
                                            "in":  [
                                                       84
@@ -836,6 +949,14 @@
 
                                                                                          ]
                                                                              },
+                      "chunk preservation":  {
+                                                 "in":  [
+                                                            43
+                                                        ],
+                                                 "out":  [
+
+                                                         ]
+                                             },
                       "knowledge extraction":  {
                                                    "in":  [
                                                               9,
@@ -936,6 +1057,18 @@
 
                                                ]
                                    },
+                      "kb":  {
+                                 "in":  [
+                                            45,
+                                            76,
+                                            77,
+                                            78,
+                                            79
+                                        ],
+                                 "out":  [
+
+                                         ]
+                             },
                       "lost semantics":  {
                                              "in":  [
 
@@ -980,15 +1113,6 @@
                                               103
                                           ]
                               },
-                      "end=\"\"":  {
-                                       "in":  [
-                                                  50,
-                                                  51
-                                              ],
-                                       "out":  [
-
-                                               ]
-                                   },
                       "cluster insights":  {
                                                "in":  [
 
@@ -1045,6 +1169,14 @@
 
                                                                    ]
                                                        },
+                      "PowerShell design":  {
+                                                "out":  [
+                                                            129
+                                                        ],
+                                                "in":  [
+                                                           128
+                                                       ]
+                                            },
                       "spawn":  {
                                     "in":  [
                                                117
@@ -1061,9 +1193,9 @@
                                                            117
                                                        ]
                                            },
-                      "chunk preservation":  {
+                      "intentional design":  {
                                                  "in":  [
-                                                            43
+                                                            104
                                                         ],
                                                  "out":  [
 
@@ -1162,6 +1294,14 @@
 
                                                       ]
                                           },
+                      "wrong instructions":  {
+                                                 "out":  [
+                                                             131
+                                                         ],
+                                                 "in":  [
+
+                                                        ]
+                                             },
                       "processor exit":  {
                                              "in":  [
 
@@ -1217,14 +1357,15 @@
 
                                             ]
                                 },
-                      "f\"\\n\u0027` and line 794 is `\u0027  [red]ERROR: {e}[/red]\"":  {
-                                                                                             "in":  [
+                      "e.g.":  {
+                                   "in":  [
 
-                                                                                                    ],
-                                                                                             "out":  [
-                                                                                                         51
-                                                                                                     ]
-                                                                                         },
+                                          ],
+                                   "out":  [
+                                               17,
+                                               125
+                                           ]
+                               },
                       "\"article\"":  {
                                           "in":  [
                                                      1
@@ -1233,21 +1374,21 @@
 
                                                   ]
                                       },
-                      "function calling LLM":  {
-                                                   "in":  [
-                                                              62
-                                                          ],
-                                                   "out":  [
+                      "documentation run":  {
+                                                "in":  [
+                                                           102
+                                                       ],
+                                                "out":  [
 
-                                                           ]
-                                               },
-                      "poor granularity":  {
-                                               "in":  [
-                                                          29
-                                                      ],
+                                                        ]
+                                            },
+                      "miscommunication":  {
                                                "out":  [
-                                                           30
-                                                       ]
+                                                           134
+                                                       ],
+                                               "in":  [
+
+                                                      ]
                                            },
                       "4":  {
                                 "in":  [
@@ -1314,15 +1455,14 @@
                                                      95
                                                  ]
                                      },
-                      "but then batch calls work":  {
-                                                        "in":  [
-                                                                   87,
-                                                                   92
-                                                               ],
-                                                        "out":  [
+                      "chunk_index":  {
+                                          "in":  [
+                                                     44
+                                                 ],
+                                          "out":  [
 
-                                                                ]
-                                                    },
+                                                  ]
+                                      },
                       "this uses embeddings":  {
                                                    "in":  [
 
@@ -1339,18 +1479,14 @@
 
                                                                        ]
                                                            },
-                      "kb":  {
-                                 "in":  [
-                                            45,
-                                            76,
-                                            77,
-                                            78,
-                                            79
-                                        ],
-                                 "out":  [
+                      "function calling LLM":  {
+                                                   "in":  [
+                                                              62
+                                                          ],
+                                                   "out":  [
 
-                                         ]
-                             },
+                                                           ]
+                                               },
                       "chunk_embedding":  {
                                               "in":  [
                                                          49
@@ -1416,14 +1552,14 @@
                                                     61
                                                 ]
                                     },
-                      "FAISS":  {
-                                    "in":  [
+                      "tags":  {
+                                   "in":  [
+                                              8
+                                          ],
+                                   "out":  [
 
-                                           ],
-                                    "out":  [
-                                                67
-                                            ]
-                                },
+                                           ]
+                               },
                       "queue: 12256ms":  {
                                              "in":  [
 
@@ -1432,6 +1568,14 @@
                                                          5
                                                      ]
                                          },
+                      "elevated process":  {
+                                               "out":  [
+
+                                                       ],
+                                               "in":  [
+                                                          130
+                                                      ]
+                                           },
                       "1 items":  {
                                       "in":  [
 
@@ -1448,14 +1592,14 @@
 
                                                      ]
                                          },
-                      "triples":  {
-                                      "in":  [
-                                                 23
-                                             ],
-                                      "out":  [
+                      "Run as Administrator":  {
+                                                   "in":  [
+                                                              126
+                                                          ],
+                                                   "out":  [
 
-                                              ]
-                                  },
+                                                           ]
+                                               },
                       "prompt":  {
                                      "in":  [
 
@@ -1489,16 +1633,16 @@
     "project_root":  "C:/Users/jpswi/personal projects/RSSsummarizer",
     "sessions":  {
                      "b83ca0cf-6f48-4726-b27f-0daeab98089d":  {
-                                                                  "last_turn":  74,
-                                                                  "last_active":  "2026-01-18T11:10:46.0592392-08:00",
+                                                                  "last_turn":  75,
+                                                                  "last_active":  "2026-01-18T11:11:23.7223186-08:00",
                                                                   "last_dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer"
                                                               }
                  },
     "metadata":  {
-                     "last_turn":  74,
-                     "cycles_found":  1,
-                     "total_connected":  41,
-                     "total_orphans":  80
+                     "last_turn":  75,
+                     "cycles_found":  2,
+                     "total_connected":  43,
+                     "total_orphans":  88
                  },
     "edges":  [
                   {
@@ -2769,6 +2913,106 @@
                       "sub":  "right-click",
                       "obj":  "Run as Administrator",
                       "pred":  "is",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  75,
+                      "timestamp":  "2026-01-18T11:11:23.7223186-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "user",
+                      "obj":  "sudo command",
+                      "pred":  "attempted",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  75,
+                      "timestamp":  "2026-01-18T11:11:23.7223186-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "sudo absence",
+                      "obj":  "PowerShell design",
+                      "pred":  "caused by",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  75,
+                      "timestamp":  "2026-01-18T11:11:23.7223186-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "PowerShell design",
+                      "obj":  "Windows security model",
+                      "pred":  "reflects",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  75,
+                      "timestamp":  "2026-01-18T11:11:23.7223186-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "Windows security",
+                      "obj":  "elevated process",
+                      "pred":  "requires",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  75,
+                      "timestamp":  "2026-01-18T11:11:23.7223186-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "wrong instructions",
+                      "obj":  "environment confusion",
+                      "pred":  "caused by",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  75,
+                      "timestamp":  "2026-01-18T11:11:23.7223186-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "confusion",
+                      "obj":  "bash-centric thinking",
+                      "pred":  "caused by",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  75,
+                      "timestamp":  "2026-01-18T11:11:23.7223186-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "bash thinking",
+                      "obj":  "agent environment",
+                      "pred":  "caused by",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  75,
+                      "timestamp":  "2026-01-18T11:11:23.7223186-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "miscommunication",
+                      "obj":  "explicit documentation",
+                      "pred":  "despite",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  75,
+                      "timestamp":  "2026-01-18T11:11:23.7223186-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "failure",
+                      "obj":  "not reading instructions",
+                      "pred":  "caused by",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  75,
+                      "timestamp":  "2026-01-18T11:11:23.7223186-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "assumption",
+                      "obj":  "failure",
+                      "pred":  "caused",
                       "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
                   }
               ]
