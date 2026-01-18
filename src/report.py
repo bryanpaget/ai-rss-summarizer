@@ -1199,57 +1199,79 @@ def _run_connection_detection(
     console.print(f"  [green]Found {len(clusters)} clusters[/green]")
 
     # =========================================================================
-    # PHASE 3: Analyze clusters (TEXT MODEL - submit all, then collect all)
+    # PHASE 3: Analyze clusters (TEXT MODEL - batched with sliding window)
     # =========================================================================
     from .gateway import get_gateway
 
     gateway = get_gateway()
-    console.print(f"  [dim]Analyzing {len(clusters)} clusters for themes and relationships...[/dim]")
 
     # Apply limit to clusters
     clusters_to_process = clusters[:limit] if limit > 0 else clusters
 
-    # --- STEP 3a: Build prompts and submit all ---
-    cluster_handles = []
-    for cluster in clusters_to_process:
-        prompt = build_cluster_analysis_prompt(cluster)
-        if prompt:
-            handle = gateway.submit_text(prompt, temperature=0.3)
-            cluster_handles.append((cluster, handle))
-
-    console.print(f"  [dim]Submitted {len(cluster_handles)} cluster analysis requests[/dim]")
-
-    # --- STEP 3b: Collect all responses and parse ---
+    # Process in batches to avoid timeout issues
+    # With 120s timeout, batches of 50 are safe (processor handles ~1/sec)
+    BATCH_SIZE = 50
     total_triples = 0
     total_connections = 0
+    total_llm_calls = 0
 
-    for i, (cluster, handle) in enumerate(cluster_handles):
-        console.print(f"    [dim]Cluster {i+1}/{len(cluster_handles)} ({len(cluster)} insights)...[/dim]", end="")
+    num_batches = (len(clusters_to_process) + BATCH_SIZE - 1) // BATCH_SIZE
+    console.print(f"  Analyzing {len(clusters_to_process)} clusters in {num_batches} batches...")
 
-        try:
-            response = gateway.collect_text(handle)
-            new_triples, connections = parse_cluster_analysis_response(response, cluster, kb)
+    for batch_idx in range(num_batches):
+        batch_start_idx = batch_idx * BATCH_SIZE
+        batch_end_idx = min(batch_start_idx + BATCH_SIZE, len(clusters_to_process))
+        batch_clusters = clusters_to_process[batch_start_idx:batch_end_idx]
 
-            if new_triples or connections:
-                console.print(f" [green]+{len(new_triples)} triples, {len(connections)} connections[/green]")
-                total_triples += len(new_triples)
-                total_connections += len(connections)
+        # Calculate ETA based on previous batches
+        if batch_idx > 0 and total_llm_calls > 0:
+            # Rough estimate: ~1 second per LLM call
+            remaining_clusters = len(clusters_to_process) - batch_start_idx
+            eta_str = f" [~{format_duration(remaining_clusters)} remaining]"
+        else:
+            eta_str = ""
 
-                # Show sample triples
-                for t in new_triples[:2]:
-                    console.print(f"      [cyan]{t.subject}[/cyan] -> {t.predicate} -> [cyan]{t.object}[/cyan]")
-            else:
-                console.print(f" [dim]no new knowledge[/dim]")
+        console.print(f"    [dim]Batch {batch_idx+1}/{num_batches} ({len(batch_clusters)} clusters){eta_str}...[/dim]")
 
-            # Update stats
-            stats["connections"] += len(connections)
-            stats["cluster_triples"] += len(new_triples)
+        # Submit batch
+        cluster_handles = []
+        for cluster in batch_clusters:
+            prompt = build_cluster_analysis_prompt(cluster)
+            if prompt:
+                handle = gateway.submit_text(prompt, temperature=0.3)
+                cluster_handles.append((cluster, handle))
+                total_llm_calls += 1
 
-        except Exception as e:
-            console.print(f" [red]ERROR: {e}[/red]")
-            stats["errors"] += 1
+        # Collect batch
+        batch_triples = 0
+        batch_connections = 0
+        batch_errors = 0
 
-    console.print(f"  [green]Added {total_triples} triples to knowledge graph[/green]")
+        for cluster, handle in cluster_handles:
+            try:
+                response = gateway.collect_text(handle)
+                new_triples, connections = parse_cluster_analysis_response(response, cluster, kb)
+
+                batch_triples += len(new_triples)
+                batch_connections += len(connections)
+                stats["connections"] += len(connections)
+                stats["cluster_triples"] += len(new_triples)
+
+            except Exception as e:
+                console.print(f"      [red]Cluster {batch_start_idx + cluster_handles.index((cluster, handle)) + 1} ERROR: {e}[/red]")
+                stats["errors"] += 1
+                batch_errors += 1
+
+        total_triples += batch_triples
+        total_connections += batch_connections
+
+        # Batch summary
+        if batch_errors > 0:
+            console.print(f"      [yellow]+{batch_triples} triples, {batch_connections} connections, {batch_errors} errors[/yellow]")
+        elif batch_triples > 0 or batch_connections > 0:
+            console.print(f"      [green]+{batch_triples} triples, {batch_connections} connections[/green]")
+
+    console.print(f"  [green]Added {total_triples} triples to knowledge graph ({total_llm_calls} LLM calls)[/green]")
     console.print(f"  [green]Found {total_connections} insight connections[/green]")
     console.print()
 
