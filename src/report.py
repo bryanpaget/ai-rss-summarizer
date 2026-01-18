@@ -563,6 +563,7 @@ def _run_llm_phase(
         console.print("  [dim]- Extracting insights and facts...[/dim]")
         try:
             extraction = extract_all_from_article(article, provider, kb)
+            total_llm_calls += 1  # extraction call
             insights = extraction.insights
             triples = extraction.new_triples
 
