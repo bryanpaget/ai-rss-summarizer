@@ -1,11 +1,11 @@
 """Document Python files by extracting functions first, then describing each."""
 import sys
 import ast
-import subprocess
-import tempfile
 import os
-import json
 from pathlib import Path
+
+# Add src to path for gateway import
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 def extract_functions(filepath):
     """Use AST to extract all functions/classes with exact line numbers."""
