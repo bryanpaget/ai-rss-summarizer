@@ -237,12 +237,20 @@ Respond with JSON:
     def create_new_story(self, article: Article) -> Story:
         """Create a new story from an article.
 
-        Also generates and stores embedding for the story for future similarity matching.
+        Uses article's ALREADY EXTRACTED metadata - NO LLM calls.
+        This is the "process once, use many times" architecture.
         """
-        # Generate story metadata
-        title = self._generate_story_title(article)
-        description = self._generate_story_description(article)
-        keywords = self._extract_keywords(article)
+        # Use already-extracted metadata (from extraction phase)
+        title = article.headline or article.title
+        description = article.summary or ""
+        # Parse keywords from JSON if stored, otherwise empty list
+        if article.keywords:
+            try:
+                keywords = json.loads(article.keywords) if isinstance(article.keywords, str) else article.keywords
+            except (json.JSONDecodeError, TypeError):
+                keywords = []
+        else:
+            keywords = []
 
         # Parse published timestamp
         if article.published:
