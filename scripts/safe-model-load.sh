@@ -1391,37 +1391,50 @@ cmd_request() {
     fi
 
 
-    # Check if queue is empty BEFORE adding (for spawn decision)
-    local queue_was_empty=false
-    if [[ ! -s "$QUEUE_FILE" ]]; then
-        queue_was_empty=true
-    fi
+# RACE CONDITION FIX: Lock the queue for the entire check+append+fix sequence
+    # This prevents races with sort_queue_by_type reading while we append
+    local queue_was_empty_file
+    queue_was_empty_file=$(mktemp)
+    (
+        flock -x 200 || { log "Failed to acquire queue lock for append"; exit 1; }
+        
+        # Check if queue is empty BEFORE adding (for spawn decision)
+        if [[ ! -s "$QUEUE_FILE" ]]; then
+            echo "true" > "$queue_was_empty_file"
+        else
+            echo "false" > "$queue_was_empty_file"
+        fi
 
-    # Build request JSON using jq --rawfile to read prompt from file
-    # This avoids all shell variable limits
-    # IMPORTANT: -c for compact output (single line JSONL format)
-    # Include queued_at timestamp for queue time tracking
-    # Include priority for queue ordering (high priority processed first)
-    local queued_at
-    queued_at=$(date +%s%3N)  # milliseconds since epoch
-    jq -nc --rawfile prompt "$actual_prompt_file" \
-        --arg id "$request_id" \
-        --arg type "$request_type" \
-        --arg system "$system_prompt" \
-        --arg temp "$temperature" \
-        --arg max_tokens "$max_tokens" \
-        --arg pipe_path "$pipe_path" \
-        --arg file_path "$file_path" \
-        --arg stream "$stream_mode" \
-        --arg queued_at "$queued_at" \
-        --arg priority "$priority" \
-        '{id: $id, type: $type, prompt: $prompt, system: $system, temperature: $temp, max_tokens: $max_tokens, pipe_path: $pipe_path, file_path: $file_path, stream: $stream, queued_at: ($queued_at | tonumber), priority: $priority}' \
-        >> "$QUEUE_FILE"
+        # Build request JSON using jq --rawfile to read prompt from file
+        # This avoids all shell variable limits
+        # IMPORTANT: -c for compact output (single line JSONL format)
+        # Include queued_at timestamp for queue time tracking
+        # Include priority for queue ordering (high priority processed first)
+        local queued_at
+        queued_at=$(date +%s%3N)  # milliseconds since epoch
+        jq -nc --rawfile prompt "$actual_prompt_file" \
+            --arg id "$request_id" \
+            --arg type "$request_type" \
+            --arg system "$system_prompt" \
+            --arg temp "$temperature" \
+            --arg max_tokens "$max_tokens" \
+            --arg pipe_path "$pipe_path" \
+            --arg file_path "$file_path" \
+            --arg stream "$stream_mode" \
+            --arg queued_at "$queued_at" \
+            --arg priority "$priority" \
+            '{id: $id, type: $type, prompt: $prompt, system: $system, temperature: $temp, max_tokens: $max_tokens, pipe_path: $pipe_path, file_path: $file_path, stream: $stream, queued_at: ($queued_at | tonumber), priority: $priority}' \
+            >> "$QUEUE_FILE"
 
-    # Fix .pipe.lnk extension issue in queue file
-    if grep -q '\.pipe\.lnk' "$QUEUE_FILE"; then
-        sed -i 's/\.pipe\.lnk/.pipe/g' "$QUEUE_FILE"
-    fi
+        # Fix .pipe.lnk extension issue in queue file
+        if grep -q '\.pipe\.lnk' "$QUEUE_FILE"; then
+            sed -i 's/\.pipe\.lnk/.pipe/g' "$QUEUE_FILE"
+        fi
+    ) 200>"$QUEUE_LOCK_FILE"
+    
+    local queue_was_empty
+    queue_was_empty=$(cat "$queue_was_empty_file")
+    rm -f "$queue_was_empty_file"
 
 
     # Clean up temp file if we created one
