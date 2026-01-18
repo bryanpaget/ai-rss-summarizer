@@ -106,6 +106,7 @@ class LMStudioProvider(EmbeddingProvider):
         self.timeout = timeout
         self._cached_model: Optional[str] = None
         self._auto_load_model = auto_load_model
+        self._model_loaded = False  # Track if we've triggered model loading
 
     @property
     def name(self) -> str:
