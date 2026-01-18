@@ -1391,7 +1391,7 @@ cmd_request() {
     fi
 
 
-# RACE CONDITION FIX: Lock the queue for the entire check+append+fix sequence
+    # RACE CONDITION FIX: Lock the queue for the entire check+append+fix sequence
     # This prevents races with sort_queue_by_type reading while we append
     local queue_was_empty_file
     queue_was_empty_file=$(mktemp)
