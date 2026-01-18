@@ -13,7 +13,8 @@ param(
     [int]$ChunkTokens = 15000,      # Max tokens per LLM call
     [int]$OverlapTokens = 1500,
     [int]$CharsPerToken = 4,
-    [int]$MaxRetries = 2
+    [int]$MaxRetries = 2,
+    [switch]$SkipSynthesis  # Skip system map generation (Tool 2 mode)
 )
 
 $ErrorActionPreference = "Stop"
@@ -597,9 +598,14 @@ foreach ($file in $files) {
     Write-Host ""
 }
 
-# PASS 2: Generate meta-summary
-Write-Host ""
-Write-Host "=== Generating System Map ===" -ForegroundColor Magenta
+# PASS 2: Generate meta-summary (skip if -SkipSynthesis)
+if ($SkipSynthesis) {
+    Write-Host ""
+    Write-Host "=== Skipping System Map (Tool 2 mode) ===" -ForegroundColor Yellow
+    $metaResponse = ""
+} else {
+    Write-Host ""
+    Write-Host "=== Generating System Map ===" -ForegroundColor Magenta
 Write-Host ""
 
 # Build combined summary text
@@ -634,6 +640,7 @@ if ($metaTokens -le $ChunkTokens) {
     Write-Host "Summaries too large for single meta-pass, outputting raw summaries" -ForegroundColor Yellow
     $metaResponse = "# System Map`n`n(Auto-generated meta-summary skipped - summaries exceed token limit)`n`nSee individual file summaries below."
 }
+}  # end if not SkipSynthesis
 
 # === OUTPUT ===
 
