@@ -1230,15 +1230,19 @@ def _run_connection_detection(
             batch_success = 0
             batch_errors = 0
 
-            for ins in batch:
-                try:
-                    result = embedding_service.embed_text(ins.content)
+            try:
+                # Batch embed all insights at once
+                texts = [ins.content for ins in batch]
+                results = embedding_service.embed_batch(texts)
+
+                # Save each result
+                for ins, result in zip(batch, results):
                     embedding_service.save_embedding(ins.id, "insight", result)
                     batch_success += 1
-                except Exception as e:
-                    console.print(f"\n      [red]Embedding failed: {e}[/red]")
-                    stats["errors"] += 1
-                    batch_errors += 1
+            except Exception as e:
+                console.print(f"\n      [red]Batch embedding failed: {e}[/red]")
+                stats["errors"] += len(batch)
+                batch_errors = len(batch)
 
             progress.end_batch(batch_success, batch_errors)
 
