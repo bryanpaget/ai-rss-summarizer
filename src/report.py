@@ -783,11 +783,16 @@ def _run_embedding_phase(
                     break
                 try:
                     semantic_card = _create_semantic_card(article)
-                    result = embedding_service.embed_text(semantic_card)
+                    # Use embed_text_with_chunks to preserve individual chunk embeddings
+                    result, chunk_data = embedding_service.embed_text_with_chunks(semantic_card)
+                    # Save averaged embedding (for backward compatibility)
                     storage.save_embedding(article.id, result.vector)
+                    # Save individual chunk embeddings (for fine-grained matching)
+                    storage.save_chunk_embeddings(article.id, chunk_data)
                     batch_success += 1
                 except Exception as e:
-                    console.print(f"\n  [red]ERROR: {e}[/red]", end="")
+                    console.print(f"
+  [red]ERROR: {e}[/red]", end="")
                     stats["errors"] += 1
                     batch_errors += 1
 
