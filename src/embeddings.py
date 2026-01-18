@@ -223,6 +223,9 @@ class EmbeddingService:
     def embed_batch(self, texts: list[str]) -> list[EmbeddingResult]:
         """Generate embeddings for multiple texts efficiently.
 
+        Uses true batch embedding for short texts (single API call).
+        Long texts are chunked and averaged separately.
+
         Args:
             texts: List of texts to embed. Long texts are chunked and averaged.
 
@@ -238,28 +241,49 @@ class EmbeddingService:
         try:
             provider = self._get_provider()
 
-            # Process each text, chunking and averaging as needed
-            results = []
-            for text in texts:
-                if len(text) > 2000:
-                    chunks = self._chunk_at_sentences(text, max_chunk_size=1800)
-                    if len(chunks) > 1:
-                        vectors = provider.embed_batch(chunks)
-                        averaged = self._average_vectors(vectors)
-                        results.append(EmbeddingResult(
-                            vector=averaged,
-                            model=provider.model_name,
-                            dimensions=len(averaged),
-                        ))
-                        continue
-                    text = chunks[0] if chunks else text
+            # Separate short texts (can batch) from long texts (need chunking)
+            short_texts = []  # (original_idx, text)
+            long_texts = []   # (original_idx, text)
 
-                vector = provider.embed(text)
-                results.append(EmbeddingResult(
-                    vector=vector,
-                    model=provider.model_name,
-                    dimensions=len(vector),
-                ))
+            for idx, text in enumerate(texts):
+                if len(text) > 2000:
+                    long_texts.append((idx, text))
+                else:
+                    short_texts.append((idx, text))
+
+            results = [None] * len(texts)
+
+            # Batch embed all short texts at once
+            if short_texts:
+                short_texts_only = [t for _, t in short_texts]
+                vectors = provider.embed_batch(short_texts_only)
+                for (original_idx, _), vector in zip(short_texts, vectors):
+                    results[original_idx] = EmbeddingResult(
+                        vector=vector,
+                        model=provider.model_name,
+                        dimensions=len(vector),
+                    )
+
+            # Handle long texts individually (need chunking)
+            for original_idx, text in long_texts:
+                chunks = self._chunk_at_sentences(text, max_chunk_size=1800)
+                if len(chunks) > 1:
+                    vectors = provider.embed_batch(chunks)
+                    averaged = self._average_vectors(vectors)
+                    results[original_idx] = EmbeddingResult(
+                        vector=averaged,
+                        model=provider.model_name,
+                        dimensions=len(averaged),
+                    )
+                else:
+                    chunk_text = chunks[0] if chunks else text
+                    vector = provider.embed(chunk_text)
+                    results[original_idx] = EmbeddingResult(
+                        vector=vector,
+                        model=provider.model_name,
+                        dimensions=len(vector),
+                    )
+
             return results
         except EmbeddingProviderError as e:
             raise EmbeddingError(f"Batch embedding failed: {e}") from e
