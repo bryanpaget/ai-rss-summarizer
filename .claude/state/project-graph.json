@@ -1,72 +1,5 @@
 ﻿{
     "adjacency":  {
-                      "keywords":  {
-                                       "in":  [
-                                                  18,
-                                                  21,
-                                                  22
-                                              ],
-                                       "out":  [
-
-                                               ]
-                                   },
-                      "queue: 12651ms":  {
-                                             "in":  [
-
-                                                    ],
-                                             "out":  [
-                                                         4
-                                                     ]
-                                         },
-                      "`request_embedding`":  {
-                                                  "in":  [
-                                                             3
-                                                         ],
-                                                  "out":  [
-
-                                                          ]
-                                              },
-                      "CREATE NEW with 3 LLM calls":  {
-                                                          "in":  [
-                                                                     25
-                                                                 ],
-                                                          "out":  [
-
-                                                                  ]
-                                                      },
-                      "queue: 11910ms":  {
-                                             "in":  [
-
-                                                    ],
-                                             "out":  [
-                                                         6
-                                                     ]
-                                         },
-                      "tagging":  {
-                                      "in":  [
-
-                                             ],
-                                      "out":  [
-                                                  9,
-                                                  10
-                                              ]
-                                  },
-                      "`request_text`":  {
-                                             "in":  [
-
-                                                    ],
-                                             "out":  [
-                                                         3
-                                                     ]
-                                         },
-                      "LLM to analyze clusters":  {
-                                                      "in":  [
-                                                                 24
-                                                             ],
-                                                      "out":  [
-
-                                                              ]
-                                                  },
                       "temperature=0.3":  {
                                               "in":  [
                                                          14
@@ -75,54 +8,81 @@
 
                                                       ]
                                           },
-                      "queue: 11572ms":  {
+                      "embeddings":  {
+                                         "out":  [
+                                                     34
+                                                 ],
+                                         "in":  [
+
+                                                ]
+                                     },
+                      "API contract":  {
+                                           "out":  [
+
+                                                   ],
+                                           "in":  [
+                                                      37
+                                                  ]
+                                       },
+                      "0 LLM calls":  {
+                                          "out":  [
+
+                                                  ],
+                                          "in":  [
+                                                     59
+                                                 ]
+                                      },
+                      "`request_text`":  {
                                              "in":  [
 
                                                     ],
                                              "out":  [
-                                                         7
+                                                         3
                                                      ]
                                          },
-                      "entity relationships":  {
-                                                   "in":  [
-                                                              11
-                                                          ],
-                                                   "out":  [
+                      "article_embedding":  {
+                                                "out":  [
+                                                            53,
+                                                            55,
+                                                            57
+                                                        ],
+                                                "in":  [
 
-                                                           ]
-                                               },
-                      "type: embedding":  {
-                                              "in":  [
-
+                                                       ]
+                                            },
+                      "lost semantics":  {
+                                             "out":  [
+                                                         33
                                                      ],
-                                              "out":  [
-                                                          12
-                                                      ]
-                                          },
-                      "prompt":  {
-                                     "in":  [
+                                             "in":  [
 
-                                            ],
-                                     "out":  [
-                                                 14
-                                             ]
-                                 },
-                      "summaries":  {
-                                        "in":  [
+                                                    ]
+                                         },
+                      "cluster":  {
+                                      "in":  [
 
-                                               ],
-                                        "out":  [
-                                                    8
-                                                ]
-                                    },
-                      "e.g.":  {
+                                             ],
+                                      "out":  [
+                                                  15,
+                                                  16
+                                              ]
+                                  },
+                      "tags":  {
                                    "in":  [
-
+                                              8
                                           ],
                                    "out":  [
-                                               17
+
                                            ]
                                },
+                      "using extracted metadata":  {
+                                                       "out":  [
+                                                                   59
+                                                               ],
+                                                       "in":  [
+
+                                                              ]
+                                                   },
                       "1 second LLM call":  {
                                                 "in":  [
 
@@ -140,31 +100,195 @@
 
                                              ]
                                  },
-                      "handle":  {
-                                     "in":  [
-                                                15,
-                                                16
-                                            ],
-                                     "out":  [
+                      "fine-grained":  {
+                                           "out":  [
+                                                       40
+                                                   ],
+                                           "in":  [
 
-                                             ]
-                                 },
-                      "find similar stories":  {
+                                                  ]
+                                       },
+                      "poor granularity":  {
+                                               "out":  [
+                                                           30
+                                                       ],
+                                               "in":  [
+                                                          29
+                                                      ]
+                                           },
+                      "semantic space mismatch":  {
+                                                      "out":  [
+
+                                                              ],
+                                                      "in":  [
+                                                                 27
+                                                             ]
+                                                  },
+                      "queue: 12256ms":  {
+                                             "in":  [
+
+                                                    ],
+                                             "out":  [
+                                                         5
+                                                     ]
+                                         },
+                      "f\"\\n\u0027` and line 794 is `\u0027  [red]ERROR: {e}[/red]\"":  {
+                                                                                             "out":  [
+                                                                                                         51
+                                                                                                     ],
+                                                                                             "in":  [
+
+                                                                                                    ]
+                                                                                         },
+                      "granularity":  {
+                                          "out":  [
+
+                                                  ],
+                                          "in":  [
+                                                     34
+                                                 ]
+                                      },
+                      "entity relationships":  {
                                                    "in":  [
-
+                                                              11
                                                           ],
                                                    "out":  [
-                                                               25
+
                                                            ]
                                                },
-                      "stream: false":  {
-                                            "in":  [
-                                                       12
-                                                   ],
+                      "`request_embedding`":  {
+                                                  "in":  [
+                                                             3
+                                                         ],
+                                                  "out":  [
+
+                                                          ]
+                                              },
+                      "prompt":  {
+                                     "in":  [
+
+                                            ],
+                                     "out":  [
+                                                 14
+                                             ]
+                                 },
+                      "result.vector":  {
                                             "out":  [
 
-                                                    ]
+                                                    ],
+                                            "in":  [
+                                                       0,
+                                                       2,
+                                                       47
+                                                   ]
                                         },
+                      "single return":  {
+                                            "out":  [
+                                                        37
+                                                    ],
+                                            "in":  [
+
+                                                   ]
+                                        },
+                      "type: embedding":  {
+                                              "in":  [
+
+                                                     ],
+                                              "out":  [
+                                                          12
+                                                      ]
+                                          },
+                      "then 10 seconds waiting":  {
+                                                      "in":  [
+                                                                 13
+                                                             ],
+                                                      "out":  [
+
+                                                              ]
+                                                  },
+                      "tagging":  {
+                                      "in":  [
+
+                                             ],
+                                      "out":  [
+                                                  9,
+                                                  10
+                                              ]
+                                  },
+                      "API":  {
+                                  "out":  [
+                                              38
+                                          ],
+                                  "in":  [
+
+                                         ]
+                              },
+                      "current embedding approach":  {
+                                                         "out":  [
+
+                                                                 ],
+                                                         "in":  [
+                                                                    31
+                                                                ]
+                                                     },
+                      "end=\"\"":  {
+                                       "out":  [
+
+                                               ],
+                                       "in":  [
+                                                  50,
+                                                  51
+                                              ]
+                                   },
+                      "chunk_text":  {
+                                         "out":  [
+                                                     48,
+                                                     49
+                                                 ],
+                                         "in":  [
+
+                                                ]
+                                     },
+                      "embedding-only":  {
+                                             "in":  [
+
+                                                    ],
+                                             "out":  [
+                                                         20
+                                                     ]
+                                         },
+                      "CREATE NEW with 3 LLM calls":  {
+                                                          "in":  [
+                                                                     25
+                                                                 ],
+                                                          "out":  [
+
+                                                                  ]
+                                                      },
+                      "one vector":  {
+                                         "out":  [
+                                                     32
+                                                 ],
+                                         "in":  [
+
+                                                ]
+                                     },
+                      "f\"\\n  [red]ERROR: {e}[/red]\"":  {
+                                                              "out":  [
+                                                                          50
+                                                                      ],
+                                                              "in":  [
+
+                                                                     ]
+                                                          },
+                      "queue: 11910ms":  {
+                                             "in":  [
+
+                                                    ],
+                                             "out":  [
+                                                         6
+                                                     ]
+                                         },
                       "50 at a time":  {
                                            "in":  [
                                                       17
@@ -173,6 +297,78 @@
 
                                                    ]
                                        },
+                      "queue: 11572ms":  {
+                                             "in":  [
+
+                                                    ],
+                                             "out":  [
+                                                         7
+                                                     ]
+                                         },
+                      "if any chunk matches well":  {
+                                                        "out":  [
+                                                                    52
+                                                                ],
+                                                        "in":  [
+
+                                                               ]
+                                                    },
+                      "chunk preservation":  {
+                                                 "out":  [
+
+                                                         ],
+                                                 "in":  [
+                                                            43
+                                                        ]
+                                             },
+                      "chunk semantics":  {
+                                              "out":  [
+
+                                                      ],
+                                              "in":  [
+                                                         32
+                                                     ]
+                                          },
+                      "one-to-one mapping":  {
+                                                 "out":  [
+
+                                                         ],
+                                                 "in":  [
+                                                            38
+                                                        ]
+                                             },
+                      "triples":  {
+                                      "in":  [
+                                                 23
+                                             ],
+                                      "out":  [
+
+                                              ]
+                                  },
+                      "partial overlap":  {
+                                              "out":  [
+                                                          43
+                                                      ],
+                                              "in":  [
+                                                         42
+                                                     ]
+                                          },
+                      "design":  {
+                                     "out":  [
+                                                 39
+                                             ],
+                                     "in":  [
+
+                                            ]
+                                 },
+                      "e.g.":  {
+                                   "in":  [
+
+                                          ],
+                                   "out":  [
+                                               17
+                                           ]
+                               },
                       "title":  {
                                     "in":  [
 
@@ -183,31 +379,48 @@
                                                 22
                                             ]
                                 },
-                      "\"article\"":  {
-                                          "in":  [
-                                                     1
-                                                 ],
-                                          "out":  [
+                      "keywords":  {
+                                       "in":  [
+                                                  18,
+                                                  21,
+                                                  22
+                                              ],
+                                       "out":  [
 
-                                                  ]
-                                      },
-                      "result.vector":  {
-                                            "in":  [
-                                                       0,
-                                                       2
-                                                   ],
-                                            "out":  [
+                                               ]
+                                   },
+                      "kb":  {
+                                 "out":  [
 
-                                                    ]
-                                        },
-                      "queue: 12256ms":  {
+                                         ],
+                                 "in":  [
+                                            45
+                                        ]
+                             },
+                      "queue: 12651ms":  {
                                              "in":  [
 
                                                     ],
                                              "out":  [
-                                                         5
+                                                         4
                                                      ]
                                          },
+                      "coverage":  {
+                                       "out":  [
+                                                   42
+                                               ],
+                                       "in":  [
+
+                                              ]
+                                   },
+                      "no matches":  {
+                                         "out":  [
+                                                     27
+                                                 ],
+                                         "in":  [
+                                                    26
+                                                ]
+                                     },
                       "cluster insights":  {
                                                "in":  [
 
@@ -216,74 +429,179 @@
                                                            24
                                                        ]
                                            },
-                      "tags":  {
-                                   "in":  [
-                                              8
-                                          ],
-                                   "out":  [
+                      "different text sources":  {
+                                                     "out":  [
 
+                                                             ],
+                                                     "in":  [
+                                                                28
+                                                            ]
+                                                 },
+                      "article: Article":  {
+                                               "out":  [
+
+                                                       ],
+                                               "in":  [
+                                                          54
+                                                      ]
+                                           },
+                      "story":  {
+                                    "out":  [
+
+                                            ],
+                                    "in":  [
+                                               53,
+                                               55,
+                                               56,
+                                               57,
+                                               58
                                            ]
-                               },
-                      "embedding-only":  {
-                                             "in":  [
+                                },
+                      "article":  {
+                                      "out":  [
+                                                  45
+                                              ],
+                                      "in":  [
 
-                                                    ],
-                                             "out":  [
-                                                         20
-                                                     ]
-                                         },
-                      "then 10 seconds waiting":  {
+                                             ]
+                                  },
+                      "multi-angle coverage":  {
+                                                   "out":  [
+
+                                                           ],
+                                                   "in":  [
+                                                              41
+                                                          ]
+                                               },
+                      "LLM to analyze clusters":  {
                                                       "in":  [
-                                                                 13
+                                                                 24
                                                              ],
                                                       "out":  [
 
                                                               ]
                                                   },
-                      "knowledge extraction":  {
+                      "single return value":  {
+                                                  "out":  [
+
+                                                          ],
+                                                  "in":  [
+                                                             36
+                                                         ]
+                                              },
+                      "chunk_embedding":  {
+                                              "out":  [
+
+                                                      ],
+                                              "in":  [
+                                                         49
+                                                     ]
+                                          },
+                      "this uses embeddings":  {
                                                    "in":  [
-                                                              9,
-                                                              10
+
                                                           ],
                                                    "out":  [
-
+                                                               19
                                                            ]
                                                },
-                      "insights":  {
-                                       "in":  [
+                      "averaged embeddings":  {
+                                                  "out":  [
 
-                                              ],
-                                       "out":  [
-                                                   11
-                                               ]
-                                   },
-                      "cluster":  {
-                                      "in":  [
-
-                                             ],
-                                      "out":  [
-                                                  15,
-                                                  16
-                                              ]
-                                  },
-                      "summary":  {
-                                      "in":  [
-
-                                             ],
-                                      "out":  [
-                                                  23
-                                              ]
-                                  },
-                      "article.id":  {
-                                         "in":  [
-
+                                                          ],
+                                                  "in":  [
+                                                             30
+                                                         ]
+                                              },
+                      "averaging":  {
+                                        "out":  [
+                                                    31,
+                                                    36
                                                 ],
+                                        "in":  [
+                                                   35
+                                               ]
+                                    },
+                      "article.id":  {
                                          "out":  [
                                                      0,
                                                      1,
-                                                     2
-                                                 ]
+                                                     2,
+                                                     46,
+                                                     47
+                                                 ],
+                                         "in":  [
+
+                                                ]
                                      },
+                      "article_id":  {
+                                         "out":  [
+                                                     44
+                                                 ],
+                                         "in":  [
+
+                                                ]
+                                     },
+                      "matching":  {
+                                       "out":  [
+                                                   26,
+                                                   29
+                                               ],
+                                       "in":  [
+
+                                              ]
+                                   },
+                      "\"article\"":  {
+                                          "in":  [
+                                                     1
+                                                 ],
+                                          "out":  [
+
+                                                  ]
+                                      },
+                      "lost granularity":  {
+                                               "out":  [
+                                                           35
+                                                       ],
+                                               "in":  [
+
+                                                      ]
+                                           },
+                      "handle":  {
+                                     "in":  [
+                                                15,
+                                                16
+                                            ],
+                                     "out":  [
+
+                                             ]
+                                 },
+                      "self":  {
+                                   "out":  [
+                                               54
+                                           ],
+                                   "in":  [
+
+                                          ]
+                               },
+                      "mismatch":  {
+                                       "out":  [
+                                                   28
+                                               ],
+                                       "in":  [
+
+                                              ]
+                                   },
+                      "embedding":  {
+                                        "out":  [
+                                                    56,
+                                                    58
+                                                ],
+                                        "in":  [
+                                                   46,
+                                                   48
+                                               ]
+                                    },
                       "process: 572ms":  {
                                              "in":  [
                                                         4,
@@ -295,20 +613,101 @@
 
                                                      ]
                                          },
-                      "triples":  {
+                      "overlap":  {
+                                      "out":  [
+                                                  41
+                                              ],
                                       "in":  [
-                                                 23
+
+                                             ]
+                                  },
+                      "chunk_index":  {
+                                          "out":  [
+
+                                                  ],
+                                          "in":  [
+                                                     44
+                                                 ]
+                                      },
+                      "chunk matching":  {
+                                             "out":  [
+
+                                                     ],
+                                             "in":  [
+                                                        39
+                                                    ]
+                                         },
+                      "summaries":  {
+                                        "in":  [
+
+                                               ],
+                                        "out":  [
+                                                    8
+                                                ]
+                                    },
+                      "partial matches":  {
+                                              "out":  [
+
+                                                      ],
+                                              "in":  [
+                                                         33
+                                                     ]
+                                          },
+                      "articles are related":  {
+                                                   "out":  [
+
+                                                           ],
+                                                   "in":  [
+                                                              52
+                                                          ]
+                                               },
+                      "stream: false":  {
+                                            "in":  [
+                                                       12
+                                                   ],
+                                            "out":  [
+
+                                                    ]
+                                        },
+                      "summary":  {
+                                      "in":  [
+
                                              ],
                                       "out":  [
-
+                                                  23
                                               ]
                                   },
-                      "this uses embeddings":  {
+                      "insights":  {
+                                       "in":  [
+
+                                              ],
+                                       "out":  [
+                                                   11
+                                               ]
+                                   },
+                      "find similar stories":  {
                                                    "in":  [
 
                                                           ],
                                                    "out":  [
-                                                               19
+                                                               25
+                                                           ]
+                                               },
+                      "subtopic detection":  {
+                                                 "out":  [
+
+                                                         ],
+                                                 "in":  [
+                                                            40
+                                                        ]
+                                             },
+                      "knowledge extraction":  {
+                                                   "in":  [
+                                                              9,
+                                                              10
+                                                          ],
+                                                   "out":  [
+
                                                            ]
                                                }
                   },
@@ -319,16 +718,16 @@
     "project_root":  "C:/Users/jpswi/personal projects/RSSsummarizer",
     "sessions":  {
                      "b83ca0cf-6f48-4726-b27f-0daeab98089d":  {
-                                                                  "last_turn":  41,
-                                                                  "last_active":  "2026-01-17T18:28:15.8657588-08:00",
+                                                                  "last_turn":  42,
+                                                                  "last_active":  "2026-01-17T20:13:06.7359026-08:00",
                                                                   "last_dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer"
                                                               }
                  },
     "metadata":  {
-                     "last_turn":  41,
-                     "cycles_found":  0,
-                     "total_connected":  10,
-                     "total_orphans":  13
+                     "last_turn":  42,
+                     "cycles_found":  1,
+                     "total_connected":  22,
+                     "total_orphans":  35
                  },
     "edges":  [
                   {
@@ -588,6 +987,346 @@
                       "type":  "double",
                       "sub":  "find similar stories",
                       "obj":  "CREATE NEW with 3 LLM calls",
+                      "pred":  "is",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  42,
+                      "timestamp":  "2026-01-17T20:13:06.7359026-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "matching",
+                      "obj":  "no matches",
+                      "pred":  "produces",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  42,
+                      "timestamp":  "2026-01-17T20:13:06.7359026-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "no matches",
+                      "obj":  "semantic space mismatch",
+                      "pred":  "caused by",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  42,
+                      "timestamp":  "2026-01-17T20:13:06.7359026-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "mismatch",
+                      "obj":  "different text sources",
+                      "pred":  "caused by",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  42,
+                      "timestamp":  "2026-01-17T20:13:06.7359026-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "matching",
+                      "obj":  "poor granularity",
+                      "pred":  "exhibits",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  42,
+                      "timestamp":  "2026-01-17T20:13:06.7359026-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "poor granularity",
+                      "obj":  "averaged embeddings",
+                      "pred":  "caused by",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  42,
+                      "timestamp":  "2026-01-17T20:13:06.7359026-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "averaging",
+                      "obj":  "current embedding approach",
+                      "pred":  "caused by",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  42,
+                      "timestamp":  "2026-01-17T20:13:06.7359026-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "one vector",
+                      "obj":  "chunk semantics",
+                      "pred":  "discards",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  42,
+                      "timestamp":  "2026-01-17T20:13:06.7359026-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "lost semantics",
+                      "obj":  "partial matches",
+                      "pred":  "prevents",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  42,
+                      "timestamp":  "2026-01-17T20:13:06.7359026-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "embeddings",
+                      "obj":  "granularity",
+                      "pred":  "lose",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  42,
+                      "timestamp":  "2026-01-17T20:13:06.7359026-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "lost granularity",
+                      "obj":  "averaging",
+                      "pred":  "caused by",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  42,
+                      "timestamp":  "2026-01-17T20:13:06.7359026-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "averaging",
+                      "obj":  "single return value",
+                      "pred":  "caused by",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  42,
+                      "timestamp":  "2026-01-17T20:13:06.7359026-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "single return",
+                      "obj":  "API contract",
+                      "pred":  "caused by",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  42,
+                      "timestamp":  "2026-01-17T20:13:06.7359026-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "API",
+                      "obj":  "one-to-one mapping",
+                      "pred":  "designed for",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  42,
+                      "timestamp":  "2026-01-17T20:13:06.7359026-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "design",
+                      "obj":  "chunk matching",
+                      "pred":  "didn\u0027t anticipate",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  42,
+                      "timestamp":  "2026-01-17T20:13:06.7359026-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "fine-grained",
+                      "obj":  "subtopic detection",
+                      "pred":  "needed for",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  42,
+                      "timestamp":  "2026-01-17T20:13:06.7359026-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "overlap",
+                      "obj":  "multi-angle coverage",
+                      "pred":  "caused by",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  42,
+                      "timestamp":  "2026-01-17T20:13:06.7359026-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "coverage",
+                      "obj":  "partial overlap",
+                      "pred":  "produces",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  42,
+                      "timestamp":  "2026-01-17T20:13:06.7359026-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "partial overlap",
+                      "obj":  "chunk preservation",
+                      "pred":  "requires",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  42,
+                      "timestamp":  "2026-01-17T20:13:06.7359026-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "double",
+                      "sub":  "article_id",
+                      "obj":  "chunk_index",
+                      "pred":  "is",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  42,
+                      "timestamp":  "2026-01-17T20:13:06.7359026-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "double",
+                      "sub":  "article",
+                      "obj":  "kb",
+                      "pred":  "is",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  42,
+                      "timestamp":  "2026-01-17T20:13:06.7359026-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "article.id",
+                      "obj":  "embedding",
+                      "pred":  "\"article\"",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  42,
+                      "timestamp":  "2026-01-17T20:13:06.7359026-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "double",
+                      "sub":  "article.id",
+                      "obj":  "result.vector",
+                      "pred":  "is",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  42,
+                      "timestamp":  "2026-01-17T20:13:06.7359026-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "double",
+                      "sub":  "chunk_text",
+                      "obj":  "embedding",
+                      "pred":  "is",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  42,
+                      "timestamp":  "2026-01-17T20:13:06.7359026-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "double",
+                      "sub":  "chunk_text",
+                      "obj":  "chunk_embedding",
+                      "pred":  "is",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  42,
+                      "timestamp":  "2026-01-17T20:13:06.7359026-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "double",
+                      "sub":  "f\"\\n  [red]ERROR: {e}[/red]\"",
+                      "obj":  "end=\"\"",
+                      "pred":  "is",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  42,
+                      "timestamp":  "2026-01-17T20:13:06.7359026-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "double",
+                      "sub":  "f\"\\n\u0027` and line 794 is `\u0027  [red]ERROR: {e}[/red]\"",
+                      "obj":  "end=\"\"",
+                      "pred":  "is",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  42,
+                      "timestamp":  "2026-01-17T20:13:06.7359026-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "double",
+                      "sub":  "if any chunk matches well",
+                      "obj":  "articles are related",
+                      "pred":  "is",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  42,
+                      "timestamp":  "2026-01-17T20:13:06.7359026-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "double",
+                      "sub":  "article_embedding",
+                      "obj":  "story",
+                      "pred":  "is",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  42,
+                      "timestamp":  "2026-01-17T20:13:06.7359026-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "double",
+                      "sub":  "self",
+                      "obj":  "article: Article",
+                      "pred":  "is",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  42,
+                      "timestamp":  "2026-01-17T20:13:06.7359026-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "double",
+                      "sub":  "article_embedding",
+                      "obj":  "story",
+                      "pred":  "is",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  42,
+                      "timestamp":  "2026-01-17T20:13:06.7359026-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "double",
+                      "sub":  "embedding",
+                      "obj":  "story",
+                      "pred":  "is",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  42,
+                      "timestamp":  "2026-01-17T20:13:06.7359026-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "double",
+                      "sub":  "article_embedding",
+                      "obj":  "story",
+                      "pred":  "is",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  42,
+                      "timestamp":  "2026-01-17T20:13:06.7359026-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "double",
+                      "sub":  "embedding",
+                      "obj":  "story",
+                      "pred":  "is",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  42,
+                      "timestamp":  "2026-01-17T20:13:06.7359026-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "double",
+                      "sub":  "using extracted metadata",
+                      "obj":  "0 LLM calls",
                       "pred":  "is",
                       "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
                   }
