@@ -10,7 +10,24 @@ from pathlib import Path
 from typing import Iterator, Optional
 
 # Current schema version - increment when adding migrations
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
+
+
+@dataclass
+class ArticleChunk:
+    """Represents a semantic chunk of an article with its embedding.
+
+    Storing individual chunk embeddings (instead of averaging them)
+    enables fine-grained matching: articles that share a subtopic
+    will have matching chunks even if their overall embeddings differ.
+    """
+
+    id: str
+    article_id: str
+    chunk_index: int
+    chunk_text: str
+    embedding: Optional[str] = None  # JSON serialized vector
+    created_at: Optional[datetime] = None
 
 
 @dataclass
