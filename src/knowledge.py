@@ -2794,6 +2794,8 @@ Return ONLY valid JSON, no other text."""
             existing_triples=existing_triples,
             signal_tags=signal_tags,
             summary=result.summary,
+            headline=result.headline,
+            keywords=result.keywords,
             is_ad=result.is_ad,
             chunks_processed=len(result.chunks),
         )
