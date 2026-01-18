@@ -103,11 +103,15 @@ class CombinedExtractionResult(BaseModel):
     """Complete extraction from a single article in ONE LLM call.
 
     This is the target schema for Issue 7 - extract everything at once.
+    Process once, use many times: headline/summary/keywords are used
+    for story creation without additional LLM calls.
     """
     chunks: list[SemanticChunk] = Field(default_factory=list)
     signal_tags: list[SignalTag] = Field(default_factory=list)
     is_ad: bool = Field(default=False)
     summary: str = Field(default="")
+    headline: str = Field(default="")  # Rewritten title for story creation
+    keywords: list[str] = Field(default_factory=list)  # Key terms for story
 
 
 # ============================================================================
