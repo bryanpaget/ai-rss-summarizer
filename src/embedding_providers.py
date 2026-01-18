@@ -235,23 +235,25 @@ class LMStudioProvider(EmbeddingProvider):
         if not texts:
             return []
 
-        # Ensure embedding model is loaded via ONE gateway call
+        # Ensure embedding model is loaded via ONE gateway call (once per session)
         # This is a one-time ~7-10s cost to load the model
         # All subsequent batch calls are fast (direct API)
-        from .gateway import get_gateway
-        gateway = get_gateway()
-        if not gateway.is_available():
-            raise EmbeddingProviderError(
-                "Gateway not available. LM Studio must be running.\n"
-                "Start LM Studio and ensure it's listening on localhost:1234"
-            )
+        if not self._model_loaded:
+            from .gateway import get_gateway
+            gateway = get_gateway()
+            if not gateway.is_available():
+                raise EmbeddingProviderError(
+                    "Gateway not available. LM Studio must be running.\n"
+                    "Start LM Studio and ensure it's listening on localhost:1234"
+                )
 
-        # Trigger model load - gateway handles model switching
-        try:
-            gateway.request_embedding("model_load_trigger")
-        except Exception as e:
-            # If this fails, the model might not load - but try the batch anyway
-            pass
+            # Trigger model load - gateway handles model switching
+            try:
+                gateway.request_embedding("model_load_trigger")
+                self._model_loaded = True
+            except Exception as e:
+                # If this fails, the model might not load - but try the batch anyway
+                pass
 
         # TRUE batch API call directly to LM Studio
         # Model should now be loaded, so direct call works
