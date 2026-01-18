@@ -22,24 +22,52 @@ Multiple clients using the gateway can cause requests to be lost. A 5-minute gap
 09:45:53 - Dispatched req_1768758048 to LM Studio                      <-- This was the second request
 ```
 
-## Root Cause: TOCTOU Race in sort_queue_by_type
+## Root Cause: Race Condition Causes Script Death
 
 The `sort_queue_by_type` function at line ~870 in `safe-model-load.sh`:
 
 1. **READ:** Uses jq to read queue file into temp files (lines 889-891)
 2. **PROCESS:** Reorganizes into temp files by priority/type (lines 893-919)
 3. **OVERWRITE:** `cat temp... > $QUEUE_FILE` overwrites queue (line 917)
+4. **LOG:** "Queue sorted (N items)" (line 926)
 
-**The Race Window:**
-- If a client appends a new request between step 1 (read) and step 3 (overwrite), the new request is LOST
-- The overwrite destroys any concurrent appends
+**The Race and Crash Sequence:**
 
-**Evidence:**
-- "Sorting queue" logged at 09:40:48 (step 1 started)
-- "Queued request req_1768758048" logged at 09:40:48 (concurrent append!)
-- NO "Queue sorted (N items)" log (step 3 never completed normally)
-- Processor exited at 09:40:49
-- When recovered at 09:45:48, only 1 item found - req_1768758046 was LOST
+The script has `set -euo pipefail` (line 16). Here's what happens:
+
+1. Sort starts, logs "Sorting queue" (line 883)
+2. jq starts reading QUEUE_FILE to temp files
+3. **RACE:** Another client appends to QUEUE_FILE mid-read
+4. jq gets corrupted JSON (partial line), fails silently due to `|| true`
+5. Temp files are incomplete or missing
+6. `cat $temp_files > $QUEUE_FILE` fails (missing files)
+7. **errexit triggers** - script dies immediately
+8. EXIT trap fires, logs "Processor exiting"
+9. "Queue sorted" log NEVER appears (we never got there)
+
+**Evidence - Full Log Sequence:**
+
+```
+09:40:46 - Queued request req_1768758046 (added to queue)
+09:40:46 - "Queue was empty and I'm first, but processor already running"
+09:40:47 - Request completed
+09:40:48 - "Batch complete"
+09:40:48 - "Sorting queue by priority and type"  <-- Sort started, saw req_1768758046
+09:40:48 - "Queued request req_1768758048"       <-- CONCURRENT APPEND! Race triggered!
+09:40:49 - "Processor exiting (releasing lock)"  <-- Script died! No "Queue sorted" log!
+```
+
+**Normal Exit Pattern (for comparison):**
+```
+Sorting queue -> Queue sorted -> (process) -> Queue appears empty -> Queue processing complete -> Processor exiting
+```
+
+**Failure Pattern:**
+```
+Sorting queue -> Processor exiting  (EVERYTHING SKIPPED!)
+```
+
+The missing intermediate logs prove the script crashed mid-sort due to errexit.
 
 ## Why req_1768758046 Was Lost
 
