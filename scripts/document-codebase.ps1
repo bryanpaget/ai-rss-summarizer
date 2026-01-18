@@ -441,6 +441,8 @@ function Process-SingleFile {
 
     $fileContent = Get-Content $FilePath -Raw
     $fileLines = Get-Content $FilePath
+    # Add line numbers so LLM can reference actual lines (LLMs cannot count)
+    $numberedContent = ($fileLines | ForEach-Object -Begin {$i=1} -Process { "$i`t$_"; $i++ }) -join "`n"
     $totalLines = $fileLines.Count
     $totalChars = $fileContent.Length
     $estimatedTokens = [math]::Ceiling($totalChars / $CharsPerToken)
