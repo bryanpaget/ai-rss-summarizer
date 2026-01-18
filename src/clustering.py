@@ -140,8 +140,17 @@ class StoryClusterer:
                 f"Cannot cluster article '{article.title}': {e}"
             ) from e
 
-    def _calculate_similarity(self, article_embedding: list[float], story: Story) -> float:
+    def _calculate_similarity(
+        self,
+        article_embedding: list[float],
+        story: Story,
+        article_id: Optional[str] = None,
+    ) -> float:
         """Calculate similarity between article and story using vector cosine similarity.
+
+        If article_id is provided, uses chunk embeddings for fine-grained matching:
+        - Compares each chunk embedding against the story
+        - Returns MAX similarity (if any chunk matches well, article belongs)
 
         No LLM calls, no embedding generation - just fast vector math.
         If story has no embedding, returns 0 (no match) to avoid model switching.
@@ -154,6 +163,21 @@ class StoryClusterer:
             # Story will get embedding during next embedding phase
             return 0.0
 
+        # Try chunk-based matching if article_id provided
+        if article_id:
+            chunks = self.storage.get_chunk_embeddings(article_id)
+            if chunks:
+                # Compare each chunk to story, take MAX
+                max_similarity = 0.0
+                for chunk in chunks:
+                    if chunk.embedding:
+                        chunk_vector = json.loads(chunk.embedding)
+                        sim = self.embedding_service.cosine_similarity(chunk_vector, story_embedding)
+                        if sim > max_similarity:
+                            max_similarity = sim
+                return max_similarity
+
+        # Fallback: use averaged embedding
         return self.embedding_service.cosine_similarity(article_embedding, story_embedding)
 
     def _find_matching_story_keywords(self, article: Article) -> Optional[Story]:
