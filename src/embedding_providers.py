@@ -219,25 +219,68 @@ class LMStudioProvider(EmbeddingProvider):
         return gateway.request_embedding(text)
 
     def embed_batch(self, texts: list[str]) -> list[list[float]]:
-        """Generate embeddings for multiple texts efficiently.
+        """Generate embeddings for multiple texts in ONE API call.
 
-        Uses the gateway's batch functionality which submits all requests
-        at once for efficient processing.
+        Uses TRUE server-side batching - sends all texts in a single request
+        to the /v1/embeddings endpoint with input as an array.
 
-        NO FALLBACKS - gateway is required, fail loudly if unavailable.
+        This is CRITICAL for performance:
+        - Gateway subprocess calls: ~7s overhead PER text
+        - Direct batch API call: ONE call for ALL texts
+
+        The embedding model must already be loaded. If not loaded,
+        make one gateway.request_embedding() call first to trigger model loading.
         """
         if not texts:
             return []
 
+        # Ensure embedding model is loaded via one gateway call
+        # This triggers the safe-model-load model switching if needed
         from .gateway import get_gateway
-
         gateway = get_gateway()
         if not gateway.is_available():
             raise EmbeddingProviderError(
                 "Gateway not available. LM Studio must be running.\n"
                 "Start LM Studio and ensure it's listening on localhost:1234"
             )
-        return gateway.batch_embedding(texts)
+
+        # Trigger model load with a dummy request (gateway handles model switching)
+        # This ensures the embedding model is loaded before we make direct API calls
+        try:
+            gateway.request_embedding("model load trigger")
+        except Exception:
+            pass  # Model may already be loaded, errors are fine here
+
+        # Now make TRUE batch API call directly to LM Studio
+        # This bypasses gateway overhead for the actual batch
+        try:
+            response = httpx.post(
+                f"{self.url}/embeddings",
+                json={
+                    "input": texts,
+                    "model": self.model_name,
+                },
+                timeout=self.timeout * len(texts),  # Scale timeout with batch size
+            )
+
+            if not response.is_success:
+                raise EmbeddingProviderError(
+                    f"Batch embedding failed: {response.status_code} - {response.text}"
+                )
+
+            data = response.json()
+
+            # Response format: {"data": [{"embedding": [...], "index": 0}, ...]}
+            # Sort by index to maintain order
+            embeddings_data = sorted(data.get("data", []), key=lambda x: x.get("index", 0))
+            return [item["embedding"] for item in embeddings_data]
+
+        except httpx.TimeoutException:
+            raise EmbeddingProviderError(
+                f"Batch embedding timed out after {self.timeout * len(texts)}s for {len(texts)} texts"
+            )
+        except httpx.RequestError as e:
+            raise EmbeddingProviderError(f"Batch embedding request failed: {e}")
 
 
 class OllamaProvider(EmbeddingProvider):
