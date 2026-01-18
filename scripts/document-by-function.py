@@ -87,8 +87,8 @@ def call_llm(prompt):
     
     try:
         # Convert path for bash
-        unix_prompt = prompt_file.replace('\', '/').replace('C:', '/c')
-        unix_script = script_path.replace('\', '/').replace('C:', '/c')
+        unix_prompt = prompt_file.replace('\\', '/').replace('C:', '/c')
+        unix_script = script_path.replace('\\', '/').replace('C:', '/c')
         
         result = subprocess.run(
             ['bash', unix_script, 'request', 'text', '--prompt-file', unix_prompt],
