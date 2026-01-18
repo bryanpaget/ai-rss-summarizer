@@ -484,7 +484,7 @@ def _run_pre_embedding_phase(
     else:
         console.print("  [dim]All insights already have embeddings[/dim]")
 
-    # Embed stories
+    # Embed stories - uses TRUE batch embedding
     stories = storage.get_active_stories()
     stories_needing_embedding = [s for s in stories if not embedding_service.get_embedding(s.id, "story")]
 
@@ -498,18 +498,32 @@ def _run_pre_embedding_phase(
             batch_errors = 0
             limit_reached = False
 
-            for story in batch:
-                if limit > 0 and progress.total_processed + batch_success >= limit:
-                    limit_reached = True
-                    break
-                try:
-                    result = embedding_service.embed_story(story)
+            # Check limit before processing batch
+            if limit > 0 and progress.total_processed >= limit:
+                limit_reached = True
+                progress.end_batch(0, 0, stopped=True)
+                break
+
+            try:
+                # Build semantic card for each story (title + description + keywords)
+                def story_to_text(story):
+                    keywords_str = ", ".join(story.keywords[:20]) if story.keywords else ""
+                    return f"{story.title}\n\n{story.description or ''}\n\nKeywords: {keywords_str}"
+
+                texts = [story_to_text(story) for story in batch]
+                results = embedding_service.embed_batch(texts)
+
+                # Save each result
+                for story, result in zip(batch, results):
+                    if limit > 0 and progress.total_processed + batch_success >= limit:
+                        limit_reached = True
+                        break
                     embedding_service.save_embedding(story.id, "story", result)
                     batch_success += 1
-                except Exception as e:
-                    console.print(f"\n  [red]ERROR: {e}[/red]", end="")
-                    stats["errors"] += 1
-                    batch_errors += 1
+            except Exception as e:
+                console.print(f"\n  [red]Batch embedding failed: {e}[/red]", end="")
+                stats["errors"] += len(batch)
+                batch_errors = len(batch)
 
             progress.end_batch(batch_success, batch_errors, stopped=limit_reached)
             if limit_reached:
