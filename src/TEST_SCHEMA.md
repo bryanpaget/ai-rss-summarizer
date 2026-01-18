@@ -1,6 +1,6 @@
 ﻿# Codebase Documentation
 
-Generated: 2026-01-18 10:16:06
+Generated: 2026-01-18 10:17:42
 Directory: src
 Files processed: 1
 
@@ -9,92 +9,67 @@ Files processed: 1
 ```markdown
 # System Architecture Document: RSS Summarizer
 
-## Overview
+This document outlines the system architecture for an RSS summarizer, based on the provided file summaries.
 
-This document outlines the system architecture for an RSS summarizer, based on provided file summaries. The system focuses on extracting information from articles (likely obtained via RSS feeds), processing it using LLMs, and generating summaries, signal tags, and entity relationships. 
+## Module Breakdown
 
+### 1. Extraction Module
 
-
-## Module Descriptions
-
-### 1. Schema Module (schema.py)
-
-*   **Primary Purpose:** Defines data structures for representing extracted information from articles.  Provides schemas for entities, insights, relationships, and overall extraction results.
+*   **Primary Purpose:** Extracts structured information (insights, triples, entity relationships, signal tags) from article content.
 *   **Key Functions/Classes:**
-    *   `ExtractedEntity`: Represents an entity mentioned in an insight.
-    *   `ExtractedInsight`: Represents a single insight extracted from an article.
-    *   `EntityRelationshipResult`:  Represents the result of entity relationship extraction.
-    *   `SignalTag`: Represents a signal tag for an article (confidence score, reason).
-    *   `SignalTagResult`: Represents the result of signal tag extraction (tags, advertising status, summary, etc.).
-    *   `CombinedExtractionResult`: Represents the complete extraction from a single article.
-*   **Dependencies:** `typing`, `pydantic`
-*   **Dependents:**  All other modules that need to store or manipulate extracted data.
+    *   `ExtractedEntity`: Represents an extracted entity with name and type.
+    *   `ExtractedInsight`: Represents a single insight with content, type, confidence, reason, and associated entities.
+    *   `ExtractedTriple`: Represents an RDF-style triple with subject, predicate, object, types, and confidence.
+    *   `ExtractedEntityRelationship`: Represents relationships between entities.
+    *   `SignalTag`: Represents a signal tag with tag, confidence level, and optional reason.
+    *   `SemanticChunk`: Represents semantically coherent chunks containing content, insights, and triples.
+    *   `CombinedExtractionResult`: Represents the complete extraction from an article (chunks, insights, triples, tags, summary, headline, keywords).
+*   **Dependencies:**
+    *   `schema.py` (for data classes)
+*   **Dependents:**
+    *   Parsing Modules
 
-### 2. LM Studio Provider Module
+### 2. Parsing Module
 
-*   **Primary Purpose:** Provides an interface for interacting with the LM Studio API for embedding generation and potentially other text generation tasks.
+*   **Primary Purpose:** Parses the structured data extracted by the Extraction Module from LLM responses in various formats.
 *   **Key Functions/Classes:**
-    *   `LMStudioProvider`:  Handles communication with the LM Studio API.
-    *   `get_provider`: Factory function to create the appropriate provider instance.
-    *   `embed`: Generates embeddings using the LM Studio API.
-    *   `embed_batch`: Performs batch embedding using the LM Studio API. 
-*   **Dependencies:** `json`, `re`, `typing`, `pydantic`.
-*   **Dependents:** Modules that need to generate text embeddings or perform other tasks via the LM Studio API (likely the main processing module).
+    * `parse_json_response`: Parses JSON data with fallback for markdown and direct JSON formats.
+    * `parse_insights`: Parses insights, validating them against `ExtractedInsight` schema.
+    * `parse_triples`: Parses triples, validating them against `ExtractedTriple` schema.
+    * `parse_signal_tags`: Parses signal tags, validating them against `SignalTagResult` schema.
+    * `parse_combined_extraction`: Parses the combined extraction result, validating it against `CombinedExtractionResult` schema.
 
-### 3. Data Parsing Module (Functions: extract_json_from_response, parse_json_response, parse_insights, parse_triples, parse_signal_tags, parse_combined_extraction)
+*   **Dependencies:**
+    *   `schema.py` (for data classes)
+*   **Dependents:** None (it's a utility layer).
 
-*   **Primary Purpose:**  Parses JSON responses received from LLMs, handling different formats and validating the extracted data against predefined schemas.
-*   **Key Functions/Classes:**
-    *   `extract_json_from_response`: Extracts JSON data from LLM responses (handles markdown).
-    *   `parse_json_response`: Parses JSON data (handles direct JSON and markdown-wrapped JSON).
-    *   `parse_insights`: Parses insights, validating against the `ExtractedInsight` schema.
-    *   `parse_triples`: Parses triples, validating against an assumed `ExtractedTriple` schema (not defined in summaries).
-    *    `parse_signal_tags`: Parses signal tags, validating against the `SignalTagResult` schema.
-    *   `parse_combined_extraction`: Parses combined extraction results, validating against the `CombinedExtractionResult` schema.
-*   **Dependencies:** `json`, `re`.
-*   **Dependents:** The main processing module that calls LLMs and receives responses.
 
-### 4.  Main Processing Module (Implicit - Assumed to exist)
-
-*   **Primary Purpose:** Orchestrates the entire process: fetching articles, sending them to an LLM, receiving responses, parsing those responses, and storing/using the extracted data. This is not explicitly defined but is implied by the other modules.
-*   **Key Functions/Classes:** (Not specified in summaries - these are inferred)
-    *  Handles article retrieval from RSS feeds.
-    *  Sends articles to the LLM with appropriate prompts.
-    *  Calls the `LMStudioProvider` to generate embeddings or perform other tasks.
-    * Calls the data parsing functions (`parse_insights`, etc.) to process LLM responses.
-    *   Stores extracted data in a suitable format (e.g., database).
 
 ## Data Flow Diagram (Text-Based)
 
 ```
-[RSS Feed] --> [Main Processing Module]
-[Main Processing Module] --> [LLM (via LMStudioProvider)]
-[LLM] --> [Main Processing Module]
-[Main Processing Module] --> [Data Parsing Module]
-[Data Parsing Module] --> [Schema Module]
-[Schema Module] --> [Main Processing Module]
-[Main Processing Module] --> [Storage (e.g., Database)]
+[RSS Feed] --> [Fetcher Module] --> [Extraction Module]
+                                      |
+                                      v
+                                 [Parsing Module] --> [Data Storage/Processing] 
+                                      |
+                                      v
+                         [Presentation Layer / User Interface]
 ```
 
 ## Entry Points
 
-*   **CLI Commands:**  (Assumed) Likely commands to:
-    *   Fetch articles from an RSS feed.
-    *   Process a single article.
-    *   Generate embeddings for a text input.
-    *   View/Query stored results.
-*   **Main Functions:** (Assumed within the Main Processing Module)
-    * `main()`: The primary function that starts the process, fetching articles, processing them, and saving the data.
-    *  `process_article(article_url)`: Processes a single article from an RSS feed, including LLM interaction, parsing, and storage.
-
+*   **CLI Command:** `rss_summarizer.py --feed <url> --output <file>` (Example) - This would initiate the entire process, fetching from an RSS feed and saving the results to a file.  The specific command will depend on how it's implemented in the overall application.
+*   **Main Function:** `main()` or equivalent within the main execution file of the application.  This function orchestrates the workflow: fetch, extract, parse, and present/store the data.
 
 ## Shared Utilities
 
-*   **JSON Parsing:** `json` module (for handling JSON data).
-*   **Regular Expressions:** `re` module (for text processing, e.g., extracting information from markdown responses).
-*    **Typing**: `typing` (for type hinting)
-*   **Pydantic**: `pydantic` (for data validation and schema definition).
-```
+*   **JSON Handling:** Utilizes standard library `json` for JSON serialization and deserialization (used in `schema.py`, `extract_json_from_response`, `parse_json_response`).
+*   **Regular Expressions:**  Utilizes standard library `re` for pattern matching (used in `schema.py`, `extract_json_from_response`).
+*   **Pydantic Validation**: Uses Pydantic to validate data against the defined schemas (`ExtractedEntity`, etc.) ensuring data integrity.
+
+```python
+
 ```
 
 
@@ -106,25 +81,23 @@ This document outlines the system architecture for an RSS summarizer, based on p
 **Lines:** 303 | **Estimated tokens:** ~2487
 
 - Lines 1-3: import-block `imports` - Imports standard library modules (json, re) and third-party libraries (typing, pydantic).
-- Lines 5-14: class `ExtractedEntity` - Represents an entity mentioned in an insight, containing its name and type.
-- Lines 14-45: class `ExtractedInsight` - Represents a single insight extracted from an article, containing its content, type, confidence, reason, and associated entities.
-- Lines 16-25: method `ExtractedEntity.embed` - Abstract method for generating embedding vectors for a single text input.
-- Lines 27-35: method `ExtractedEntity.embed_batch` - Abstract method for batch embedding, returning a list of vectors.
-- Lines 47-120: class `LMStudioProvider` - A concrete provider using the LM Studio API at localhost:1234 for text generation tasks.
-- Lines 49-58: method `LMStudioProvider.__init__` - Initializes the provider with the API URL, model name, and timeout value, enabling model loading.
-- Lines 60-75: method `LMStudioProvider.embed` - Generates an embedding vector for a single text input using the LM Studio API; raises EmbeddingProviderError on failure.
-- Lines 77-120: method `LMStudioProvider.embed_batch` - Performs batch embedding by sending a single API request for multiple texts, optimizing performance.
-- Lines 122-140: function `get_provider` - A factory function that returns the appropriate embedding provider based on availability.
-- Lines 140-165: class `EntityRelationshipResult` - Represents the result of entity relationship extraction, containing a list of extracted relationships.
-- Lines 165-187: class `SignalTag` - Represents a signal tag for an article, including the tag itself, confidence score, and an optional reason.
-- Lines 187-213: class `SignalTagResult` - Represents the result of signal tag extraction, containing a list of signal tags, a boolean indicating if the article is an advertisement, and summary/headline/keywords.
-- Lines 213-265: class `CombinedExtractionResult` - Represents the complete extraction from a single article in one LLM call, including semantic chunks, signal tags, advertising status, summary, headline, and keywords.
-- Lines 269-348: function `extract_json_from_response` - Extracts JSON data from an LLM response, handling markdown code blocks and direct JSON structures.
-- Lines 351-401: function `parse_json_response` - Parses JSON data from an LLM response, attempting to handle both direct JSON and JSON within markdown wrappers, raising ValueError on failure.
-- Lines 405-442: function `parse_insights` - Parses insights from an LLM response, validating the data against the ExtractedInsight schema, and raising ValueError on failure.
-- Lines 446-483: function `parse_triples` - Parses triples from an LLM response, validating the data against the ExtractedTriple schema, and raising ValueError on failure.
-- Lines 487-523: function `parse_signal_tags` - Parses signal tags from an LLM response, validating the data against the SignalTagResult schema, and raising ValueError on failure.
-- Lines 527-574: function `parse_combined_extraction` - Parses the combined extraction result from an LLM response, validating it against the CombinedExtractionResult schema, and raising ValueError on failure.
+- Lines 5-35: class `ExtractedEntity` - Represents an entity mentioned in an insight, containing its name and type.
+- Lines 37-57: class `ExtractedInsight` - Represents a single insight extracted from an article, including content, type, confidence, reason, and associated entities.
+- Lines 59-77: class `InsightExtractionResult` - Represents the result of extracting insights from an article, containing a list of ExtractedInsight objects.
+- Lines 79-97: class `ExtractedTriple` - Represents an RDF-style triple extracted from text, containing subject, predicate, object, and their types, along with confidence.
+- Lines 99-117: class `TripleExtractionResult` - Represents the result of extracting triples from an article chunk, containing a list of ExtractedTriple objects.
+- Lines 119-137: class `ExtractedEntityRelationship` - Represents a relationship between two entities, specifying source, target, relationship type, and properties.
+- Lines 139-157: class `EntityRelationshipResult` - Represents the result of extracting entity relationships, containing a list of ExtractedEntityRelationship objects.
+- Lines 159-177: class `SignalTag` - Represents a signal tag for an article, including the tag itself, confidence level, and optional reason.
+- Lines 179-197: class `SignalTagResult` - Represents the result of extracting signal tags from an article, containing a list of SignalTag objects and a boolean indicating whether the article is an advertisement.
+- Lines 199-236: class `SemanticChunk` - Represents a semantically coherent chunk of an article, containing content, insights, and triples.
+- Lines 238-266: class `CombinedExtractionResult` - Represents the complete extraction from a single article in one LLM call, including chunks, insights, triples, tags, summary, headline, and keywords.
+- Lines 268-357: function `extract_json_from_response` - Extracts JSON data from an LLM response, handling markdown wrappers.
+- Lines 359-410: function `parse_json_response` - Parses JSON data from an LLM response, with fallback to handle markdown and direct JSON formats.
+- Lines 412-460: function `parse_insights` - Parses insights from an LLM response, validating them against the ExtractedInsight schema.
+- Lines 462-511: function `parse_triples` - Parses triples from an LLM response, validating them against the ExtractedTriple schema.
+- Lines 513-562: function `parse_signal_tags` - Parses signal tags from an LLM response, validating them against the SignalTagResult schema.
+- Lines 564-632: function `parse_combined_extraction` - Parses the combined extraction result from an LLM response, validating it against the CombinedExtractionResult schema.
 
 ---
 
