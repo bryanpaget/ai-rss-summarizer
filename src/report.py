@@ -1277,7 +1277,7 @@ def _run_connection_detection(
 
 
 # =============================================================================
-# STEP 5: STORY MATCHING
+# STEP 5: STORY MATCHING (Batched)
 # =============================================================================
 
 def _run_story_matching(
@@ -1293,67 +1293,166 @@ def _run_story_matching(
     Step 5: Match articles to stories using embeddings.
 
     Uses the semantic embeddings generated in Step 4 to find
-    related stories for each article.
+    related stories for each article. New story creation is batched
+    to avoid sequential LLM calls.
+
+    Architecture:
+    1. PASS 1: Find matches for all articles (embedding-only, no LLM)
+    2. PASS 2: Batch create new stories (submit all prompts, then collect)
     """
+    from .gateway import get_gateway
+    from .clustering import (
+        build_story_title_prompt,
+        build_story_description_prompt,
+        build_story_keywords_prompt,
+        parse_story_title_response,
+        parse_story_description_response,
+        parse_story_keywords_response,
+    )
+
     console.print("[bold]Step 5:[/bold] Matching articles to stories...")
 
     clusterer = StoryClusterer(provider, storage, kb, embedding_service=embedding_service)
+    gateway = get_gateway()
 
+    # Apply limit
+    articles_to_process = articles[:limit] if limit > 0 else articles
+
+    console.print(f"  Processing {len(articles_to_process)} articles...")
+
+    # =========================================================================
+    # PASS 1: Find matches (embedding-only, no LLM)
+    # =========================================================================
+    matched_articles = []  # (article, story)
+    needs_new_story = []   # articles that need new stories
+
+    step_start = time.time()
+    for article in articles_to_process:
+        embedding = storage.get_embedding(article.id)
+        if not embedding:
+            needs_new_story.append(article)
+            continue
+
+        matched_story = clusterer.find_matching_story_with_embedding(article, embedding)
+        if matched_story:
+            matched_articles.append((article, matched_story))
+        else:
+            needs_new_story.append(article)
+
+    match_time = time.time() - step_start
+    console.print(f"  [dim]Pass 1 (matching): {len(matched_articles)} matched, {len(needs_new_story)} need new stories ({match_time:.1f}s)[/dim]")
+
+    # =========================================================================
+    # Update matched articles (no LLM needed)
+    # =========================================================================
     matched = 0
-    created = 0
-    operations = 0
-
-    for article in articles:
-        if limit > 0 and operations >= limit:
-            console.print(f"  [dim]Stopped at {limit} story operations (limit reached)[/dim]")
-            break
-        article_title = article.title if article.title else "Untitled"
+    for article, story in matched_articles:
         try:
-            embedding = storage.get_embedding(article.id)
-            if not embedding:
-                # No embedding - create new story without matching
-                console.print(f"    [dim]{article_title}[/dim]")
-                console.print(f"      [yellow]No embedding - creating new story[/yellow]")
-                try:
-                    new_story = clusterer.create_new_story(article)
-                    created += 1
-                    operations += 1
-                    if new_story:
-                        console.print(f"      [green]-> New story: {new_story.title}[/green]")
-                except Exception as e:
-                    console.print(f"      [red]ERROR creating story: {e}[/red]")
-                    stats["errors"] += 1
-                continue
-
-            # Try to match to existing story
-            matched_story = clusterer.find_matching_story_with_embedding(article, embedding)
-
-            console.print(f"    [dim]{article_title}[/dim]")
-            if matched_story:
-                try:
-                    clusterer.update_story_with_article(matched_story, article)
-                    matched += 1
-                    operations += 1
-                    console.print(f"      [cyan]-> Matched to: {matched_story.title}[/cyan]")
-                except Exception as e:
-                    console.print(f"      [red]ERROR updating story: {e}[/red]")
-                    stats["errors"] += 1
-            else:
-                # Create new story - show why no match
-                console.print(f"      [yellow]No similar story found - creating new[/yellow]")
-                try:
-                    new_story = clusterer.create_new_story(article)
-                    created += 1
-                    operations += 1
-                    if new_story:
-                        console.print(f"      [green]-> New story: {new_story.title}[/green]")
-                except Exception as e:
-                    console.print(f"      [red]ERROR creating story: {e}[/red]")
-                    stats["errors"] += 1
-
+            clusterer.update_story_with_article(story, article)
+            matched += 1
         except Exception as e:
-            console.print(f"    [red]ERROR matching '{article_title}': {e}[/red]")
+            console.print(f"    [red]ERROR updating story for '{article.title[:40]}': {e}[/red]")
             stats["errors"] += 1
+
+    # =========================================================================
+    # PASS 2: Batch create new stories
+    # =========================================================================
+    created = 0
+    total_llm_calls = 0
+
+    if needs_new_story:
+        console.print(f"  Creating {len(needs_new_story)} new stories (batched, 3 LLM calls each = {len(needs_new_story) * 3} total)...")
+
+        # Build all prompts
+        title_handles = []
+        desc_handles = []
+        keywords_handles = []
+
+        for article in needs_new_story:
+            # Submit title prompt
+            title_prompt = build_story_title_prompt(article)
+            title_handle = gateway.submit_text(title_prompt, temperature=0.3)
+            title_handles.append((article, title_handle))
+            total_llm_calls += 1
+
+            # Submit description prompt
+            desc_prompt = build_story_description_prompt(article)
+            desc_handle = gateway.submit_text(desc_prompt, temperature=0.3)
+            desc_handles.append((article, desc_handle))
+            total_llm_calls += 1
+
+            # Submit keywords prompt
+            keywords_prompt = build_story_keywords_prompt(article)
+            keywords_handle = gateway.submit_text(keywords_prompt, temperature=0.3)
+            keywords_handles.append((article, keywords_handle))
+            total_llm_calls += 1
+
+        console.print(f"    [dim]Submitted {total_llm_calls} LLM requests[/dim]")
+
+        # Collect responses and create stories
+        collect_start = time.time()
+        for i, article in enumerate(needs_new_story):
+            try:
+                # Collect title
+                _, title_handle = title_handles[i]
+                title_response = gateway.collect_text(title_handle)
+                title = parse_story_title_response(title_response, article)
+
+                # Collect description
+                _, desc_handle = desc_handles[i]
+                desc_response = gateway.collect_text(desc_handle)
+                description = parse_story_description_response(desc_response, article)
+
+                # Collect keywords
+                _, keywords_handle = keywords_handles[i]
+                keywords_response = gateway.collect_text(keywords_handle)
+                keywords = parse_story_keywords_response(keywords_response, article)
+
+                # Create the story with collected data
+                # Parse published timestamp
+                if article.published:
+                    try:
+                        if isinstance(article.published, str):
+                            pub_str = article.published.replace("Z", "+00:00")
+                            first_seen = datetime.fromisoformat(pub_str).replace(tzinfo=None)
+                        else:
+                            first_seen = article.published
+                    except (ValueError, TypeError):
+                        first_seen = datetime.now()
+                else:
+                    first_seen = datetime.now()
+
+                story = Story(
+                    id=str(uuid.uuid4()),
+                    title=title,
+                    description=description,
+                    keywords=keywords,
+                    first_seen=first_seen,
+                    last_updated=datetime.now(),
+                    lifecycle_state="emerging",
+                    article_ids=[article.id],
+                    news_item_ids=[],
+                )
+
+                # Save to database
+                storage.save_story(story)
+                storage.update_article_story(article.id, story.id)
+                created += 1
+
+                # Progress indicator every 10 stories
+                if (i + 1) % 10 == 0:
+                    elapsed = time.time() - collect_start
+                    remaining = len(needs_new_story) - (i + 1)
+                    rate = (i + 1) / elapsed if elapsed > 0 else 1
+                    eta = remaining / rate if rate > 0 else 0
+                    console.print(f"    [dim]Created {i+1}/{len(needs_new_story)} stories (~{format_duration(eta)} remaining)[/dim]")
+
+            except Exception as e:
+                console.print(f"    [red]ERROR creating story for '{article.title[:40]}': {e}[/red]")
+                stats["errors"] += 1
+
+        collect_time = time.time() - collect_start
+        console.print(f"    [green]Created {created} stories ({total_llm_calls} LLM calls in {collect_time:.1f}s)[/green]")
 
     console.print()
     console.print(f"  [green]Matched {matched} articles to existing stories[/green]")
