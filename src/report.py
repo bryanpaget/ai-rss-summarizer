@@ -675,6 +675,11 @@ def _run_llm_phase(
                 console.print(f"  [bold green][OK][/bold green] [dim]{article_elapsed:.1f}s[/dim]")
         console.print()
 
+    # Summary with call counts for visibility
+    step_elapsed = time.time() - step_start
+    articles_processed = min(len(articles), limit) if limit > 0 else len(articles)
+    console.print(f"  [dim]Processed {articles_processed} articles with {total_llm_calls} LLM calls ({step_elapsed:.1f}s)[/dim]")
+
     return processed_articles
 
 
