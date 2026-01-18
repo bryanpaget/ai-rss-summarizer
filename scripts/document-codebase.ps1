@@ -59,15 +59,17 @@ $fileTypeConfigs = @{
 "@
         Examples = @"
 --- EXAMPLE INPUT ---
-1	"""Calculator module."""
+1	"""Example only - not real code."""
 2	
-3	def add(a, b):
-4	    return a + b
+3	def example_function_xyz():
+4	    pass
 --- END EXAMPLE INPUT ---
 
 Correct output:
-Lines 1-1: global ``module_docstring`` - Module docstring
-Lines 3-4: function ``add`` - Adds two numbers
+Lines 1-1: global ``module_docstring`` - Module docstring  
+Lines 3-4: function ``example_function_xyz`` - Example function
+
+IMPORTANT: The above is FORMAT DEMONSTRATION ONLY. Never output "example_function_xyz" - it does not exist in real files.
 "@
         Guidance = @"
 PYTHON-SPECIFIC RULES:
