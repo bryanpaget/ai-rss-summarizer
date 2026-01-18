@@ -108,6 +108,69 @@ class EmbeddingService:
         except EmbeddingProviderError as e:
             raise EmbeddingError(f"Embedding failed: {e}") from e
 
+    def embed_text_with_chunks(
+        self, text: str
+    ) -> tuple[EmbeddingResult, list[tuple[str, list[float]]]]:
+        """Generate embedding for text AND preserve individual chunk embeddings.
+
+        This method returns BOTH the averaged embedding (for backward compatibility)
+        AND the individual chunk embeddings (for fine-grained matching).
+
+        Args:
+            text: Text to embed.
+
+        Returns:
+            Tuple of:
+                - EmbeddingResult with averaged vector
+                - List of (chunk_text, chunk_embedding) tuples
+
+        Raises:
+            EmbeddingError: If embedding fails or no provider available
+        """
+        try:
+            provider = self._get_provider()
+
+            # Short text: single chunk
+            if len(text) <= 2000:
+                vector = provider.embed(text)
+                result = EmbeddingResult(
+                    vector=vector,
+                    model=provider.model_name,
+                    dimensions=len(vector),
+                )
+                # Return as single chunk
+                return result, [(text, vector)]
+
+            # Long text: chunk and embed each
+            chunks = self._chunk_at_sentences(text, max_chunk_size=1800)
+
+            if len(chunks) == 1:
+                vector = provider.embed(chunks[0])
+                result = EmbeddingResult(
+                    vector=vector,
+                    model=provider.model_name,
+                    dimensions=len(vector),
+                )
+                return result, [(chunks[0], vector)]
+
+            # Multiple chunks: embed all, preserve each, return averaged
+            vectors = provider.embed_batch(chunks)
+            averaged = self._average_vectors(vectors)
+
+            result = EmbeddingResult(
+                vector=averaged,
+                model=provider.model_name,
+                dimensions=len(averaged),
+            )
+
+            # Pair each chunk with its embedding
+            chunk_data = list(zip(chunks, vectors))
+
+            return result, chunk_data
+
+        except EmbeddingProviderError as e:
+            raise EmbeddingError(f"Embedding failed: {e}") from e
+
     def _chunk_at_sentences(self, text: str, max_chunk_size: int = 1800) -> list[str]:
         """Split text at sentence boundaries to fit embedding model limits."""
         if len(text) <= max_chunk_size:
