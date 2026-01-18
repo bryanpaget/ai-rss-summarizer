@@ -35,6 +35,15 @@
                                                      136
                                                  ]
                                      },
+                      "cluster":  {
+                                      "in":  [
+
+                                             ],
+                                      "out":  [
+                                                  15,
+                                                  16
+                                              ]
+                                  },
                       "C:\\Program Files\\Git\\usr\\bin":  {
                                                                "in":  [
                                                                           125
@@ -60,12 +69,12 @@
                                                        ]
                                            },
                       "timeout signal":  {
-                                             "out":  [
-                                                         514
-                                                     ],
                                              "in":  [
 
-                                                    ]
+                                                    ],
+                                             "out":  [
+                                                         514
+                                                     ]
                                          },
                       "additional terms":  {
                                                "in":  [
@@ -84,21 +93,21 @@
                                               ]
                                   },
                       "heartbeat updates":  {
-                                                "out":  [
-
-                                                        ],
                                                 "in":  [
                                                            545
-                                                       ]
-                                            },
-                      "lines 1079/1132":  {
-                                              "out":  [
+                                                       ],
+                                                "out":  [
 
-                                                      ],
-                                              "in":  [
-                                                         522
+                                                        ]
+                                            },
+                      "need heartbeat":  {
+                                             "in":  [
+
+                                                    ],
+                                             "out":  [
+                                                         538
                                                      ]
-                                          },
+                                         },
                       "Windows security":  {
                                                "in":  [
 
@@ -125,6 +134,14 @@
 
                                                          ]
                                              },
+                      "with heartbeat":  {
+                                             "out":  [
+
+                                                     ],
+                                             "in":  [
+                                                        552
+                                                    ]
+                                         },
                       "that format":  {
                                           "in":  [
                                                      305
@@ -141,15 +158,6 @@
 
                                                    ]
                                        },
-                      "communication":  {
-                                            "in":  [
-                                                       158,
-                                                       290
-                                                   ],
-                                            "out":  [
-
-                                                    ]
-                                        },
                       "insights":  {
                                        "in":  [
 
@@ -166,17 +174,6 @@
 
                                                   ]
                                       },
-                      "that":  {
-                                   "in":  [
-
-                                          ],
-                                   "out":  [
-                                               283,
-                                               300,
-                                               307,
-                                               412
-                                           ]
-                               },
                       "command not found":  {
                                                 "in":  [
                                                            181
@@ -228,6 +225,14 @@
 
                                                      ]
                                          },
+                      "problem":  {
+                                      "in":  [
+
+                                             ],
+                                      "out":  [
+                                                  391
+                                              ]
+                                  },
                       "PowerShell design":  {
                                                 "in":  [
                                                            128,
@@ -253,14 +258,6 @@
                                                                101
                                                            ]
                                                },
-                      "literal compliance":  {
-                                                 "in":  [
-                                                            272
-                                                        ],
-                                                 "out":  [
-                                                             273
-                                                         ]
-                                             },
                       "locking":  {
                                       "in":  [
 
@@ -327,15 +324,6 @@
 
                                                          ]
                                              },
-                      "requests":  {
-                                       "in":  [
-
-                                              ],
-                                       "out":  [
-                                                   458,
-                                                   500
-                                               ]
-                                   },
                       "my text":  {
                                       "in":  [
 
@@ -361,12 +349,12 @@
                                                       ]
                                           },
                       "no feedback":  {
-                                          "out":  [
-                                                      512
-                                                  ],
                                           "in":  [
 
-                                                 ]
+                                                 ],
+                                          "out":  [
+                                                      512
+                                                  ]
                                       },
                       "invalid JSON":  {
                                            "in":  [
@@ -433,20 +421,28 @@
                                                   ]
                                       },
                       "LLM wait":  {
-                                       "out":  [
-
-                                               ],
                                        "in":  [
                                                   538
-                                              ]
-                                   },
-                      "heartbeat mechanism":  {
-                                                  "out":  [
+                                              ],
+                                       "out":  [
 
-                                                          ],
+                                               ]
+                                   },
+                      "cli_constitution.py with 31 items after 2 timeouts":  {
+                                                                                 "in":  [
+                                                                                            101
+                                                                                        ],
+                                                                                 "out":  [
+
+                                                                                         ]
+                                                                             },
+                      "heartbeat mechanism":  {
                                                   "in":  [
                                                              521
-                                                         ]
+                                                         ],
+                                                  "out":  [
+
+                                                          ]
                                               },
                       "permission denied":  {
                                                 "in":  [
@@ -456,6 +452,14 @@
 
                                                         ]
                                             },
+                      "instead":  {
+                                      "in":  [
+
+                                             ],
+                                      "out":  [
+                                                  165
+                                              ]
+                                  },
                       "literal words":  {
                                             "in":  [
                                                        306
@@ -515,21 +519,13 @@
 
                                                                 ]
                                                     },
-                      "their report":  {
-                                           "in":  [
-                                                      169
-                                                  ],
-                                           "out":  [
-
-                                                   ]
-                                       },
                       "incremental feedback":  {
-                                                   "out":  [
-
-                                                           ],
                                                    "in":  [
                                                               518
-                                                          ]
+                                                          ],
+                                                   "out":  [
+
+                                                           ]
                                                },
                       "rss report":  {
                                          "in":  [
@@ -549,12 +545,12 @@
                                                   ]
                                       },
                       "processing":  {
-                                         "out":  [
-
-                                                 ],
                                          "in":  [
                                                     547
-                                                ]
+                                                ],
+                                         "out":  [
+
+                                                 ]
                                      },
                       "fast":  {
                                    "in":  [
@@ -564,14 +560,6 @@
                                                85
                                            ]
                                },
-                      "matching format":  {
-                                              "in":  [
-                                                         381
-                                                     ],
-                                              "out":  [
-
-                                                      ]
-                                          },
                       "instruction":  {
                                           "in":  [
 
@@ -592,12 +580,12 @@
                                             ]
                                 },
                       "per-request":  {
-                                          "out":  [
-                                                      534
-                                                  ],
                                           "in":  [
                                                      533
-                                                 ]
+                                                 ],
+                                          "out":  [
+                                                      534
+                                                  ]
                                       },
                       "acknowledgment first":  {
                                                    "in":  [
@@ -607,15 +595,18 @@
 
                                                            ]
                                                },
-                      "cluster":  {
-                                      "in":  [
-
-                                             ],
-                                      "out":  [
-                                                  15,
-                                                  16
-                                              ]
-                                  },
+                      "STORY tag":  {
+                                        "in":  [
+                                                   207,
+                                                   315,
+                                                   350,
+                                                   362,
+                                                   373
+                                               ],
+                                        "out":  [
+                                                    196
+                                                ]
+                                    },
                       "minimum language":  {
                                                "in":  [
                                                           284
@@ -624,21 +615,29 @@
 
                                                        ]
                                            },
-                      "timeout as failure signal":  {
-                                                        "out":  [
+                      "add_eos_token true":  {
+                                                 "out":  [
 
-                                                                ],
+                                                         ],
+                                                 "in":  [
+                                                            558
+                                                        ]
+                                             },
+                      "timeout as failure signal":  {
                                                         "in":  [
                                                                    513
-                                                               ]
+                                                               ],
+                                                        "out":  [
+
+                                                                ]
                                                     },
                       "recent heartbeat":  {
-                                               "out":  [
-                                                           527
-                                                       ],
                                                "in":  [
 
-                                                      ]
+                                                      ],
+                                               "out":  [
+                                                           527
+                                                       ]
                                            },
                       "tagging system":  {
                                              "in":  [
@@ -665,12 +664,12 @@
                                                       ]
                                           },
                       "during wait":  {
-                                          "out":  [
-
-                                                  ],
                                           "in":  [
                                                      549
-                                                 ]
+                                                 ],
+                                          "out":  [
+
+                                                  ]
                                       },
                       "otherwise":  {
                                         "in":  [
@@ -713,6 +712,14 @@
                                               100
                                           ]
                               },
+                      "model":  {
+                                    "out":  [
+                                                558
+                                            ],
+                                    "in":  [
+
+                                           ]
+                                },
                       "premature processor exit":  {
                                                        "in":  [
                                                                   103
@@ -745,16 +752,14 @@
 
                                                             ]
                                                 },
-                      "120s limit":  {
-                                         "in":  [
-                                                    478,
-                                                    503
-                                                ],
-                                         "out":  [
-                                                     479,
-                                                     504
-                                                 ]
-                                     },
+                      "user expectation":  {
+                                               "in":  [
+
+                                                      ],
+                                               "out":  [
+                                                           159
+                                                       ]
+                                           },
                       "indefinite hangs":  {
                                                "in":  [
                                                           470
@@ -787,14 +792,24 @@
 
                                                            ]
                                                },
-                      "API contract":  {
-                                           "in":  [
-                                                      37
-                                                  ],
-                                           "out":  [
+                      "120s limit":  {
+                                         "in":  [
+                                                    478,
+                                                    503
+                                                ],
+                                         "out":  [
+                                                     479,
+                                                     504
+                                                 ]
+                                     },
+                      "last item flag":  {
+                                             "in":  [
+                                                        120
+                                                    ],
+                                             "out":  [
 
-                                                   ]
-                                       },
+                                                     ]
+                                         },
                       "workaround":  {
                                          "in":  [
                                                     337
@@ -804,16 +819,16 @@
                                                  ]
                                      },
                       "gateway":  {
+                                      "in":  [
+
+                                             ],
                                       "out":  [
                                                   490,
                                                   496,
                                                   515,
                                                   519,
                                                   521
-                                              ],
-                                      "in":  [
-
-                                             ]
+                                              ]
                                   },
                       "than 3":  {
                                      "in":  [
@@ -823,14 +838,14 @@
 
                                              ]
                                  },
-                      "need heartbeat":  {
-                                             "out":  [
-                                                         538
-                                                     ],
-                                             "in":  [
+                      "windows":  {
+                                      "in":  [
 
-                                                    ]
-                                         },
+                                             ],
+                                      "out":  [
+                                                  110
+                                              ]
+                                  },
                       "not reading instructions":  {
                                                        "in":  [
                                                                   135
@@ -840,12 +855,12 @@
                                                                ]
                                                    },
                       "batch building":  {
-                                             "out":  [
-
-                                                     ],
                                              "in":  [
                                                         531
-                                                    ]
+                                                    ],
+                                             "out":  [
+
+                                                     ]
                                          },
                       "workload mismatch":  {
                                                 "in":  [
@@ -855,12 +870,12 @@
                                                             487
                                                         ]
                                             },
-                      "receipt needs":  {
+                      "failure modes":  {
                                             "in":  [
-
+                                                       261
                                                    ],
                                             "out":  [
-                                                        352
+
                                                     ]
                                         },
                       "add":  {
@@ -1000,21 +1015,12 @@
                                                          149
                                                      ]
                                          },
-                      "candidate files":  {
-                                              "in":  [
-                                                         198
-                                                     ],
-                                              "out":  [
-
-                                                      ]
-                                          },
-                      "large clusters":  {
+                      "numbered three":  {
                                              "in":  [
-                                                        473
+                                                        296
                                                     ],
                                              "out":  [
-                                                         465,
-                                                         474
+
                                                      ]
                                          },
                       "same":  {
@@ -1033,6 +1039,14 @@
 
                                                            ]
                                                },
+                      "recompiling":  {
+                                          "out":  [
+
+                                                  ],
+                                          "in":  [
+                                                     568
+                                                 ]
+                                      },
                       "repetition":  {
                                          "in":  [
 
@@ -1079,14 +1093,6 @@
 
                                                ]
                                    },
-                      "the time":  {
-                                       "out":  [
-
-                                               ],
-                                       "in":  [
-                                                  539
-                                              ]
-                                   },
                       "punctuation":  {
                                           "in":  [
                                                      275
@@ -1095,6 +1101,14 @@
 
                                                   ]
                                       },
+                      "GGUF":  {
+                                   "out":  [
+                                               565
+                                           ],
+                                   "in":  [
+
+                                          ]
+                               },
                       "result":  {
                                      "in":  [
                                                 74
@@ -1111,22 +1125,6 @@
                                                328
                                            ]
                                },
-                      "file path":  {
-                                        "in":  [
-                                                   302
-                                               ],
-                                        "out":  [
-
-                                                ]
-                                    },
-                      "validation":  {
-                                         "in":  [
-                                                    499
-                                                ],
-                                         "out":  [
-
-                                                 ]
-                                     },
                       "return formatting":  {
                                                 "in":  [
                                                            292
@@ -1135,6 +1133,14 @@
 
                                                         ]
                                             },
+                      "baked tokenizer settings":  {
+                                                       "out":  [
+
+                                                               ],
+                                                       "in":  [
+                                                                  565
+                                                              ]
+                                                   },
                       "wrong proposal":  {
                                              "in":  [
 
@@ -1144,15 +1150,15 @@
                                                      ]
                                          },
                       "response file":  {
-                                            "out":  [
-                                                        481,
-                                                        516
-                                                    ],
                                             "in":  [
                                                        480,
                                                        515,
                                                        523
-                                                   ]
+                                                   ],
+                                            "out":  [
+                                                        481,
+                                                        516
+                                                    ]
                                         },
                       "removing without asking":  {
                                                       "in":  [
@@ -1162,15 +1168,6 @@
                                                                   290
                                                               ]
                                                   },
-                      "user narrative":  {
-                                             "in":  [
-                                                        200,
-                                                        316
-                                                    ],
-                                             "out":  [
-
-                                                     ]
-                                         },
                       "acting":  {
                                      "in":  [
 
@@ -1179,22 +1176,39 @@
                                                  162
                                              ]
                                  },
-                      "cluster insights":  {
-                                               "in":  [
+                      "I":  {
+                                "in":  [
 
-                                                      ],
-                                               "out":  [
-                                                           24
-                                                       ]
-                                           },
-                      "multiple clients":  {
-                                               "in":  [
-                                                          492
-                                                      ],
-                                               "out":  [
-                                                           493
-                                                       ]
-                                           },
+                                       ],
+                                "out":  [
+                                            169,
+                                            170,
+                                            173,
+                                            183,
+                                            185,
+                                            187,
+                                            189,
+                                            213,
+                                            215,
+                                            217,
+                                            219,
+                                            245,
+                                            250,
+                                            254,
+                                            258,
+                                            266,
+                                            269,
+                                            276,
+                                            289,
+                                            299,
+                                            306,
+                                            319,
+                                            411,
+                                            414,
+                                            420,
+                                            431
+                                        ]
+                            },
                       "programmatic elevation":  {
                                                      "in":  [
                                                                 145
@@ -1221,6 +1235,18 @@
                                                    296
                                                ]
                                    },
+                      "article.id":  {
+                                         "in":  [
+
+                                                ],
+                                         "out":  [
+                                                     0,
+                                                     1,
+                                                     2,
+                                                     46,
+                                                     47
+                                                 ]
+                                     },
                       "STORY captures events":  {
                                                     "in":  [
                                                                442
@@ -1240,6 +1266,14 @@
                                                                94
                                                            ]
                                                },
+                      "API contract":  {
+                                           "in":  [
+                                                      37
+                                                  ],
+                                           "out":  [
+
+                                                   ]
+                                       },
                       "without asking":  {
                                              "in":  [
                                                         289
@@ -1256,16 +1290,25 @@
 
                                                             ]
                                                 },
-                      "result.vector":  {
-                                            "in":  [
-                                                       0,
-                                                       2,
-                                                       47
-                                                   ],
+                      "blocking wait":  {
                                             "out":  [
 
-                                                    ]
+                                                    ],
+                                            "in":  [
+                                                       551
+                                                   ]
                                         },
+                      "that":  {
+                                   "in":  [
+
+                                          ],
+                                   "out":  [
+                                               283,
+                                               300,
+                                               307,
+                                               412
+                                           ]
+                               },
                       "line present":  {
                                            "in":  [
                                                       344
@@ -1287,12 +1330,12 @@
                                            ]
                                },
                       "curl wait":  {
-                                        "out":  [
-
-                                                ],
                                         "in":  [
                                                    540
-                                               ]
+                                               ],
+                                        "out":  [
+
+                                                ]
                                     },
                       "averaging":  {
                                         "in":  [
@@ -1303,6 +1346,14 @@
                                                     36
                                                 ]
                                     },
+                      "user burden":  {
+                                          "in":  [
+
+                                                 ],
+                                          "out":  [
+                                                      146
+                                                  ]
+                                      },
                       "forever":  {
                                       "in":  [
                                                  412
@@ -1352,17 +1403,6 @@
 
                                                                ]
                                                    },
-                      "this":  {
-                                   "in":  [
-                                              353
-                                          ],
-                                   "out":  [
-                                               363,
-                                               375,
-                                               383,
-                                               443
-                                           ]
-                               },
                       "message to current state":  {
                                                        "in":  [
                                                                   221
@@ -1395,6 +1435,14 @@
                                                   238
                                               ]
                                   },
+                      "separator":  {
+                                        "out":  [
+
+                                                ],
+                                        "in":  [
+                                                   566
+                                               ]
+                                    },
                       "non-empty queue":  {
                                               "in":  [
 
@@ -1411,15 +1459,14 @@
 
                                                    ]
                                        },
-                      "existing format":  {
-                                              "in":  [
-                                                         434,
-                                                         435
-                                                     ],
-                                              "out":  [
+                      "the time":  {
+                                       "in":  [
+                                                  539
+                                              ],
+                                       "out":  [
 
-                                                      ]
-                                          },
+                                               ]
+                                   },
                       "timeout errors":  {
                                              "in":  [
 
@@ -1436,21 +1483,21 @@
 
                                                    ]
                                        },
-                      "chunk_embedding":  {
-                                              "in":  [
-                                                         49
-                                                     ],
-                                              "out":  [
-
-                                                      ]
-                                          },
-                      "next request":  {
+                      "their report":  {
+                                           "in":  [
+                                                      169
+                                                  ],
                                            "out":  [
 
-                                                   ],
+                                                   ]
+                                       },
+                      "next request":  {
                                            "in":  [
                                                       536
-                                                  ]
+                                                  ],
+                                           "out":  [
+
+                                                   ]
                                        },
                       "at minimum 3":  {
                                            "in":  [
@@ -1508,6 +1555,14 @@
                                                      66
                                                  ]
                                      },
+                      "informational":  {
+                                            "out":  [
+
+                                                    ],
+                                            "in":  [
+                                                       569
+                                                   ]
+                                        },
                       "correction":  {
                                          "in":  [
 
@@ -1532,14 +1587,15 @@
 
                                                 ]
                                     },
-                      "single return value":  {
-                                                  "in":  [
-                                                             36
-                                                         ],
-                                                  "out":  [
+                      "user narrative":  {
+                                             "in":  [
+                                                        200,
+                                                        316
+                                                    ],
+                                             "out":  [
 
-                                                          ]
-                                              },
+                                                     ]
+                                         },
                       "wrong file":  {
                                          "in":  [
                                                     451
@@ -1565,23 +1621,23 @@
                                                           ]
                                               },
                       "gateway.py":  {
-                                         "out":  [
-                                                     480,
-                                                     523
-                                                 ],
                                          "in":  [
                                                     466,
                                                     479,
                                                     504
-                                                ]
+                                                ],
+                                         "out":  [
+                                                     480,
+                                                     523
+                                                 ]
                                      },
                       "LM Studio call":  {
-                                             "out":  [
-                                                         539
-                                                     ],
                                              "in":  [
 
-                                                    ]
+                                                    ],
+                                             "out":  [
+                                                         539
+                                                     ]
                                          },
                       "lost semantics":  {
                                              "in":  [
@@ -1624,12 +1680,12 @@
                                                        ]
                                            },
                       "LLM processes":  {
-                                            "out":  [
-
-                                                    ],
                                             "in":  [
                                                        546
-                                                   ]
+                                                   ],
+                                            "out":  [
+
+                                                    ]
                                         },
                       "story tag later":  {
                                               "in":  [
@@ -1664,15 +1720,6 @@
 
                                                       ]
                                           },
-                      "personal projects":  {
-                                                "in":  [
-                                                           409,
-                                                           419
-                                                       ],
-                                                "out":  [
-
-                                                        ]
-                                            },
                       "unconditional":  {
                                             "in":  [
                                                        223,
@@ -1735,6 +1782,14 @@
                                                          379
                                                      ]
                                          },
+                      "infrastructure":  {
+                                             "in":  [
+
+                                                    ],
+                                             "out":  [
+                                                         530
+                                                     ]
+                                         },
                       "my action receipt":  {
                                                 "in":  [
                                                            220
@@ -1751,14 +1806,15 @@
 
                                               ]
                                   },
-                      "f\"\\n\u0027` and line 794 is `\u0027  [red]ERROR: {e}[/red]\"":  {
-                                                                                             "in":  [
-
-                                                                                                    ],
-                                                                                             "out":  [
-                                                                                                         51
-                                                                                                     ]
-                                                                                         },
+                      "large clusters":  {
+                                             "in":  [
+                                                        473
+                                                    ],
+                                             "out":  [
+                                                         465,
+                                                         474
+                                                     ]
+                                         },
                       "Milhouse .claude":  {
                                                "in":  [
                                                           433
@@ -1800,14 +1856,22 @@
                                                     160
                                                 ]
                                     },
-                      "problem":  {
-                                      "in":  [
+                      "minimized":  {
+                                        "in":  [
+                                                   146
+                                               ],
+                                        "out":  [
 
-                                             ],
-                                      "out":  [
-                                                  391
-                                              ]
-                                  },
+                                                ]
+                                    },
+                      "fix":  {
+                                  "out":  [
+                                              560
+                                          ],
+                                  "in":  [
+
+                                         ]
+                              },
                       "no matches":  {
                                          "in":  [
                                                     26
@@ -1866,7 +1930,8 @@
                                             },
                       "Python":  {
                                      "out":  [
-                                                 526
+                                                 526,
+                                                 563
                                              ],
                                      "in":  [
                                                 525
@@ -1880,6 +1945,27 @@
 
                                                       ]
                                           },
+                      "kb":  {
+                                 "in":  [
+                                            45,
+                                            76,
+                                            77,
+                                            78,
+                                            79
+                                        ],
+                                 "out":  [
+
+                                         ]
+                             },
+                      "matching":  {
+                                       "in":  [
+
+                                              ],
+                                       "out":  [
+                                                   26,
+                                                   29
+                                               ]
+                                   },
                       "always":  {
                                      "in":  [
                                                 228
@@ -1904,21 +1990,22 @@
                                                        461
                                                    ]
                                        },
-                      "infrastructure":  {
-                                             "out":  [
-                                                         530
+                      "partial matches":  {
+                                              "in":  [
+                                                         33
                                                      ],
-                                             "in":  [
+                                              "out":  [
 
-                                                    ]
-                                         },
+                                                      ]
+                                          },
                       "issue":  {
+                                    "out":  [
+                                                108,
+                                                557
+                                            ],
                                     "in":  [
 
-                                           ],
-                                    "out":  [
-                                                108
-                                            ]
+                                           ]
                                 },
                       "line 45":  {
                                       "in":  [
@@ -1928,6 +2015,16 @@
                                                   329
                                               ]
                                   },
+                      "title":  {
+                                    "in":  [
+
+                                           ],
+                                    "out":  [
+                                                18,
+                                                21,
+                                                22
+                                            ]
+                                },
                       "this connects":  {
                                             "in":  [
 
@@ -1953,14 +2050,22 @@
                                               332
                                           ]
                               },
-                      "at minimum":  {
-                                         "in":  [
-                                                    294
-                                                ],
-                                         "out":  [
-                                                     279
-                                                 ]
-                                     },
+                      "cluster insights":  {
+                                               "in":  [
+
+                                                      ],
+                                               "out":  [
+                                                           24
+                                                       ]
+                                           },
+                      "replace with":  {
+                                           "out":  [
+                                                       552
+                                                   ],
+                                           "in":  [
+
+                                                  ]
+                                       },
                       "after receipt":  {
                                             "in":  [
                                                        264
@@ -1994,21 +2099,21 @@
 
                                                     ]
                                         },
-                      "spawn condition":  {
-                                              "in":  [
+                      "validation":  {
+                                         "in":  [
+                                                    499
+                                                ],
+                                         "out":  [
 
-                                                     ],
-                                              "out":  [
-                                                          114
-                                                      ]
-                                          },
+                                                 ]
+                                     },
                       "polling with timeout":  {
-                                                   "out":  [
-
-                                                           ],
                                                    "in":  [
                                                               510
-                                                          ]
+                                                          ],
+                                                   "out":  [
+
+                                                           ]
                                                },
                       "48 lines":  {
                                        "in":  [
@@ -2028,12 +2133,12 @@
                                                  ]
                                      },
                       "all PIDs":  {
-                                       "out":  [
-
-                                               ],
                                        "in":  [
                                                   543
-                                              ]
+                                              ],
+                                       "out":  [
+
+                                               ]
                                    },
                       "failure":  {
                                       "in":  [
@@ -2043,6 +2148,14 @@
                                                   135
                                               ]
                                   },
+                      "periodic heartbeat":  {
+                                                 "out":  [
+
+                                                         ],
+                                                 "in":  [
+                                                            550
+                                                        ]
+                                             },
                       "alternative":  {
                                           "in":  [
 
@@ -2100,6 +2213,14 @@
 
                                                      ]
                                          },
+                      "placement":  {
+                                        "in":  [
+
+                                               ],
+                                        "out":  [
+                                                    234
+                                                ]
+                                    },
                       "old formatting":  {
                                              "in":  [
 
@@ -2108,6 +2229,14 @@
                                                          293
                                                      ]
                                          },
+                      "setting":  {
+                                      "out":  [
+                                                  567
+                                              ],
+                                      "in":  [
+
+                                             ]
+                                  },
                       "current file":  {
                                            "in":  [
                                                       319
@@ -2116,6 +2245,14 @@
 
                                                    ]
                                        },
+                      "kill -0 check":  {
+                                            "out":  [
+
+                                                    ],
+                                            "in":  [
+                                                       553
+                                                   ]
+                                        },
                       "approval workflow":  {
                                                 "in":  [
                                                            363
@@ -2270,12 +2407,12 @@
                                                   ]
                                       },
                       "stale heartbeat":  {
-                                              "out":  [
-
-                                                      ],
                                               "in":  [
                                                          528
-                                                     ]
+                                                     ],
+                                              "out":  [
+
+                                                      ]
                                           },
                       "available":  {
                                         "in":  [
@@ -2286,12 +2423,12 @@
                                                 ]
                                     },
                       "PIDs":  {
-                                   "out":  [
-                                               542
-                                           ],
                                    "in":  [
 
-                                          ]
+                                          ],
+                                   "out":  [
+                                               542
+                                           ]
                                },
                       "fine-grained":  {
                                            "in":  [
@@ -2370,12 +2507,12 @@
                                            ]
                                },
                       "imprecise":  {
-                                        "out":  [
-
-                                                ],
                                         "in":  [
                                                    514
-                                               ]
+                                               ],
+                                        "out":  [
+
+                                                ]
                                     },
                       "spawn or wake":  {
                                             "in":  [
@@ -2393,6 +2530,14 @@
 
                                                     ]
                                         },
+                      "projects":  {
+                                       "in":  [
+
+                                              ],
+                                       "out":  [
+                                                   409
+                                               ]
+                                   },
                       "184ms each":  {
                                          "in":  [
 
@@ -2585,6 +2730,14 @@
 
                                                               ]
                                                   },
+                      "GGUF model config":  {
+                                                "out":  [
+
+                                                        ],
+                                                "in":  [
+                                                           557
+                                                       ]
+                                            },
                       "ground truth":  {
                                            "in":  [
                                                       201
@@ -2625,22 +2778,15 @@
 
                                                     ]
                                         },
-                      "dispatch":  {
-                                       "out":  [
-                                                   541
-                                               ],
-                                       "in":  [
-                                                  532
-                                              ]
-                                   },
-                      "clients":  {
-                                      "in":  [
+                      "successfully":  {
+                                           "in":  [
+                                                      338,
+                                                      398
+                                                  ],
+                                           "out":  [
 
-                                             ],
-                                      "out":  [
-                                                  109
-                                              ]
-                                  },
+                                                   ]
+                                       },
                       "commit":  {
                                      "in":  [
                                                 339
@@ -2725,6 +2871,14 @@
                                                          104
                                                      ]
                                          },
+                      "f\"\\n\u0027` and line 794 is `\u0027  [red]ERROR: {e}[/red]\"":  {
+                                                                                             "in":  [
+
+                                                                                                    ],
+                                                                                             "out":  [
+                                                                                                         51
+                                                                                                     ]
+                                                                                         },
                       "environment confusion":  {
                                                     "in":  [
                                                                131
@@ -2757,15 +2911,14 @@
                                                    28
                                                ]
                                    },
-                      "correct format":  {
-                                             "in":  [
-                                                        304,
-                                                        445
-                                                    ],
-                                             "out":  [
+                      "chunk_embedding":  {
+                                              "in":  [
+                                                         49
+                                                     ],
+                                              "out":  [
 
-                                                     ]
-                                         },
+                                                      ]
+                                          },
                       "blocking":  {
                                        "in":  [
 
@@ -2774,22 +2927,13 @@
                                                    472
                                                ]
                                    },
-                      "successfully":  {
-                                           "in":  [
-                                                      338,
-                                                      398
-                                                  ],
-                                           "out":  [
-
-                                                   ]
-                                       },
                       "background curl":  {
-                                              "out":  [
-
-                                                      ],
                                               "in":  [
                                                          541
-                                                     ]
+                                                     ],
+                                              "out":  [
+
+                                                      ]
                                           },
                       "PATH":  {
                                    "in":  [
@@ -2812,12 +2956,12 @@
                                                    ]
                                        },
                       "need to add":  {
-                                          "out":  [
-                                                      548
-                                                  ],
                                           "in":  [
 
-                                                 ]
+                                                 ],
+                                          "out":  [
+                                                      548
+                                                  ]
                                       },
                       "so ~46s per article including tagging":  {
                                                                     "in":  [
@@ -2835,22 +2979,6 @@
 
                                                     ]
                                         },
-                      "communicate only":  {
-                                               "in":  [
-                                                          163
-                                                      ],
-                                               "out":  [
-
-                                                       ]
-                                           },
-                      "partial matches":  {
-                                              "in":  [
-                                                         33
-                                                     ],
-                                              "out":  [
-
-                                                      ]
-                                          },
                       "limit":  {
                                     "in":  [
 
@@ -2931,23 +3059,31 @@
                                                        ]
                                            },
                       "responsive feedback":  {
-                                                  "out":  [
-
-                                                          ],
                                                   "in":  [
                                                              529
-                                                         ]
-                                              },
-                      "title":  {
-                                    "in":  [
+                                                         ],
+                                                  "out":  [
 
-                                           ],
-                                    "out":  [
-                                                18,
-                                                21,
-                                                22
-                                            ]
-                                },
+                                                          ]
+                                              },
+                      "~/.claude/proposals":  {
+                                                  "in":  [
+                                                             431,
+                                                             450
+                                                         ],
+                                                  "out":  [
+
+                                                          ]
+                                              },
+                      "doc":  {
+                                  "in":  [
+                                             444
+                                         ],
+                                  "out":  [
+                                              413,
+                                              418
+                                          ]
+                              },
                       "sudo not found":  {
                                              "in":  [
                                                         168
@@ -2974,6 +3110,16 @@
 
                                                       ]
                                           },
+                      "result.vector":  {
+                                            "in":  [
+                                                       0,
+                                                       2,
+                                                       47
+                                                   ],
+                                            "out":  [
+
+                                                    ]
+                                        },
                       "permission":  {
                                          "in":  [
                                                     164
@@ -3007,12 +3153,12 @@
                                                   ]
                                       },
                       "progress visibility":  {
-                                                  "out":  [
-
-                                                          ],
                                                   "in":  [
                                                              524
-                                                         ]
+                                                         ],
+                                                  "out":  [
+
+                                                          ]
                                               },
                       "5.4/sec":  {
                                       "in":  [
@@ -3039,14 +3185,6 @@
 
                                                  ]
                                      },
-                      "sudo absence":  {
-                                           "in":  [
-
-                                                  ],
-                                           "out":  [
-                                                       128
-                                                   ]
-                                       },
                       "cluster requests":  {
                                                "in":  [
 
@@ -3056,52 +3194,51 @@
                                                        ]
                                            },
                       "pids array":  {
-                                         "out":  [
-
-                                                 ],
                                          "in":  [
                                                     542
-                                                ]
-                                     },
-                      "dispatch only":  {
-                                            "out":  [
-
-                                                    ],
-                                            "in":  [
-                                                       535
-                                                   ]
-                                        },
-                      "Python side":  {
-                                          "out":  [
-                                                      524
-                                                  ],
-                                          "in":  [
+                                                ],
+                                         "out":  [
 
                                                  ]
-                                      },
-                      "3.8/sec":  {
-                                      "in":  [
-                                                 90,
-                                                 95
-                                             ],
-                                      "out":  [
+                                     },
+                      "dispatch only":  {
+                                            "in":  [
+                                                       535
+                                                   ],
+                                            "out":  [
 
+                                                    ]
+                                        },
+                      "our code":  {
+                                       "out":  [
+
+                                               ],
+                                       "in":  [
+                                                  559
                                               ]
-                                  },
-                      "commit to exit":  {
-                                             "in":  [
-                                                        121
-                                                    ],
-                                             "out":  [
+                                   },
+                      "Python side":  {
+                                          "in":  [
 
-                                                     ]
-                                         },
+                                                 ],
+                                          "out":  [
+                                                      524
+                                                  ]
+                                      },
                       "queue: 11910ms":  {
                                              "in":  [
 
                                                     ],
                                              "out":  [
                                                          6
+                                                     ]
+                                         },
+                      "commit to exit":  {
+                                             "in":  [
+                                                        121
+                                                    ],
+                                             "out":  [
+
                                                      ]
                                          },
                       "TRANSCRIPT":  {
@@ -3120,18 +3257,22 @@
 
                                                   ]
                                       },
-                      "kb":  {
-                                 "in":  [
-                                            45,
-                                            76,
-                                            77,
-                                            78,
-                                            79
-                                        ],
-                                 "out":  [
+                      "address":  {
+                                      "in":  [
 
-                                         ]
-                             },
+                                             ],
+                                      "out":  [
+                                                  253
+                                              ]
+                                  },
+                      "compile-time":  {
+                                           "out":  [
+
+                                                   ],
+                                           "in":  [
+                                                      567
+                                                  ]
+                                       },
                       "must":  {
                                    "in":  [
 
@@ -3142,14 +3283,15 @@
                                                453
                                            ]
                                },
-                      "paraphrased every attempt":  {
-                                                        "in":  [
-                                                                   258
-                                                               ],
-                                                        "out":  [
+                      "end=\"\"":  {
+                                       "in":  [
+                                                  50,
+                                                  51
+                                              ],
+                                       "out":  [
 
-                                                                ]
-                                                    },
+                                               ]
+                                   },
                       "process: 572ms":  {
                                              "in":  [
                                                         4,
@@ -3162,12 +3304,12 @@
                                                      ]
                                          },
                       "feedback":  {
-                                       "out":  [
-
-                                               ],
                                        "in":  [
                                                   511
-                                              ]
+                                              ],
+                                       "out":  [
+
+                                               ]
                                    },
                       "design":  {
                                      "in":  [
@@ -3186,14 +3328,30 @@
 
                                                           ]
                                               },
-                      "good granularity":  {
+                      "communicate only":  {
+                                               "in":  [
+                                                          163
+                                                      ],
                                                "out":  [
 
-                                                       ],
-                                               "in":  [
-                                                          534
-                                                      ]
+                                                       ]
                                            },
+                      "every 2s":  {
+                                       "out":  [
+
+                                               ],
+                                       "in":  [
+                                                  561
+                                              ]
+                                   },
+                      "paraphrased every attempt":  {
+                                                        "in":  [
+                                                                   258
+                                                               ],
+                                                        "out":  [
+
+                                                                ]
+                                                    },
                       "but":  {
                                   "in":  [
 
@@ -3226,14 +3384,6 @@
 
                                                                     ]
                                                         },
-                      "content":  {
-                                      "in":  [
-
-                                             ],
-                                      "out":  [
-                                                  442
-                                              ]
-                                  },
                       "Batch 1/2":  {
                                         "in":  [
 
@@ -3318,14 +3468,22 @@
 
                                                               ]
                                                   },
-                      "queue: 12651ms":  {
-                                             "in":  [
+                      "single return value":  {
+                                                  "in":  [
+                                                             36
+                                                         ],
+                                                  "out":  [
 
-                                                    ],
-                                             "out":  [
-                                                         4
-                                                     ]
-                                         },
+                                                          ]
+                                              },
+                      "1 second LLM call":  {
+                                                "in":  [
+
+                                                       ],
+                                                "out":  [
+                                                            13
+                                                        ]
+                                            },
                       "no LLM":  {
                                      "in":  [
                                                 19,
@@ -3343,15 +3501,15 @@
 
                                                              ]
                                                  },
-                      "structure":  {
-                                        "in":  [
-                                                   425
-                                               ],
-                                        "out":  [
-                                                    256,
-                                                    265
-                                                ]
-                                    },
+                      "requests":  {
+                                       "in":  [
+
+                                              ],
+                                       "out":  [
+                                                   458,
+                                                   500
+                                               ]
+                                   },
                       "content size":  {
                                            "in":  [
                                                       482
@@ -3369,22 +3527,21 @@
                                                            ]
                                                },
                       "current approach":  {
-                                               "out":  [
-                                                           510
-                                                       ],
                                                "in":  [
 
-                                                      ]
+                                                      ],
+                                               "out":  [
+                                                           510
+                                                       ]
                                            },
-                      "~/.claude/proposals":  {
-                                                  "in":  [
-                                                             431,
-                                                             450
-                                                         ],
-                                                  "out":  [
+                      "timeout failures":  {
+                                               "in":  [
+                                                          487
+                                                      ],
+                                               "out":  [
 
-                                                          ]
-                                              },
+                                                       ]
+                                           },
                       "present":  {
                                       "in":  [
 
@@ -3412,25 +3569,21 @@
                                                ]
                                    },
                       "LM Studio":  {
-                                        "out":  [
-                                                    517
-                                                ],
                                         "in":  [
 
-                                               ]
+                                               ],
+                                        "out":  [
+                                                    517
+                                                ]
                                     },
-                      "Milhouse":  {
-                                       "in":  [
-                                                  408,
-                                                  438
-                                              ],
-                                       "out":  [
-                                                   360,
-                                                   419,
-                                                   423,
-                                                   428
-                                               ]
-                                   },
+                      "at minimum three":  {
+                                               "in":  [
+                                                          285
+                                                      ],
+                                               "out":  [
+
+                                                       ]
+                                           },
                       "also propose":  {
                                            "in":  [
 
@@ -3448,15 +3601,14 @@
 
                                                 ]
                                     },
-                      "change":  {
-                                     "in":  [
-                                                367,
-                                                385
-                                            ],
-                                     "out":  [
-                                                 327
-                                             ]
-                                 },
+                      "literal compliance":  {
+                                                 "in":  [
+                                                            272
+                                                        ],
+                                                 "out":  [
+                                                             273
+                                                         ]
+                                             },
                       "empty queue + first position":  {
                                                            "in":  [
                                                                       114
@@ -3473,6 +3625,14 @@
                                                      34
                                                  ]
                                      },
+                      "spawn condition":  {
+                                              "in":  [
+
+                                                     ],
+                                              "out":  [
+                                                          114
+                                                      ]
+                                          },
                       "analysis and proposal":  {
                                                     "in":  [
                                                                243
@@ -3562,22 +3722,6 @@
                                                       155
                                                   ]
                                       },
-                      "timeout failures":  {
-                                               "in":  [
-                                                          487
-                                                      ],
-                                               "out":  [
-
-                                                       ]
-                                           },
-                      "failure type":  {
-                                           "in":  [
-
-                                                  ],
-                                           "out":  [
-                                                       158
-                                                   ]
-                                       },
                       "slipped requests":  {
                                                "in":  [
                                                           110
@@ -3603,21 +3747,31 @@
                                                                      ]
                                                          },
                       "streaming":  {
-                                        "out":  [
-                                                    518
-                                                ],
                                         "in":  [
                                                    517
-                                               ]
+                                               ],
+                                        "out":  [
+                                                    518
+                                                ]
                                     },
-                      "failure modes":  {
-                                            "in":  [
-                                                       261
-                                                   ],
-                                            "out":  [
+                      "personal projects":  {
+                                                "in":  [
+                                                           409,
+                                                           419
+                                                       ],
+                                                "out":  [
 
-                                                    ]
-                                        },
+                                                        ]
+                                            },
+                      "existing format":  {
+                                              "in":  [
+                                                         434,
+                                                         435
+                                                     ],
+                                              "out":  [
+
+                                                      ]
+                                          },
                       "partial overlap":  {
                                               "in":  [
                                                          42
@@ -3626,14 +3780,14 @@
                                                           43
                                                       ]
                                           },
-                      "user expectation":  {
-                                               "in":  [
+                      "sudo absence":  {
+                                           "in":  [
 
-                                                      ],
-                                               "out":  [
-                                                           159
-                                                       ]
-                                           },
+                                                  ],
+                                           "out":  [
+                                                       128
+                                                   ]
+                                       },
                       "queue corruption":  {
                                                "in":  [
                                                           508
@@ -3658,6 +3812,17 @@
 
                                                   ]
                                       },
+                      "warning":  {
+                                      "out":  [
+                                                  555,
+                                                  556,
+                                                  564,
+                                                  569
+                                              ],
+                                      "in":  [
+
+                                             ]
+                                  },
                       "adds ~7-10s one-time cost":  {
                                                         "in":  [
 
@@ -3764,6 +3929,14 @@
                                                 67
                                             ]
                                 },
+                      "poll loop":  {
+                                        "out":  [
+                                                    553
+                                                ],
+                                        "in":  [
+
+                                               ]
+                                    },
                       "actions taken":  {
                                             "in":  [
                                                        404
@@ -3781,12 +3954,12 @@
                                                    ]
                                        },
                       "lines 1079":  {
-                                         "out":  [
-                                                     520
-                                                 ],
                                          "in":  [
 
-                                                ]
+                                                ],
+                                         "out":  [
+                                                     520
+                                                 ]
                                      },
                       "e.g.":  {
                                    "in":  [
@@ -3798,12 +3971,12 @@
                                            ]
                                },
                       "completion only":  {
-                                              "out":  [
-
-                                                      ],
                                               "in":  [
                                                          516
-                                                     ]
+                                                     ],
+                                              "out":  [
+
+                                                      ]
                                           },
                       "first":  {
                                     "in":  [
@@ -3813,6 +3986,22 @@
 
                                             ]
                                 },
+                      "busy wait":  {
+                                        "out":  [
+
+                                                ],
+                                        "in":  [
+                                                   554
+                                               ]
+                                    },
+                      "copy to home bin":  {
+                                               "in":  [
+
+                                                      ],
+                                               "out":  [
+                                                           153
+                                                       ]
+                                           },
                       "directory":  {
                                         "in":  [
                                                    368
@@ -3854,12 +4043,12 @@
                                                 ]
                                     },
                       "not connected":  {
-                                            "out":  [
-
-                                                    ],
                                             "in":  [
                                                        530
-                                                   ]
+                                                   ],
+                                            "out":  [
+
+                                                    ]
                                         },
                       "user review":  {
                                           "in":  [
@@ -3878,12 +4067,12 @@
                                         ]
                             },
                       "single request":  {
-                                             "out":  [
-                                                         537
-                                                     ],
                                              "in":  [
 
-                                                    ]
+                                                    ],
+                                             "out":  [
+                                                         537
+                                                     ]
                                          },
                       "embedding":  {
                                         "in":  [
@@ -3903,14 +4092,6 @@
 
                                                ]
                                    },
-                      "last item flag":  {
-                                             "in":  [
-                                                        120
-                                                    ],
-                                             "out":  [
-
-                                                     ]
-                                         },
                       "once found":  {
                                          "in":  [
 
@@ -3976,6 +4157,14 @@
                                              407
                                          ]
                              },
+                      "EOS token missing":  {
+                                                "out":  [
+
+                                                        ],
+                                                "in":  [
+                                                           556
+                                                       ]
+                                            },
                       "required elements":  {
                                                 "in":  [
 
@@ -4161,6 +4350,14 @@
                                                             57
                                                         ]
                                             },
+                      "cannot change":  {
+                                            "out":  [
+                                                        568
+                                                    ],
+                                            "in":  [
+
+                                                   ]
+                                        },
                       "progress receipt":  {
                                                "in":  [
                                                           255,
@@ -4223,18 +4420,6 @@
                                                        294
                                                    ]
                                        },
-                      "STORY tag":  {
-                                        "in":  [
-                                                   207,
-                                                   315,
-                                                   350,
-                                                   362,
-                                                   373
-                                               ],
-                                        "out":  [
-                                                    196
-                                                ]
-                                    },
                       "must contain three":  {
                                                  "in":  [
                                                             282
@@ -4310,6 +4495,14 @@
                                                408
                                            ]
                                },
+                      "cannot fix":  {
+                                         "out":  [
+                                                     559
+                                                 ],
+                                         "in":  [
+
+                                                ]
+                                     },
                       "longer response":  {
                                               "in":  [
                                                          475
@@ -4318,14 +4511,16 @@
                                                           476
                                                       ]
                                           },
-                      "cli_constitution.py with 31 items after 2 timeouts":  {
-                                                                                 "in":  [
-                                                                                            101
-                                                                                        ],
-                                                                                 "out":  [
+                      "article":  {
+                                      "in":  [
 
-                                                                                         ]
-                                                                             },
+                                             ],
+                                      "out":  [
+                                                  45,
+                                                  76,
+                                                  77
+                                              ]
+                                  },
                       "heartbeat":  {
                                         "out":  [
                                                     522,
@@ -4335,10 +4530,12 @@
                                                     533,
                                                     535,
                                                     544,
-                                                    547
+                                                    547,
+                                                    562
                                                 ],
                                         "in":  [
-                                                   526
+                                                   526,
+                                                   563
                                                ]
                                     },
                       "120s":  {
@@ -4384,13 +4581,12 @@
 
                                                 ]
                                     },
-                      "element 3":  {
+                      "file path":  {
                                         "in":  [
-
+                                                   302
                                                ],
                                         "out":  [
-                                                    403,
-                                                    456
+
                                                 ]
                                     },
                       "type":  {
@@ -4402,12 +4598,12 @@
                                            ]
                                },
                       "after dispatch":  {
-                                             "out":  [
-                                                         536
-                                                     ],
                                              "in":  [
 
-                                                    ]
+                                                    ],
+                                             "out":  [
+                                                         536
+                                                     ]
                                          },
                       "correct place":  {
                                             "in":  [
@@ -4433,14 +4629,15 @@
                                                             86
                                                         ]
                                             },
-                      "windows":  {
-                                      "in":  [
-
-                                             ],
-                                      "out":  [
-                                                  110
-                                              ]
-                                  },
+                      "change":  {
+                                     "in":  [
+                                                367,
+                                                385
+                                            ],
+                                     "out":  [
+                                                 327
+                                             ]
+                                 },
                       "actionable solution":  {
                                                   "in":  [
                                                              141
@@ -4449,39 +4646,6 @@
 
                                                           ]
                                               },
-                      "I":  {
-                                "in":  [
-
-                                       ],
-                                "out":  [
-                                            169,
-                                            170,
-                                            173,
-                                            183,
-                                            185,
-                                            187,
-                                            189,
-                                            213,
-                                            215,
-                                            217,
-                                            219,
-                                            245,
-                                            250,
-                                            254,
-                                            258,
-                                            266,
-                                            269,
-                                            276,
-                                            289,
-                                            299,
-                                            306,
-                                            319,
-                                            411,
-                                            414,
-                                            420,
-                                            431
-                                        ]
-                            },
                       "summaries":  {
                                         "in":  [
 
@@ -4498,6 +4662,14 @@
 
                                                                    ]
                                                        },
+                      "sleep":  {
+                                    "out":  [
+                                                554
+                                            ],
+                                    "in":  [
+
+                                           ]
+                                },
                       "user input primary":  {
                                                  "in":  [
                                                             212
@@ -4547,6 +4719,15 @@
 
                                               ]
                                   },
+                      "embedding tokenizer":  {
+                                                  "out":  [
+
+                                                          ],
+                                                  "in":  [
+                                                             555,
+                                                             564
+                                                         ]
+                                              },
                       "timing windows":  {
                                              "in":  [
                                                         109
@@ -4575,7 +4756,9 @@
                                         "out":  [
                                                     543,
                                                     545,
-                                                    546
+                                                    546,
+                                                    550,
+                                                    561
                                                 ],
                                         "in":  [
                                                    544,
@@ -4623,6 +4806,15 @@
 
                                                                  ]
                                                      },
+                      "element 3":  {
+                                        "in":  [
+
+                                               ],
+                                        "out":  [
+                                                    403,
+                                                    456
+                                                ]
+                                    },
                       "floor":  {
                                     "in":  [
                                                279
@@ -4641,12 +4833,12 @@
                                                       ]
                                           },
                       "polling":  {
-                                      "out":  [
-                                                  511
-                                              ],
                                       "in":  [
 
-                                             ]
+                                             ],
+                                      "out":  [
+                                                  511
+                                              ]
                                   },
                       "longer processing":  {
                                                 "in":  [
@@ -4656,6 +4848,14 @@
 
                                                         ]
                                             },
+                      "lines 1079/1132":  {
+                                              "in":  [
+                                                         522
+                                                     ],
+                                              "out":  [
+
+                                                      ]
+                                          },
                       "known issue":  {
                                           "in":  [
 
@@ -4729,13 +4929,21 @@
                                                        171
                                                    ]
                                        },
+                      "during processing":  {
+                                                "out":  [
+
+                                                        ],
+                                                "in":  [
+                                                           562
+                                                       ]
+                                            },
                       "uncertainty":  {
-                                          "out":  [
-                                                      513
-                                                  ],
                                           "in":  [
                                                      512
-                                                 ]
+                                                 ],
+                                          "out":  [
+                                                      513
+                                                  ]
                                       },
                       "exclusive locking":  {
                                                 "in":  [
@@ -4754,6 +4962,14 @@
 
                                                               ]
                                                   },
+                      "add_eos_token":  {
+                                            "out":  [
+                                                        566
+                                                    ],
+                                            "in":  [
+
+                                                   ]
+                                        },
                       "existing proposals":  {
                                                  "in":  [
                                                             376,
@@ -4827,6 +5043,16 @@
 
                                                 ]
                                     },
+                      "response":  {
+                                       "in":  [
+
+                                              ],
+                                       "out":  [
+                                                   78,
+                                                   79,
+                                                   141
+                                               ]
+                                   },
                       "article: Article":  {
                                                "in":  [
                                                           54
@@ -4868,6 +5094,14 @@
                                                   112
                                               ]
                                   },
+                      "current code":  {
+                                           "out":  [
+                                                       551
+                                                   ],
+                                           "in":  [
+
+                                                  ]
+                                       },
                       "properly":  {
                                        "in":  [
                                                   447
@@ -4876,14 +5110,14 @@
 
                                                ]
                                    },
-                      "placement":  {
-                                        "in":  [
+                      "matching format":  {
+                                              "in":  [
+                                                         381
+                                                     ],
+                                              "out":  [
 
-                                               ],
-                                        "out":  [
-                                                    234
-                                                ]
-                                    },
+                                                      ]
+                                          },
                       "summary":  {
                                       "in":  [
 
@@ -4991,21 +5225,13 @@
                                                              ]
                                                  },
                       "heartbeat stale":  {
-                                              "out":  [
-
-                                                      ],
                                               "in":  [
                                                          537
-                                                     ]
-                                          },
-                      "minimized":  {
-                                        "in":  [
-                                                   146
-                                               ],
-                                        "out":  [
+                                                     ],
+                                              "out":  [
 
-                                                ]
-                                    },
+                                                      ]
+                                          },
                       "bash-centric thinking":  {
                                                     "in":  [
                                                                132
@@ -5022,6 +5248,14 @@
 
                                                      ]
                                          },
+                      "at minimum":  {
+                                         "in":  [
+                                                    294
+                                                ],
+                                         "out":  [
+                                                     279
+                                                 ]
+                                     },
                       "race condition":  {
                                              "in":  [
                                                         490
@@ -5030,14 +5264,14 @@
                                                          491
                                                      ]
                                          },
-                      "numbered three":  {
-                                             "in":  [
-                                                        296
-                                                    ],
-                                             "out":  [
+                      "receipt needs":  {
+                                            "in":  [
 
-                                                     ]
-                                         },
+                                                   ],
+                                            "out":  [
+                                                        352
+                                                    ]
+                                        },
                       "Windows security model":  {
                                                      "in":  [
                                                                 129
@@ -5057,14 +5291,14 @@
                                                  441
                                              ]
                                  },
-                      "one at a time":  {
-                                            "in":  [
-                                                       225
-                                                   ],
-                                            "out":  [
-                                                        84
-                                                    ]
-                                        },
+                      "spawn":  {
+                                    "in":  [
+                                               117
+                                           ],
+                                    "out":  [
+
+                                            ]
+                                },
                       "procedure":  {
                                         "in":  [
                                                    336
@@ -5073,14 +5307,14 @@
 
                                                 ]
                                     },
-                      "projects":  {
-                                       "in":  [
-
-                                              ],
-                                       "out":  [
-                                                   409
-                                               ]
-                                   },
+                      "multiple clients":  {
+                                               "in":  [
+                                                          492
+                                                      ],
+                                               "out":  [
+                                                           493
+                                                       ]
+                                           },
                       "ins.id":  {
                                      "in":  [
 
@@ -5089,14 +5323,14 @@
                                                  74
                                              ]
                                  },
-                      "at minimum three":  {
-                                               "in":  [
-                                                          285
-                                                      ],
-                                               "out":  [
+                      "failure type":  {
+                                           "in":  [
 
-                                                       ]
-                                           },
+                                                  ],
+                                           "out":  [
+                                                       158
+                                                   ]
+                                       },
                       "queue: 11572ms":  {
                                              "in":  [
 
@@ -5113,6 +5347,15 @@
 
                                                      ]
                                          },
+                      "3.8/sec":  {
+                                      "in":  [
+                                                 90,
+                                                 95
+                                             ],
+                                      "out":  [
+
+                                              ]
+                                  },
                       "documented standards":  {
                                                    "in":  [
                                                               217
@@ -5154,14 +5397,6 @@
                                                        259
                                                    ]
                                        },
-                      "1 second LLM call":  {
-                                                "in":  [
-
-                                                       ],
-                                                "out":  [
-                                                            13
-                                                        ]
-                                            },
                       "batch":  {
                                     "in":  [
 
@@ -5178,13 +5413,22 @@
                                                        462
                                                    ]
                                        },
+                      "structure":  {
+                                        "in":  [
+                                                   425
+                                               ],
+                                        "out":  [
+                                                    256,
+                                                    265
+                                                ]
+                                    },
                       "heartbeat checking":  {
-                                                 "out":  [
-                                                             529
-                                                         ],
                                                  "in":  [
 
-                                                        ]
+                                                        ],
+                                                 "out":  [
+                                                             529
+                                                         ]
                                              },
                       "clear directive":  {
                                               "in":  [
@@ -5194,14 +5438,26 @@
                                                           272
                                                       ]
                                           },
-                      "copy to home bin":  {
-                                               "in":  [
-
-                                                      ],
-                                               "out":  [
-                                                           153
-                                                       ]
-                                           },
+                      "Milhouse":  {
+                                       "in":  [
+                                                  408,
+                                                  438
+                                              ],
+                                       "out":  [
+                                                   360,
+                                                   419,
+                                                   423,
+                                                   428
+                                               ]
+                                   },
+                      "one at a time":  {
+                                            "in":  [
+                                                       225
+                                                   ],
+                                            "out":  [
+                                                        84
+                                                    ]
+                                        },
                       "slow processing":  {
                                               "in":  [
 
@@ -5221,22 +5477,20 @@
                                                   ]
                                       },
                       "progress":  {
-                                       "out":  [
-                                                   176
-                                               ],
                                        "in":  [
                                                   519
-                                              ]
+                                              ],
+                                       "out":  [
+                                                   176
+                                               ]
                                    },
-                      "article":  {
-                                      "in":  [
-
-                                             ],
+                      "fc71805":  {
                                       "out":  [
-                                                  45,
-                                                  76,
-                                                  77
-                                              ]
+
+                                              ],
+                                      "in":  [
+                                                 560
+                                             ]
                                   },
                       "format":  {
                                      "in":  [
@@ -5249,15 +5503,14 @@
                                                  439
                                              ]
                                  },
-                      "doc":  {
-                                  "in":  [
-                                             444
-                                         ],
-                                  "out":  [
-                                              413,
-                                              418
-                                          ]
-                              },
+                      "content":  {
+                                      "in":  [
+
+                                             ],
+                                      "out":  [
+                                                  442
+                                              ]
+                                  },
                       "LLM calls":  {
                                         "in":  [
 
@@ -5290,14 +5543,17 @@
 
                                                 ]
                                     },
-                      "user burden":  {
-                                          "in":  [
-
-                                                 ],
-                                          "out":  [
-                                                      146
-                                                  ]
-                                      },
+                      "this":  {
+                                   "in":  [
+                                              353
+                                          ],
+                                   "out":  [
+                                               363,
+                                               375,
+                                               383,
+                                               443
+                                           ]
+                               },
                       "\"article\"":  {
                                           "in":  [
                                                      1
@@ -5390,6 +5646,9 @@
                                               ]
                                   },
                       "timeout":  {
+                                      "in":  [
+                                                 458
+                                             ],
                                       "out":  [
                                                   459,
                                                   466,
@@ -5398,10 +5657,7 @@
                                                   498,
                                                   501,
                                                   528
-                                              ],
-                                      "in":  [
-                                                 458
-                                             ]
+                                              ]
                                   },
                       "protocol change":  {
                                               "in":  [
@@ -5411,15 +5667,15 @@
 
                                                       ]
                                           },
-                      "end=\"\"":  {
-                                       "in":  [
-                                                  50,
-                                                  51
-                                              ],
-                                       "out":  [
+                      "correct format":  {
+                                             "in":  [
+                                                        304,
+                                                        445
+                                                    ],
+                                             "out":  [
 
-                                               ]
-                                   },
+                                                     ]
+                                         },
                       "slow LLM processing":  {
                                                   "in":  [
                                                              462
@@ -5453,14 +5709,6 @@
                                                            483
                                                        ]
                                            },
-                      "spawn":  {
-                                    "in":  [
-                                               117
-                                           ],
-                                    "out":  [
-
-                                            ]
-                                },
                       "triples":  {
                                       "in":  [
                                                  23
@@ -5478,12 +5726,12 @@
                                                 ]
                                     },
                       "still processing":  {
-                                               "out":  [
-
-                                                       ],
                                                "in":  [
                                                           527
-                                                      ]
+                                                      ],
+                                               "out":  [
+
+                                                       ]
                                            },
                       "step":  {
                                    "in":  [
@@ -5543,14 +5791,6 @@
                                                          264
                                                      ]
                                          },
-                      "address":  {
-                                      "in":  [
-
-                                             ],
-                                      "out":  [
-                                                  253
-                                              ]
-                                  },
                       "parallel":  {
                                        "in":  [
                                                   85
@@ -5559,14 +5799,22 @@
 
                                                ]
                                    },
+                      "queue: 12651ms":  {
+                                             "in":  [
+
+                                                    ],
+                                             "out":  [
+                                                         4
+                                                     ]
+                                         },
                       "could add":  {
+                                        "in":  [
+
+                                               ],
                                         "out":  [
                                                     540,
                                                     549
-                                                ],
-                                        "in":  [
-
-                                               ]
+                                                ]
                                     },
                       "propose STORY tag":  {
                                                 "in":  [
@@ -5618,14 +5866,14 @@
 
                                                     ]
                                         },
-                      "instead":  {
-                                      "in":  [
+                      "candidate files":  {
+                                              "in":  [
+                                                         198
+                                                     ],
+                                              "out":  [
 
-                                             ],
-                                      "out":  [
-                                                  165
-                                              ]
-                                  },
+                                                      ]
+                                          },
                       ".claude":  {
                                       "in":  [
                                                  424
@@ -5634,15 +5882,14 @@
 
                                               ]
                                   },
-                      "matching":  {
-                                       "in":  [
+                      "clients":  {
+                                      "in":  [
 
-                                              ],
-                                       "out":  [
-                                                   26,
-                                                   29
-                                               ]
-                                   },
+                                             ],
+                                      "out":  [
+                                                  109
+                                              ]
+                                  },
                       "personal projects/Milhouse":  {
                                                          "in":  [
                                                                     410
@@ -5652,12 +5899,12 @@
                                                                  ]
                                                      },
                       "1132":  {
-                                   "out":  [
-
-                                           ],
                                    "in":  [
                                               520
-                                          ]
+                                          ],
+                                   "out":  [
+
+                                           ]
                                },
                       "then":  {
                                    "in":  [
@@ -5690,18 +5937,15 @@
                                                    248
                                                ]
                                    },
-                      "article.id":  {
-                                         "in":  [
+                      "communication":  {
+                                            "in":  [
+                                                       158,
+                                                       290
+                                                   ],
+                                            "out":  [
 
-                                                ],
-                                         "out":  [
-                                                     0,
-                                                     1,
-                                                     2,
-                                                     46,
-                                                     47
-                                                 ]
-                                     },
+                                                    ]
+                                        },
                       "CLAUDE.md":  {
                                         "in":  [
                                                    348
@@ -5726,19 +5970,25 @@
                                                        184
                                                    ]
                                        },
-                      "response":  {
+                      "dispatch":  {
                                        "in":  [
-
+                                                  532
                                               ],
                                        "out":  [
-                                                   78,
-                                                   79,
-                                                   141
+                                                   541
                                                ]
                                    },
                       "read guide first":  {
                                                "in":  [
                                                           224
+                                                      ],
+                                               "out":  [
+
+                                                       ]
+                                           },
+                      "good granularity":  {
+                                               "in":  [
+                                                          534
                                                       ],
                                                "out":  [
 
@@ -5802,16 +6052,16 @@
     "project_root":  "C:/Users/jpswi/personal projects/RSSsummarizer",
     "sessions":  {
                      "b83ca0cf-6f48-4726-b27f-0daeab98089d":  {
-                                                                  "last_turn":  99,
-                                                                  "last_active":  "2026-01-18T12:11:01.9852098-08:00",
+                                                                  "last_turn":  100,
+                                                                  "last_active":  "2026-01-18T12:18:30.4815409-08:00",
                                                                   "last_dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer"
                                                               }
                  },
     "metadata":  {
-                     "last_turn":  99,
-                     "cycles_found":  9,
-                     "total_connected":  219,
-                     "total_orphans":  324
+                     "last_turn":  100,
+                     "cycles_found":  10,
+                     "total_connected":  224,
+                     "total_orphans":  339
                  },
     "edges":  [
                   {
@@ -11312,6 +11562,206 @@
                       "sub":  "could add",
                       "obj":  "during wait",
                       "pred":  "periodic heartbeat",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  100,
+                      "timestamp":  "2026-01-18T12:18:30.4815409-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "wait loop",
+                      "obj":  "periodic heartbeat",
+                      "pred":  "needs",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  100,
+                      "timestamp":  "2026-01-18T12:18:30.4815409-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "current code",
+                      "obj":  "blocking wait",
+                      "pred":  "uses",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  100,
+                      "timestamp":  "2026-01-18T12:18:30.4815409-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "replace with",
+                      "obj":  "with heartbeat",
+                      "pred":  "poll loop",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  100,
+                      "timestamp":  "2026-01-18T12:18:30.4815409-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "poll loop",
+                      "obj":  "kill -0 check",
+                      "pred":  "uses",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  100,
+                      "timestamp":  "2026-01-18T12:18:30.4815409-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "sleep",
+                      "obj":  "busy wait",
+                      "pred":  "prevents",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  100,
+                      "timestamp":  "2026-01-18T12:18:30.4815409-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "warning",
+                      "obj":  "embedding tokenizer",
+                      "pred":  "about",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  100,
+                      "timestamp":  "2026-01-18T12:18:30.4815409-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "warning",
+                      "obj":  "EOS token missing",
+                      "pred":  "says",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  100,
+                      "timestamp":  "2026-01-18T12:18:30.4815409-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "issue",
+                      "obj":  "GGUF model config",
+                      "pred":  "in",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  100,
+                      "timestamp":  "2026-01-18T12:18:30.4815409-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "model",
+                      "obj":  "add_eos_token true",
+                      "pred":  "needs",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  100,
+                      "timestamp":  "2026-01-18T12:18:30.4815409-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "cannot fix",
+                      "obj":  "our code",
+                      "pred":  "in",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  100,
+                      "timestamp":  "2026-01-18T12:18:30.4815409-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "fix",
+                      "obj":  "fc71805",
+                      "pred":  "committed as",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  100,
+                      "timestamp":  "2026-01-18T12:18:30.4815409-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "wait loop",
+                      "obj":  "every 2s",
+                      "pred":  "touches heartbeat",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  100,
+                      "timestamp":  "2026-01-18T12:18:30.4815409-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "heartbeat",
+                      "obj":  "during processing",
+                      "pred":  "stays fresh",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  100,
+                      "timestamp":  "2026-01-18T12:18:30.4815409-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "Python",
+                      "obj":  "heartbeat",
+                      "pred":  "can trust",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  100,
+                      "timestamp":  "2026-01-18T12:18:30.4815409-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "warning",
+                      "obj":  "embedding tokenizer",
+                      "pred":  "about",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  100,
+                      "timestamp":  "2026-01-18T12:18:30.4815409-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "GGUF",
+                      "obj":  "baked tokenizer settings",
+                      "pred":  "has",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  100,
+                      "timestamp":  "2026-01-18T12:18:30.4815409-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "add_eos_token",
+                      "obj":  "separator",
+                      "pred":  "adds",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  100,
+                      "timestamp":  "2026-01-18T12:18:30.4815409-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "setting",
+                      "obj":  "compile-time",
+                      "pred":  "is",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  100,
+                      "timestamp":  "2026-01-18T12:18:30.4815409-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "cannot change",
+                      "obj":  "recompiling",
+                      "pred":  "without",
+                      "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
+                  },
+                  {
+                      "turn":  100,
+                      "timestamp":  "2026-01-18T12:18:30.4815409-08:00",
+                      "dir":  "C:\\Users\\jpswi\\personal projects\\RSSsummarizer",
+                      "type":  "triple",
+                      "sub":  "warning",
+                      "obj":  "informational",
+                      "pred":  "is",
                       "session":  "b83ca0cf-6f48-4726-b27f-0daeab98089d"
                   }
               ]
