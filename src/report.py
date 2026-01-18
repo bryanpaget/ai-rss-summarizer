@@ -614,6 +614,7 @@ def _run_llm_phase(
         if not article.signal_tags:
             try:
                 signal_tags = tagger.tag_article(article)
+                total_llm_calls += 1  # tagging call
                 storage.update_signal_tags(article.id, signal_tags.to_json())
                 article.signal_tags = signal_tags.to_json()
                 compact = signal_tags.to_compact_string()
