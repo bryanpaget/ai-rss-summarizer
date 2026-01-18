@@ -2722,7 +2722,9 @@ Return as JSON with this exact structure:
     {{"tag": "topic name", "confidence": 0.9, "reason": "Why this tag"}}
   ],
   "is_ad": false,
-  "summary": "Concise 2-3 sentence summary of the article."
+  "summary": "Concise 2-3 sentence summary of the article.",
+  "headline": "Rewritten title that captures the core story (for story grouping)",
+  "keywords": ["key", "terms", "from", "article"]
 }}
 
 Extract ALL relevant information. The number of chunks, insights, and triples depends entirely on the content density.
