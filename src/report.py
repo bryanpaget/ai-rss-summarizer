@@ -528,100 +528,125 @@ def _run_llm_phase(
     Step 3: LLM processing for all articles.
 
     Generates: summaries, insights, facts (triples), signal tags, trend tags.
-    Uses embedding_service for connection detection and trend categorization.
+    Uses pipelining to keep 2 requests in flight at all times.
 
     NOTE: Model loading is handled by the gateway - no ensure_*_model() calls needed.
     The gateway automatically loads the correct model based on request type.
 
     NO SILENT FAILURES - Every error is surfaced to the user.
     """
+    from .gateway import get_gateway
+    from .knowledge import build_extraction_prompt, process_extraction_response
+
     console.print("[bold]Step 3:[/bold] LLM Analysis...")
     console.print(f"  [green]Using {provider.name}[/green]")
 
+    gateway = get_gateway()
     tagger = SignalTagger(use_llm=True, provider=provider)
     processed_articles = []
-    step_start = time.time()  # For ETA calculation
-    total_llm_calls = 0  # Track LLM calls for visibility
+    step_start = time.time()
+    total_llm_calls = 0
 
     console.print()
 
-    for idx, article in enumerate(articles):
-        if limit > 0 and idx >= limit:
-            console.print(f"  [dim]Stopped at {limit} articles (limit reached)[/dim]")
-            break
-        article_start = time.time()
+    # Apply limit
+    articles_to_process = articles[:limit] if limit > 0 else articles
+    total_articles = len(articles_to_process)
+
+    if limit > 0 and len(articles) > limit:
+        console.print(f"  [dim]Processing {limit} of {len(articles)} articles (limit)[/dim]")
+        console.print()
+
+    # Pipelining: keep up to 2 extraction requests in flight
+    PIPELINE_SIZE = 2
+    in_flight = []  # List of (idx, article, handle, start_time)
+    next_idx = 0
+    completed_count = 0
+
+    def submit_next():
+        """Submit next article for extraction if available."""
+        nonlocal next_idx
+        if next_idx < total_articles:
+            article = articles_to_process[next_idx]
+            prompt = build_extraction_prompt(article)
+            if prompt:
+                handle = gateway.submit_text(prompt, temperature=0.3)
+                in_flight.append((next_idx, article, handle, time.time()))
+            else:
+                # Article too short, skip but still record it
+                in_flight.append((next_idx, article, None, time.time()))
+            next_idx += 1
+
+    def process_completed(idx: int, article: Article, response: str, article_start: float):
+        """Process a completed extraction."""
+        nonlocal total_llm_calls, completed_count
+
+        article_errors = []
         insights = []
         triples = []
-        connections = []
-        triple_result = None
 
         # Article header
-        console.print(f"[bold cyan][{idx + 1}/{len(articles)}][/bold cyan] {article.title}")
-
-        article_errors = []  # Collect errors for this article
-
-        # --- CONSOLIDATED EXTRACTION (single LLM call for insights + triples) ---
+        console.print(f"[bold cyan][{idx + 1}/{total_articles}][/bold cyan] {article.title}")
         console.print("  [dim]- Extracting insights and facts...[/dim]")
-        try:
-            extraction = extract_all_from_article(article, provider, kb)
-            total_llm_calls += 1  # extraction call
-            insights = extraction.insights
-            triples = extraction.new_triples
 
-            # Report insights
-            for ins in insights:
-                stats["insights"] += 1
-                console.print(f"    [green]+[/green] {ins.content}")
-            if not insights:
-                console.print("    [dim]No insights extracted[/dim]")
+        if response is None:
+            # Article was too short
+            console.print("    [dim]Article too short, skipped[/dim]")
+        else:
+            total_llm_calls += 1
+            try:
+                extraction = process_extraction_response(response, article, kb)
+                insights = extraction.insights
+                triples = extraction.new_triples
 
-            # Report triples
-            if extraction.new_triples:
-                console.print(f"    [green]+{len(extraction.new_triples)} new facts:[/green]")
-                for t in extraction.new_triples[:5]:
-                    console.print(f"      [green]*[/green] {t.subject} -> {t.predicate} -> {t.object}")
-                if len(extraction.new_triples) > 5:
-                    console.print(f"      [dim]...and {len(extraction.new_triples) - 5} more[/dim]")
-                stats["triples_new"] += len(extraction.new_triples)
-            else:
-                console.print("    [dim]No new facts[/dim]")
+                # Report insights
+                for ins in insights:
+                    stats["insights"] += 1
+                    console.print(f"    [green]+[/green] {ins.content}")
+                if not insights:
+                    console.print("    [dim]No insights extracted[/dim]")
 
-            if extraction.existing_triples:
-                console.print(f"    [dim]~{len(extraction.existing_triples)} already known[/dim]")
-                stats["triples_existing"] += len(extraction.existing_triples)
-            stats["triples"] += len(extraction.new_triples) + len(extraction.existing_triples)
+                # Report triples
+                if extraction.new_triples:
+                    console.print(f"    [green]+{len(extraction.new_triples)} new facts:[/green]")
+                    for t in extraction.new_triples[:5]:
+                        console.print(f"      [green]*[/green] {t.subject} -> {t.predicate} -> {t.object}")
+                    if len(extraction.new_triples) > 5:
+                        console.print(f"      [dim]...and {len(extraction.new_triples) - 5} more[/dim]")
+                    stats["triples_new"] += len(extraction.new_triples)
+                else:
+                    console.print("    [dim]No new facts[/dim]")
 
-            # Save extracted metadata (process once, use many times)
-            if extraction.summary:
-                storage.update_summary(article.id, extraction.summary)
-                article.summary = extraction.summary
-            if extraction.headline:
-                storage.update_headline(article.id, extraction.headline)
-                article.headline = extraction.headline
-            if extraction.keywords:
-                storage.update_keywords(article.id, extraction.keywords)
-                article.keywords = json.dumps(extraction.keywords)
-        except Exception as e:
-            error_msg = f"Extraction failed: {e}"
-            article_errors.append(error_msg)
-            console.print(f"    [red]ERROR: {error_msg}[/red]")
-            stats["errors"] += 1
+                if extraction.existing_triples:
+                    console.print(f"    [dim]~{len(extraction.existing_triples)} already known[/dim]")
+                    stats["triples_existing"] += len(extraction.existing_triples)
+                stats["triples"] += len(extraction.new_triples) + len(extraction.existing_triples)
 
-        # --- Connection detection DEFERRED ---
-        # Connections are detected AFTER Step 4 (embedding phase) to avoid model switching.
+                # Save extracted metadata
+                if extraction.summary:
+                    storage.update_summary(article.id, extraction.summary)
+                    article.summary = extraction.summary
+                if extraction.headline:
+                    storage.update_headline(article.id, extraction.headline)
+                    article.headline = extraction.headline
+                if extraction.keywords:
+                    storage.update_keywords(article.id, extraction.keywords)
+                    article.keywords = json.dumps(extraction.keywords)
 
-        # --- Tagging ---
+            except Exception as e:
+                error_msg = f"Extraction failed: {e}"
+                article_errors.append(error_msg)
+                console.print(f"    [red]ERROR: {error_msg}[/red]")
+                stats["errors"] += 1
+
+        # --- Tagging (still synchronous for simplicity) ---
         console.print("  [dim]- Tagging...[/dim]")
         tag_output = []
 
-        # NOTE: Trend tags (embedding-based) moved to _run_embedding_phase
-        # to avoid model switching during LLM phase
-
-        # Signal tags (LLM-based)
         if not article.signal_tags:
             try:
                 signal_tags = tagger.tag_article(article)
-                total_llm_calls += 1  # tagging call
+                total_llm_calls += 1
                 storage.update_signal_tags(article.id, signal_tags.to_json())
                 article.signal_tags = signal_tags.to_json()
                 compact = signal_tags.to_compact_string()
@@ -647,28 +672,25 @@ def _run_llm_phase(
         # Mark as analyzed
         stats["processed"] += 1
         storage.mark_as_analyzed(article.id)
+        completed_count += 1
 
         # Store processed data
         processed_articles.append({
             "article": article,
             "insights": insights,
             "triples": triples,
-            "connections": connections,
+            "connections": [],
             "errors": article_errors,
         })
 
-        # Summary for this article with timing and ETA
+        # Summary with timing and ETA
         article_elapsed = time.time() - article_start
-        articles_done = idx + 1
-        articles_remaining = len(articles) - articles_done
+        articles_remaining = total_articles - completed_count
 
-        # Calculate ETA based on current rate
-        if articles_remaining > 0 and articles_done > 0:
-            # Use cumulative time from step start for more stable rate
+        if articles_remaining > 0 and completed_count > 0:
             step_elapsed = time.time() - step_start
-            rate_per_article = step_elapsed / articles_done
+            rate_per_article = step_elapsed / completed_count
             eta_seconds = articles_remaining * rate_per_article
-
             eta_str = f"~{format_duration(eta_seconds)} remaining"
 
             if article_errors:
@@ -682,10 +704,36 @@ def _run_llm_phase(
                 console.print(f"  [bold green][OK][/bold green] [dim]{article_elapsed:.1f}s[/dim]")
         console.print()
 
-    # Summary with call counts for visibility
+    # Initial submission: fill the pipeline
+    for _ in range(min(PIPELINE_SIZE, total_articles)):
+        submit_next()
+
+    # Process until all complete
+    while in_flight:
+        # Check each in-flight request
+        for i, (idx, article, handle, start_time) in enumerate(in_flight):
+            if handle is None:
+                # Article was too short, process immediately
+                in_flight.pop(i)
+                process_completed(idx, article, None, start_time)
+                submit_next()
+                break
+
+            # Try non-blocking collect
+            response = gateway.try_collect_text(handle)
+            if response is not None:
+                # Request completed
+                in_flight.pop(i)
+                process_completed(idx, article, response, start_time)
+                submit_next()
+                break
+        else:
+            # None completed yet, wait a bit
+            time.sleep(0.1)
+
+    # Summary with call counts
     step_elapsed = time.time() - step_start
-    articles_processed = min(len(articles), limit) if limit > 0 else len(articles)
-    console.print(f"  [dim]Processed {articles_processed} articles with {total_llm_calls} LLM calls ({step_elapsed:.1f}s)[/dim]")
+    console.print(f"  [dim]Processed {completed_count} articles with {total_llm_calls} LLM calls ({step_elapsed:.1f}s)[/dim]")
 
     return processed_articles
 
