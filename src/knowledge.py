@@ -2818,3 +2818,169 @@ Return ONLY valid JSON, no other text."""
             is_ad=False,
             chunks_processed=0,
         )
+
+
+def build_extraction_prompt(article: Article) -> Optional[str]:
+    """Build the extraction prompt for an article (no LLM call).
+
+    This separates prompt building from the actual LLM request,
+    enabling pipelining where multiple requests are in flight.
+
+    Args:
+        article: Article to build prompt for
+
+    Returns:
+        Prompt string, or None if article is too short to process
+    """
+    from .constitution import get_constitution_context
+
+    if not article.content or len(article.content) < 100:
+        return None
+
+    constitution_context = get_constitution_context()
+
+    return f"""{constitution_context}
+=== ARTICLE TO ANALYZE ===
+Extract information from ONLY the article content below. Do NOT include the analysis principles above as insights or facts - they are instructions for HOW to analyze, not content to extract.
+
+Analyze this article completely. Extract ALL information in a single structured response.
+
+Article: "{article.title}"
+
+Content:
+{article.content}
+
+Instructions:
+1. Divide the content into semantically coherent chunks (by topic/section)
+2. For EACH chunk, extract:
+   - Insights (key learnings, facts, claims)
+   - Triples (subject-predicate-object relationships where subjects and objects are PROPER NOUNS only - specific named people, companies, places, organizations. NEVER use generic nouns like 'woman', 'man', 'article', 'analysis'.)
+3. For the ENTIRE article, provide:
+   - Signal tags (topics, themes, categories)
+   - Whether this appears to be an advertisement/sponsored content
+   - A concise summary (2-3 sentences)
+   - A headline (rewritten title that captures the core story, for grouping related articles)
+   - Keywords (5-10 key terms/entities from the article)
+
+Return as JSON with this exact structure:
+{{{{
+  "chunks": [
+    {{{{
+      "content": "The chunk text...",
+      "insights": [
+        {{{{"content": "Insight text", "type": "technical|tool|statistic|opinion", "confidence": "high|medium|low", "reason": "Why this confidence"}}}}
+      ],
+      "triples": [
+        {{{{"subject": "Entity", "predicate": "relationship", "object": "Entity/Value", "subject_type": "entity", "object_type": "entity|literal", "confidence": "high|medium|low"}}}}
+      ]
+    }}}}
+  ],
+  "signal_tags": [
+    {{{{"tag": "topic name", "confidence": 0.9, "reason": "Why this tag"}}}}
+  ],
+  "is_ad": false,
+  "summary": "Concise 2-3 sentence summary of the article.",
+  "headline": "Rewritten title that captures the core story (for story grouping)",
+  "keywords": ["key", "terms", "from", "article"]
+}}}}
+
+Extract ALL relevant information. The number of chunks, insights, and triples depends entirely on the content density.
+Return ONLY valid JSON, no other text."""
+
+
+def process_extraction_response(
+    response: str,
+    article: Article,
+    knowledge_base: KnowledgeBase,
+) -> CombinedExtractionOutput:
+    """Process an extraction response (no LLM call).
+
+    This separates response processing from the LLM request,
+    enabling pipelining where multiple requests are in flight.
+
+    Args:
+        response: Raw LLM response string
+        article: Article that was processed
+        knowledge_base: Knowledge base to save results to
+
+    Returns:
+        CombinedExtractionOutput with all extracted data
+    """
+    from .schema import parse_combined_extraction, CombinedExtractionResult
+
+    try:
+        # Parse with schema validation
+        try:
+            result = parse_combined_extraction(response)
+        except ValueError as e:
+            logger.warning(f"Schema validation failed, attempting fallback: {e}")
+            from .schema import parse_json_response
+            data = parse_json_response(response)
+            result = CombinedExtractionResult.model_validate(data)
+
+        # Process extracted data and save to knowledge base
+        all_insights = []
+        new_triples = []
+        existing_triples = []
+
+        for chunk in result.chunks:
+            for insight_data in chunk.insights:
+                insight = Insight(
+                    id=str(uuid.uuid4()),
+                    article_id=article.id,
+                    content=insight_data.content,
+                    insight_type=insight_data.type,
+                    confidence=insight_data.confidence,
+                    confidence_reason=insight_data.reason,
+                )
+                if knowledge_base.save_insight(insight):
+                    all_insights.append(insight)
+
+            for triple_data in chunk.triples:
+                if not (triple_data.subject and triple_data.predicate and triple_data.object):
+                    continue
+                triple = Triple(
+                    id=str(uuid.uuid4()),
+                    subject=triple_data.subject,
+                    predicate=triple_data.predicate,
+                    object=triple_data.object,
+                    subject_type=triple_data.subject_type,
+                    object_type=triple_data.object_type,
+                    source_article_id=article.id,
+                    confidence=triple_data.confidence,
+                )
+                if knowledge_base.save_triple(triple):
+                    new_triples.append(triple)
+                else:
+                    existing_triples.append(triple)
+
+        signal_tags = [
+            {"tag": t.tag, "confidence": t.confidence, "reason": t.reason}
+            for t in result.signal_tags
+        ]
+
+        return CombinedExtractionOutput(
+            insights=all_insights,
+            new_triples=new_triples,
+            existing_triples=existing_triples,
+            signal_tags=signal_tags,
+            summary=result.summary,
+            headline=result.headline,
+            keywords=result.keywords,
+            is_ad=result.is_ad,
+            chunks_processed=len(result.chunks),
+        )
+
+    except Exception as e:
+        logger.error(f"Processing extraction response failed for '{article.title[:40]}': {e}")
+        return CombinedExtractionOutput(
+            insights=[],
+            new_triples=[],
+            existing_triples=[],
+            signal_tags=[],
+            summary="",
+            headline="",
+            keywords=[],
+            is_ad=False,
+            chunks_processed=0,
+        )
