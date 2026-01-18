@@ -24,7 +24,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from .storage import Storage, Article
+from .storage import Storage, Article, Story
 from .utils import format_duration
 from .content_filter import filter_articles, cleanup_old_spam
 from .knowledge import (
