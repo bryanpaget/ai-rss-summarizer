@@ -241,7 +241,6 @@ class LMStudioProvider(EmbeddingProvider):
         # If not loaded, this will fail. Use the pipeline's pre-embedding
         # phase which calls gateway.request_embedding() once to trigger
         # model loading before batch operations.
-        # This bypasses gateway overhead for the actual batch
         try:
             response = httpx.post(
                 f"{self.url}/embeddings",
