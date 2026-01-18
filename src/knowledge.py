@@ -1124,10 +1124,27 @@ class KnowledgeBase:
 
 @dataclass
 class ConsolidatedExtractionResult:
-    """Result of consolidated extraction - insights and triples in one call."""
+    """Result of consolidated extraction - everything from ONE LLM call.
+
+    This is the "process once, use many times" architecture:
+    - summary: 1-2 sentence description (used for story description)
+    - headline: rewritten title (used for story title)
+    - keywords: key terms (used for story keywords)
+    - insights: extracted insights
+    - triples: extracted facts
+
+    Story creation should use these fields directly - NO additional LLM calls.
+    """
     insights: list[Insight]
     new_triples: list[Triple]
     existing_triples: list[Triple]
+    summary: str = ""
+    headline: str = ""
+    keywords: list[str] = None
+
+    def __post_init__(self):
+        if self.keywords is None:
+            self.keywords = []
 
 
 def extract_all_from_article(
