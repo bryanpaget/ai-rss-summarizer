@@ -1,3 +1,11 @@
+# STOP - READ FIRST
+
+**Before doing ANYTHING in this project, read `.claude/BLOCKING_PRIORITY.md`**
+
+This project is blocked on organization and documentation. No code changes until the system is fully mapped and documented. Every "fix" applied without understanding the full system makes things worse.
+
+---
+
 ## ✓ INTELLIGENCE BRIEFING - IMPLEMENTED
 
 **`rss report` now outputs the intelligence briefing format from REPORT_DESIGN_SPEC.md**
