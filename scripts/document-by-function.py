@@ -125,19 +125,95 @@ def call_llm(prompt):
         return f"Error: {e}"
 
 
-def describe_function(func):
-    """Get LLM to describe a single function."""
-    prompt = f"""Describe this Python {func['type']} in ONE sentence. Be specific about what it does.
+def estimate_tokens(text: str) -> int:
+    """Estimate token count (roughly 4 chars per token)."""
+    return len(text) // 4
 
-{func['code'][:2000]}
 
-ONE SENTENCE DESCRIPTION:"""
+def extract_nested_functions(code: str, parent_name: str) -> list:
+    """Extract nested functions/methods from a class or large function."""
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return []
+
+    lines = code.split('\n')
+    results = []
+
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            # Skip the parent function itself (it's at line 1 of the snippet)
+            if node.lineno == 1 and node.name == parent_name.split('.')[-1]:
+                continue
+
+            start = node.lineno
+            end = node.end_lineno
+            code_lines = lines[start-1:end]
+            nested_code = '\n'.join(code_lines)
+
+            results.append({
+                'name': f"{parent_name}.{node.name}",
+                'type': 'method' if parent_name else 'function',
+                'start': start,  # Relative to parent
+                'end': end,
+                'code': nested_code
+            })
+
+    return results
+
+
+def describe_function(func, max_tokens=5000):
+    """Get LLM to describe a single function using sandwich prompt structure."""
+    code = func['code']
+    tokens = estimate_tokens(code)
+
+    # If too large, extract and describe nested functions separately
+    if tokens > max_tokens and func['type'] in ('class', 'function'):
+        nested = extract_nested_functions(code, func['name'])
+        if nested:
+            # Describe nested items individually
+            nested_descs = []
+            for nf in nested[:10]:  # Limit to avoid runaway
+                nested_desc = describe_function(nf, max_tokens)
+                nested_descs.append(f"  - {nf['name']}: {nested_desc}")
+
+            # Summary for parent
+            return f"Contains {len(nested)} methods: " + "; ".join([n['name'].split('.')[-1] for n in nested[:5]])
+
+    # Truncate code for prompt if still too long
+    code_for_prompt = code[:8000] if len(code) > 8000 else code
+
+    # Sandwich prompt: Role -> Task -> Rules -> Content -> Example -> Output instruction
+    prompt = f"""You are a code documentation specialist creating concise function summaries.
+
+TASK: Write ONE sentence describing what this Python {func['type']} does.
+
+RULES:
+1. Start with a verb (Parses, Returns, Validates, Creates, Handles)
+2. Be specific about behavior, not just signature
+3. No filler ("This function", "basically", "essentially")
+4. Mention key parameters only if they affect meaning
+
+=== BEGIN CODE ===
+{code_for_prompt}
+=== END CODE ===
+
+EXAMPLE FORMAT (do NOT copy - reference only):
+"Parses interval strings like '5m' or '1h' into seconds, returning None on invalid input."
+
+ONE SENTENCE (start with verb):"""
 
     response = call_llm(prompt)
-    # Take first sentence only
+    # Take first sentence only, clean up
     desc = response.strip().split('\n')[0].strip()
-    if desc.startswith('This '):
-        desc = desc[5:]
+    # Remove common filler starts
+    for prefix in ['This ', 'The ', 'A ', 'An ']:
+        if desc.startswith(prefix):
+            desc = desc[len(prefix):]
+            break
+    # Ensure starts with capital
+    if desc and desc[0].islower():
+        desc = desc[0].upper() + desc[1:]
     return desc
 
 
