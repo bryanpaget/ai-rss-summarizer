@@ -1002,6 +1002,77 @@ def parse_news_extraction_response(
     return items
 
 
+# =============================================================================
+# BATCH HELPERS FOR STORY CREATION
+# =============================================================================
+
+def build_story_title_prompt(article: Article) -> str:
+    """Build prompt for generating a story title."""
+    return f"""You are a headline writer. Write ONE short headline (3-8 words) that captures the main topic.
+
+Article: {article.title}
+
+Headline:"""
+
+
+def build_story_description_prompt(article: Article) -> str:
+    """Build prompt for generating a story description."""
+    return f"""Describe what this story is about in 1-2 sentences.
+
+Article: {article.title}
+Content: {article.content}
+
+Description:"""
+
+
+def build_story_keywords_prompt(article: Article) -> str:
+    """Build prompt for extracting story keywords."""
+    return f"""Extract ALL key terms from this article.
+Include: people, organizations, places, main topics. The number of terms depends on content density.
+
+Article: {article.title}
+Content: {article.content}
+
+Return as comma-separated list:"""
+
+
+def parse_story_title_response(response: str, article: Article) -> str:
+    """Parse story title from LLM response with fallback."""
+    if not response:
+        return article.title
+    title = response.strip()
+    # Clean up the title - remove quotes, newlines, markdown, common prefixes
+    title = title.replace('"', '').replace('\n', ' ')
+    title = title.replace('**', '').replace('*', '').replace('`', '')
+    title = title.strip()
+    # Remove common LLM response patterns
+    for prefix in ["Here is", "Here's", "The headline is", "Headline:"]:
+        if title.lower().startswith(prefix.lower()):
+            title = title[len(prefix):].strip()
+    # If still garbage, use fallback
+    if len(title) < 3 or len(title) > 100 or "few" in title.lower():
+        return article.title
+    return title
+
+
+def parse_story_description_response(response: str, article: Article) -> str:
+    """Parse story description from LLM response with fallback."""
+    if not response:
+        return article.summary or article.content or ""
+    return response.strip()
+
+
+def parse_story_keywords_response(response: str, article: Article) -> list[str]:
+    """Parse keywords from LLM response with fallback."""
+    if not response:
+        return [word for word in article.title.split() if len(word) > 4]
+    keywords = [kw.strip() for kw in response.split(',')]
+    keywords = [kw for kw in keywords if kw and len(kw) > 2]
+    if not keywords:
+        return [word for word in article.title.split() if len(word) > 4]
+    return keywords
+
+
 def batch_process_articles(
     articles: list[Article],
     llm_provider: LLMProvider,
