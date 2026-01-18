@@ -14,7 +14,8 @@ param(
     [int]$OverlapTokens = 1500,
     [int]$CharsPerToken = 4,
     [int]$MaxRetries = 2,
-    [switch]$SkipSynthesis  # Skip system map generation (Tool 2 mode)
+    [switch]$SkipSynthesis,  # Skip system map generation (Tool 2 mode)
+    [int]$MaxFiles = 0       # Limit number of files (0 = no limit)
 )
 
 $ErrorActionPreference = "Stop"
@@ -569,6 +570,9 @@ Write-Host ""
 
 # Find all matching files
 $files = Get-ChildItem -Path $Directory -Filter $FilePattern -Recurse -File
+if ($MaxFiles -gt 0) {
+    $files = $files | Select-Object -First $MaxFiles
+}
 Write-Host "Found $($files.Count) files to process" -ForegroundColor Cyan
 Write-Host ""
 
