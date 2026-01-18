@@ -23,7 +23,6 @@ LOG_FILE="${IPC_DIR}/gateway.log"
 PID_FILE="${IPC_DIR}/processor.pid"
 HEARTBEAT_FILE="${IPC_DIR}/processor.heartbeat"
 LOCK_FILE="${IPC_DIR}/processor.lock"
-QUEUE_LOCK_FILE="${IPC_DIR}/queue.lock"  # For atomic queue file operations
 STALE_THRESHOLD_SECONDS=10
 CONFIG_FILE="${HOME}/.claude/config/safe-auto-load.json"
 LM_STUDIO_URL="http://localhost:1234/v1"
@@ -878,59 +877,53 @@ sort_queue_by_type() {
         return
     fi
 
-    # RACE CONDITION FIX: Acquire exclusive lock before any queue file operations
-    # This prevents concurrent clients from appending while we read/sort/write
-    (
-        flock -x 200 || { log "Failed to acquire queue lock for sorting"; return 1; }
+    local current_type
+    current_type=$(get_current_model_type)
 
-        local current_type
-        current_type=$(get_current_model_type)
+    log "Sorting queue by priority and type (current model: ${current_type:-none})"
 
-        log "Sorting queue by priority and type (current model: ${current_type:-none})"
+    # Step 1: Separate by priority
+    local temp_high="${QUEUE_FILE}.high"
+    local temp_low="${QUEUE_FILE}.low"
 
-        # Step 1: Separate by priority
-        local temp_high="${QUEUE_FILE}.high"
-        local temp_low="${QUEUE_FILE}.low"
+    jq -c 'select(.priority == "high")' "$QUEUE_FILE" > "$temp_high" 2>/dev/null || true
+    jq -c 'select(.priority != "high")' "$QUEUE_FILE" > "$temp_low" 2>/dev/null || true
 
-        jq -c 'select(.priority == "high")' "$QUEUE_FILE" > "$temp_high" 2>/dev/null || true
-        jq -c 'select(.priority != "high")' "$QUEUE_FILE" > "$temp_low" 2>/dev/null || true
+    # Step 2: Within each priority, sort by type compatibility
+    local temp_high_current="${QUEUE_FILE}.high.current"
+    local temp_high_other="${QUEUE_FILE}.high.other"
+    local temp_low_current="${QUEUE_FILE}.low.current"
+    local temp_low_other="${QUEUE_FILE}.low.other"
 
-        # Step 2: Within each priority, sort by type compatibility
-        local temp_high_current="${QUEUE_FILE}.high.current"
-        local temp_high_other="${QUEUE_FILE}.high.other"
-        local temp_low_current="${QUEUE_FILE}.low.current"
-        local temp_low_other="${QUEUE_FILE}.low.other"
-
-        if [[ -z "$current_type" || "$current_type" == "unknown" ]]; then
-            # No model loaded - just use priority order, no type sorting
-            cat "$temp_high" "$temp_low" > "$QUEUE_FILE"
+    if [[ -z "$current_type" || "$current_type" == "unknown" ]]; then
+        # No model loaded - just use priority order, no type sorting
+        cat "$temp_high" "$temp_low" > "$QUEUE_FILE"
+    else
+        # Sort each priority group by type compatibility
+        if [[ "$current_type" == "vision" ]]; then
+            # Vision can handle text
+            jq -c 'select(.type == "vision" or .type == "text")' "$temp_high" > "$temp_high_current" 2>/dev/null || true
+            jq -c 'select(.type != "vision" and .type != "text")' "$temp_high" > "$temp_high_other" 2>/dev/null || true
+            jq -c 'select(.type == "vision" or .type == "text")' "$temp_low" > "$temp_low_current" 2>/dev/null || true
+            jq -c 'select(.type != "vision" and .type != "text")' "$temp_low" > "$temp_low_other" 2>/dev/null || true
         else
-            # Sort each priority group by type compatibility
-            if [[ "$current_type" == "vision" ]]; then
-                # Vision can handle text
-                jq -c 'select(.type == "vision" or .type == "text")' "$temp_high" > "$temp_high_current" 2>/dev/null || true
-                jq -c 'select(.type != "vision" and .type != "text")' "$temp_high" > "$temp_high_other" 2>/dev/null || true
-                jq -c 'select(.type == "vision" or .type == "text")' "$temp_low" > "$temp_low_current" 2>/dev/null || true
-                jq -c 'select(.type != "vision" and .type != "text")' "$temp_low" > "$temp_low_other" 2>/dev/null || true
-            else
-                jq -c --arg t "$current_type" 'select(.type == $t)' "$temp_high" > "$temp_high_current" 2>/dev/null || true
-                jq -c --arg t "$current_type" 'select(.type != $t)' "$temp_high" > "$temp_high_other" 2>/dev/null || true
-                jq -c --arg t "$current_type" 'select(.type == $t)' "$temp_low" > "$temp_low_current" 2>/dev/null || true
-                jq -c --arg t "$current_type" 'select(.type != $t)' "$temp_low" > "$temp_low_other" 2>/dev/null || true
-            fi
-
-            # Recombine: HIGH priority first (current type, then other types), then LOW
-            cat "$temp_high_current" "$temp_high_other" "$temp_low_current" "$temp_low_other" > "$QUEUE_FILE"
-            rm -f "$temp_high_current" "$temp_high_other" "$temp_low_current" "$temp_low_other"
+            jq -c --arg t "$current_type" 'select(.type == $t)' "$temp_high" > "$temp_high_current" 2>/dev/null || true
+            jq -c --arg t "$current_type" 'select(.type != $t)' "$temp_high" > "$temp_high_other" 2>/dev/null || true
+            jq -c --arg t "$current_type" 'select(.type == $t)' "$temp_low" > "$temp_low_current" 2>/dev/null || true
+            jq -c --arg t "$current_type" 'select(.type != $t)' "$temp_low" > "$temp_low_other" 2>/dev/null || true
         fi
 
-        rm -f "$temp_high" "$temp_low"
+        # Recombine: HIGH priority first (current type, then other types), then LOW
+        cat "$temp_high_current" "$temp_high_other" "$temp_low_current" "$temp_low_other" > "$QUEUE_FILE"
+        rm -f "$temp_high_current" "$temp_high_other" "$temp_low_current" "$temp_low_other"
+    fi
 
-        local count high_count
-        count=$(wc -l < "$QUEUE_FILE" | tr -d ' ')
-        high_count=$(jq -c 'select(.priority == "high")' "$QUEUE_FILE" 2>/dev/null | wc -l | tr -d ' ')
-        log "Queue sorted ($count items, $high_count high priority)"
-    ) 200>"$QUEUE_LOCK_FILE"
+    rm -f "$temp_high" "$temp_low"
+
+    local count high_count
+    count=$(wc -l < "$QUEUE_FILE" | tr -d ' ')
+    high_count=$(jq -c 'select(.priority == "high")' "$QUEUE_FILE" 2>/dev/null | wc -l | tr -d ' ')
+    log "Queue sorted ($count items, $high_count high priority)"
 }
 
 is_type_compatible() {
@@ -1391,50 +1384,37 @@ cmd_request() {
     fi
 
 
-    # RACE CONDITION FIX: Lock the queue for the entire check+append+fix sequence
-    # This prevents races with sort_queue_by_type reading while we append
-    local queue_was_empty_file
-    queue_was_empty_file=$(mktemp)
-    (
-        flock -x 200 || { log "Failed to acquire queue lock for append"; exit 1; }
-        
-        # Check if queue is empty BEFORE adding (for spawn decision)
-        if [[ ! -s "$QUEUE_FILE" ]]; then
-            echo "true" > "$queue_was_empty_file"
-        else
-            echo "false" > "$queue_was_empty_file"
-        fi
+    # Check if queue is empty BEFORE adding (for spawn decision)
+    local queue_was_empty=false
+    if [[ ! -s "$QUEUE_FILE" ]]; then
+        queue_was_empty=true
+    fi
 
-        # Build request JSON using jq --rawfile to read prompt from file
-        # This avoids all shell variable limits
-        # IMPORTANT: -c for compact output (single line JSONL format)
-        # Include queued_at timestamp for queue time tracking
-        # Include priority for queue ordering (high priority processed first)
-        local queued_at
-        queued_at=$(date +%s%3N)  # milliseconds since epoch
-        jq -nc --rawfile prompt "$actual_prompt_file" \
-            --arg id "$request_id" \
-            --arg type "$request_type" \
-            --arg system "$system_prompt" \
-            --arg temp "$temperature" \
-            --arg max_tokens "$max_tokens" \
-            --arg pipe_path "$pipe_path" \
-            --arg file_path "$file_path" \
-            --arg stream "$stream_mode" \
-            --arg queued_at "$queued_at" \
-            --arg priority "$priority" \
-            '{id: $id, type: $type, prompt: $prompt, system: $system, temperature: $temp, max_tokens: $max_tokens, pipe_path: $pipe_path, file_path: $file_path, stream: $stream, queued_at: ($queued_at | tonumber), priority: $priority}' \
-            >> "$QUEUE_FILE"
+    # Build request JSON using jq --rawfile to read prompt from file
+    # This avoids all shell variable limits
+    # IMPORTANT: -c for compact output (single line JSONL format)
+    # Include queued_at timestamp for queue time tracking
+    # Include priority for queue ordering (high priority processed first)
+    local queued_at
+    queued_at=$(date +%s%3N)  # milliseconds since epoch
+    jq -nc --rawfile prompt "$actual_prompt_file" \
+        --arg id "$request_id" \
+        --arg type "$request_type" \
+        --arg system "$system_prompt" \
+        --arg temp "$temperature" \
+        --arg max_tokens "$max_tokens" \
+        --arg pipe_path "$pipe_path" \
+        --arg file_path "$file_path" \
+        --arg stream "$stream_mode" \
+        --arg queued_at "$queued_at" \
+        --arg priority "$priority" \
+        '{id: $id, type: $type, prompt: $prompt, system: $system, temperature: $temp, max_tokens: $max_tokens, pipe_path: $pipe_path, file_path: $file_path, stream: $stream, queued_at: ($queued_at | tonumber), priority: $priority}' \
+        >> "$QUEUE_FILE"
 
-        # Fix .pipe.lnk extension issue in queue file
-        if grep -q '\.pipe\.lnk' "$QUEUE_FILE"; then
-            sed -i 's/\.pipe\.lnk/.pipe/g' "$QUEUE_FILE"
-        fi
-    ) 200>"$QUEUE_LOCK_FILE"
-    
-    local queue_was_empty
-    queue_was_empty=$(cat "$queue_was_empty_file")
-    rm -f "$queue_was_empty_file"
+    # Fix .pipe.lnk extension issue in queue file
+    if grep -q '\.pipe\.lnk' "$QUEUE_FILE"; then
+        sed -i 's/\.pipe\.lnk/.pipe/g' "$QUEUE_FILE"
+    fi
 
 
     # Clean up temp file if we created one
