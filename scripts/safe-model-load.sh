@@ -1122,19 +1122,32 @@ process_batch() {
         local request_size
         request_size=$(get_prompt_size "$request_file")
 
-        # If adding this would exceed max, wait for in-flight to complete first
-        if [[ $((in_flight_bytes + request_size)) -gt $max_in_flight && ${#pids[@]} -gt 0 ]]; then
-            log "In-flight ($in_flight_bytes) + this ($request_size) > max ($max_in_flight), waiting..."
+        # If adding this would exceed max, wait for ONE to complete (not all)
+        # This maintains continuous flow instead of batch-then-drain behavior
+        while [[ $((in_flight_bytes + request_size)) -gt $max_in_flight && ${#pids[@]} -gt 0 ]]; do
+            log "In-flight ($in_flight_bytes) + this ($request_size) > max ($max_in_flight), waiting for one..."
+            # Wait for any one background job to complete
+            wait -n "${pids[@]}" 2>/dev/null || true
+            # Find which PID completed and remove it
+            local new_pids=()
             for pid in "${pids[@]}"; do
-                wait "$pid" || true
+                if kill -0 "$pid" 2>/dev/null; then
+                    new_pids+=("$pid")
+                else
+                    # This PID completed - decrement its size
+                    local completed_size="${pid_sizes[$pid]:-0}"
+                    in_flight_bytes=$((in_flight_bytes - completed_size))
+                    unset "pid_sizes[$pid]"
+                    log "PID $pid completed, freed ${completed_size}B (in_flight now: $in_flight_bytes)"
+                fi
             done
-            pids=()
-            in_flight_bytes=0
-            log "In-flight requests completed, continuing"
-        fi
+            pids=("${new_pids[@]}")
+        done
 
         dispatch_request_to_lm_studio "$request_file" "$model"
-        pids+=($!)  # Capture background curl PID
+        local new_pid=$!
+        pids+=("$new_pid")
+        pid_sizes[$new_pid]=$request_size  # Track size for this PID
         in_flight_bytes=$((in_flight_bytes + request_size))
         count=$((count + 1))
         touch "$HEARTBEAT_FILE"
