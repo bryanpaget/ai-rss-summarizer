@@ -496,7 +496,39 @@ def process_directory(directory, cache, force=False, output_file=None, workers=1
                     pass
 
         phase3_duration = time.time() - phase3_start
+        if not verbose:
+            print()  # Newline after progress indicator
         print(f"\n  Phase 3 complete: {phase3_duration:.1f}s total, {phase3_duration/total:.2f}s avg per item", flush=True)
+
+        # Write detailed timing log if requested
+        if timing_log:
+            from datetime import datetime
+            with open(timing_log, 'w', encoding='utf-8') as f:
+                f.write(f"# Timing Log\n")
+                f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write(f"Total LLM time: {phase3_duration:.1f}s\n")
+                f.write(f"Items processed: {total}\n")
+                f.write(f"Average per item: {phase3_duration/total:.2f}s\n\n")
+                f.write(f"## Per-Function Timing\n\n")
+                f.write(f"| File | Function | Duration (s) |\n")
+                f.write(f"|------|----------|-------------|\n")
+                for fpath, fname, dur in timing_data:
+                    rel = os.path.relpath(fpath, directory)
+                    f.write(f"| {rel} | {fname} | {dur:.2f} |\n")
+
+                # Per-file summary
+                f.write(f"\n## Per-File Summary\n\n")
+                file_times = {}
+                file_counts = {}
+                for fpath, fname, dur in timing_data:
+                    rel = os.path.relpath(fpath, directory)
+                    file_times[rel] = file_times.get(rel, 0) + dur
+                    file_counts[rel] = file_counts.get(rel, 0) + 1
+                f.write(f"| File | Functions | Total Time (s) | Avg (s) |\n")
+                f.write(f"|------|-----------|----------------|--------|\n")
+                for fpath in sorted(file_times.keys(), key=lambda x: -file_times[x]):
+                    f.write(f"| {fpath} | {file_counts[fpath]} | {file_times[fpath]:.1f} | {file_times[fpath]/file_counts[fpath]:.2f} |\n")
+            print(f"  Timing log written to {timing_log}")
 
         # Store timing for output
         total_stats['timing'] = timing_data
