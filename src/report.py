@@ -1373,11 +1373,14 @@ def _run_connection_detection(
         # Submit batch
         cluster_handles = []
         for cluster in batch_clusters:
-            prompt = build_cluster_analysis_prompt(cluster)
-            if prompt:
-                handle = gateway.submit_text(prompt, temperature=0.3)
-                cluster_handles.append((cluster, handle))
-                total_llm_calls += 1
+            # Chunk large clusters to prevent timeouts
+            chunks = chunk_large_cluster(cluster)
+            for chunk in chunks:
+                prompt = build_cluster_analysis_prompt(chunk)
+                if prompt:
+                    handle = gateway.submit_text(prompt, temperature=0.3)
+                    cluster_handles.append((chunk, handle))
+                    total_llm_calls += 1
 
         # Collect batch
         batch_triples = 0
