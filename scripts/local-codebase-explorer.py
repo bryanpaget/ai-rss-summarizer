@@ -684,13 +684,27 @@ Return ONLY the JSON array, no explanation:"""
         sections = json.loads(response)
 
         results = []
-        for section in sections[:20]:  # Limit
+        # Sort sections by line number to calculate proper ranges
+        sorted_sections = sorted(sections[:20], key=lambda s: s.get('line', 1))
+        for i, section in enumerate(sorted_sections):
+            start_line = section.get('line', 1)
+            # End at next section or end of file
+            if i + 1 < len(sorted_sections):
+                end_line = sorted_sections[i + 1].get('line', 1) - 1
+            else:
+                end_line = len(lines)
+            # Extract actual code from file
+            section_lines = lines[start_line - 1:end_line]
+            section_code = '\n'.join(section_lines)
+            # Truncate if too long
+            if len(section_code) > 2000:
+                section_code = section_code[:2000]
             results.append({
                 'name': section.get('name', 'unknown'),
                 'type': section.get('type', 'section'),
-                'start': section.get('line', 1),
-                'end': section.get('line', 1) + 10,  # Approximate
-                'code': ''  # Will be filled in later if needed
+                'start': start_line,
+                'end': end_line,
+                'code': section_code
             })
         return results if results else [{
             'name': Path(filepath).name,
