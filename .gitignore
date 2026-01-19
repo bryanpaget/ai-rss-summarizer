@@ -45,7 +45,49 @@ models/
 
 # Claude Code session files (not part of application)
 .claude/
+.claude_settings.json
 .auto-claude-security.json
+.auto-claude-status
+
+# Gemini session files
+.gemini/
 
 # Test profiles (local testing only)
 rssTestProfile*/
+
+# Research notes (personal, not app code)
+ADVERSARIAL_SPECIFICATION_ELICITATION_RESEARCH.md
+AI_CLI_RESEARCH.md
+AI_IMPLEMENTATION_FRAMEWORKS_RESEARCH.md
+AI_SPECIFICATION_TOOLS_RESEARCH.md
+FEED_SEARCH_DEMO.md
+TRANSCRIPT_SPEC_CRITIQUE.md
+
+# Personal config (user-specific, not templates)
+config/feeds.txt
+config/model_config.json
+config/schedule.json
+config/user_context.json
+
+# Generated documentation (can be regenerated)
+docs/CODEBASE_TEST.md
+docs/CODEBASE_VERIFY.md
+docs/LM_STUDIO_VERIFICATION.md
+docs/PROJECT_DOCS.md
+docs/SCRIPTS_DOCUMENTATION.md
+docs/SCRIPTS_TEST.md
+docs/SRC_DOCUMENTATION.md
+docs/specs/
+
+# Development/documentation tools (not app code)
+scripts/document-by-function.py
+scripts/document-codebase.ps1
+scripts/local-codebase-explorer.py
+scripts/quality_test_harness.py
+scripts/test-gateway-continuous.sh
+
+# Archive (deprecated)
+archive/
+
+# Stray test files
+test_personal_context.py
