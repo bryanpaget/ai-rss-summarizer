@@ -233,49 +233,49 @@ def extract_with_treesitter(filepath: str, language: str) -> list[dict]:
         return None
 
     # Execute query and collect matches
-    captures = query.captures(tree.root_node)
+    # API returns dict: {capture_name: [nodes]}
+    captures_dict = query.captures(tree.root_node)
 
-    # Group captures - we want the full node (function/class) not just the name
+    # Get name nodes for lookup
+    name_nodes = captures_dict.get('name', [])
+
+    # Process all capture types except 'name' (which is just for identification)
     seen_ranges = set()
-    for node, capture_name in captures:
-        # Skip name captures, we want the full node
+    for capture_name, nodes in captures_dict.items():
         if capture_name == 'name':
             continue
 
-        start_line = node.start_point[0] + 1  # 1-indexed
-        end_line = node.end_point[0] + 1
+        for node in nodes:
+            start_line = node.start_point[0] + 1  # 1-indexed
+            end_line = node.end_point[0] + 1
 
-        # Deduplicate (same range can match multiple patterns)
-        range_key = (start_line, end_line)
-        if range_key in seen_ranges:
-            continue
-        seen_ranges.add(range_key)
+            # Deduplicate (same range can match multiple patterns)
+            range_key = (start_line, end_line)
+            if range_key in seen_ranges:
+                continue
+            seen_ranges.add(range_key)
 
-        # Extract name from the node text (first identifier-like thing)
-        # This is a simplification - proper extraction would use the @name capture
-        code = node.text.decode('utf-8', errors='replace')
+            code = node.text.decode('utf-8', errors='replace')
 
-        # Try to find name from child @name captures
-        name = None
-        for child_node, child_name in captures:
-            if child_name == 'name':
-                # Check if this name node is within our current node
-                if (child_node.start_point[0] >= node.start_point[0] and
-                    child_node.end_point[0] <= node.end_point[0]):
-                    name = child_node.text.decode('utf-8', errors='replace')
+            # Try to find name from @name captures within this node's range
+            name = None
+            for name_node in name_nodes:
+                if (name_node.start_point[0] >= node.start_point[0] and
+                    name_node.end_point[0] <= node.end_point[0]):
+                    name = name_node.text.decode('utf-8', errors='replace')
                     break
 
-        if not name:
-            # Fallback: use first line as identifier
-            name = code.split('\n')[0][:50].strip()
+            if not name:
+                # Fallback: use first line as identifier
+                name = code.split('\n')[0][:50].strip()
 
-        results.append({
-            'name': name,
-            'type': capture_name,
-            'start': start_line,
-            'end': end_line,
-            'code': code
-        })
+            results.append({
+                'name': name,
+                'type': capture_name,
+                'start': start_line,
+                'end': end_line,
+                'code': code
+            })
 
     # Sort by start line
     results.sort(key=lambda x: x['start'])
