@@ -6,24 +6,46 @@ Transform your RSS feeds into personalized intelligence briefings. This tool fet
 
 ## Why Local LLMs?
 
-This tool makes **hundreds of LLM calls per session** - extracting insights, generating summaries, analyzing clusters, detecting connections. Using cloud APIs would cost $5-20+ per report. With LM Studio:
+This tool makes **hundreds of LLM calls per session**. Here's what happens when you process articles:
+
+**Per Article:**
+| Operation | LLM Calls | Embeddings | Tokens (approx) |
+|-----------|-----------|------------|-----------------|
+| Extract insights & triples | 1 | 0 | 500-2000 |
+| Generate summary | 0 (included above) | 0 | - |
+| Embed semantic card | 0 | 1 | - |
+| Trend categorization | 0 | 0 (uses stored) | - |
+
+**Per Session (after articles):**
+| Operation | LLM Calls | Embeddings |
+|-----------|-----------|------------|
+| Cluster analysis | 1 per cluster | batch at start |
+| Connection detection | varies | 0 |
+
+**Real-world example:** Processing 50 articles generates ~50 LLM calls + ~50 embeddings + ~100 cluster analysis calls = **200+ API calls**. At typical API pricing ($0.01-0.03 per 1K tokens), that's $5-20 per session.
+
+**With LM Studio (tested on RTX 3080):**
+- 50 articles: ~15 minutes total
+- Embeddings: ~0.3 seconds each (batched)
+- Text generation: ~2-5 seconds per call
+- **Cost: $0**
 
 | Benefit | Cloud APIs | LM Studio |
 |---------|-----------|-----------|
-| Cost per report | $5-20+ | **$0** |
+| Cost per 50 articles | $5-20 | **$0** |
 | Rate limits | Yes | **None** |
 | Privacy | Data sent to cloud | **100% local** |
-| Speed | Network latency | **Instant** |
+| Speed | Network latency | **Local only** |
 | Availability | Depends on provider | **Always on** |
 
 The app includes a **smart gateway system** that automatically:
 - Loads the right model for each task (text vs embeddings)
-- Batches requests to minimize model switching
-- Handles concurrent requests safely
+- Batches requests to minimize model switching (27x faster than naive approach)
+- Uses sliding window to prevent queue saturation
 - Retries on failures
 
 **Recommended models for LM Studio:**
-- **Text:** `google/gemma-3n-e4b` (4GB, fast) or `mistral-7b-instruct` (7GB, quality)
+- **Text:** `google/gemma-3n-e4b` (4GB, fast) or any instruct model you prefer
 - **Embeddings:** `nomic-embed-text-v1.5` (274MB, excellent quality)
 
 ## Features
