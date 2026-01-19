@@ -1131,7 +1131,8 @@ def main():
         output_file=args.output,
         workers=args.workers,
         verbose=args.verbose,
-        timing_log=args.timing_log
+        timing_log=args.timing_log,
+        file_limit=args.limit
     )
 
     print(f"\n=== SUMMARY ===")
