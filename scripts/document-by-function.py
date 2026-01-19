@@ -514,23 +514,30 @@ def process_directory(directory, cache, force=False, output_file=None, workers=1
                     break
 
             # Process: when one completes, add one
+            # CRITICAL: Errors are fatal. We never output error descriptions.
             total_tokens = 0
             total_llm_time = 0.0
-            errors = 0
-            while pending:
+            fatal_error = None
+            while pending and not fatal_error:
                 done = next(as_completed(pending.keys()))
                 filepath_orig, func_orig, start_time = pending.pop(done)
                 try:
                     filepath, func, desc, timing_info = done.result()
-                    is_error = desc.startswith('Error:')
-                    if is_error:
-                        errors += 1
+                except LLMError as e:
+                    # LLM failed after retries - this is fatal
+                    fatal_error = f"{os.path.relpath(filepath_orig, directory)}:{func_orig['name']}: {e}"
+                    print(f"\n\n  FATAL ERROR: {fatal_error}", flush=True)
+                    # Cancel remaining work
+                    for f in pending:
+                        f.cancel()
+                    break
                 except Exception as e:
-                    filepath, func = filepath_orig, func_orig
-                    desc = f"Error: {e}"
-                    timing_info = {'llm_time': 0, 'tokens_in': 0, 'total_time': 0}
-                    is_error = True
-                    errors += 1
+                    # Unexpected error - also fatal
+                    fatal_error = f"{os.path.relpath(filepath_orig, directory)}:{func_orig['name']}: Unexpected error: {e}"
+                    print(f"\n\n  FATAL ERROR: {fatal_error}", flush=True)
+                    for f in pending:
+                        f.cancel()
+                    break
 
                 wall_time = time.time() - start_time
                 tokens = timing_info['tokens_in']
@@ -539,14 +546,13 @@ def process_directory(directory, cache, force=False, output_file=None, workers=1
                 total_llm_time += llm_time
                 func['_description'] = desc
                 completed += 1
-                timing_data.append((filepath, func['name'], wall_time, tokens, llm_time, is_error))
+                timing_data.append((filepath, func['name'], wall_time, tokens, llm_time, False))
 
                 if verbose:
-                    err_flag = " ERR" if is_error else ""
-                    print(f"  [{completed}/{total}] wall={wall_time:.2f}s llm={llm_time:.2f}s {tokens:>5}tok {os.path.relpath(filepath, directory)}:{func['name']}{err_flag}", flush=True)
+                    print(f"  [{completed}/{total}] wall={wall_time:.2f}s llm={llm_time:.2f}s {tokens:>5}tok {os.path.relpath(filepath, directory)}:{func['name']}", flush=True)
                 else:
                     # Brief progress indicator
-                    print(f"\r  Processing: {completed}/{total} ({total_tokens} tokens, {errors} errors)", end='', flush=True)
+                    print(f"\r  Processing: {completed}/{total} ({total_tokens} tokens)", end='', flush=True)
 
                 # Add one to maintain queue level
                 try:
@@ -555,6 +561,10 @@ def process_directory(directory, cache, force=False, output_file=None, workers=1
                     pending[future] = (item[0], item[1], time.time())
                 except StopIteration:
                     pass
+
+            # If we hit a fatal error, abort the entire run
+            if fatal_error:
+                raise LLMError(f"Documentation run aborted: {fatal_error}")
 
         phase3_duration = time.time() - phase3_start
         if not verbose:
