@@ -1047,8 +1047,20 @@ def split_cluster_in_half(cluster: list) -> list[list]:
 
 
 def update_learned_max_size(failed_size: int):
-    """Update learned max size after a timeout failure."""
+    """Update learned max size after a timeout failure.
+
+    Only learns from clusters large enough to be meaningful indicators.
+    Small cluster timeouts suggest LLM issues, not capacity limits.
+    """
     global _learned_max_cluster_size
+
+    # Only learn from clusters that are meaningfully large
+    # A size-2 timeout is an LLM problem, not a capacity problem
+    min_learning_threshold = 10
+    if failed_size < min_learning_threshold:
+        console.print(f"      [dim]Timeout on small cluster ({failed_size}) - not adjusting capacity[/dim]")
+        return
+
     # Shrink to 75% of failed size (not half, to find sweet spot faster)
     new_max = max(_min_cluster_size, int(failed_size * 0.75))
     if new_max < _learned_max_cluster_size:
