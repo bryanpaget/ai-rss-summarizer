@@ -1,12 +1,12 @@
 # Project Documentation
 
-Generated: 2026-01-18 16:45:45
+Generated: 2026-01-18 16:52:04
 
 **Stats:** 39 files, 259 functions, 93 classes, ~22831 lines
 
-**Cache:** 475 cached, 0 new, 1 changed
+**Cache:** 462 cached, 13 new, 1 changed
 
-**Timing:** 4.3s total LLM time, 4.32s avg per function
+**Timing:** 21.3s total LLM time, 1.52s avg per function
 
 ---
 
@@ -14,22 +14,19 @@ Generated: 2026-01-18 16:45:45
 
 ## Architecture Overview
 
-**1. Purpose:** This Python project is a comprehensive news and information processing system designed for advanced analysis, including clustering, summarization, knowledge extraction, and trend identification. It aims to provide insights from diverse sources through sophisticated natural language processing and machine learning techniques.
+**1. Purpose:** This Python project is a comprehensive news and information processing system designed for advanced analysis, including clustering, summarization, knowledge extraction, and trend identification. It aims to provide insights from diverse sources by leveraging LLMs, vector embeddings, and structured data management.
 
 **2. Key Modules:**
 
-*   **`cli.py`**:  The primary command-line interface, handling user interactions like fetching data, summarizing content, and managing contexts.
-*   **`knowledge.py`**: Responsible for extracting structured knowledge (entities, relationships, insights) from news articles using LLMs and other techniques. This forms the core of the system's analytical capabilities.
-*   **`clustering.py`**:  Implements algorithms to group similar news articles together based on content and semantic similarity. 
-*   **`llm_providers.py`**: Manages interactions with various Large Language Models (LLMs) like OpenAI, LMStudio, Ollama, and others, providing a flexible and extensible architecture for leveraging different AI models.
+*   **`commands.py`**:  This module houses the core command-line interface (CLI) logic, orchestrating various functionalities like updating data, managing contexts, and triggering specific processing tasks. It acts as the primary entry point for user interaction.
+*   **`knowledge.py`**: This module is responsible for extracting structured knowledge from news articles, including entities, relationships, and insights.  It leverages LLMs to parse text and build a knowledge graph.
+*   **`clustering.py`**: Handles the clustering of news articles based on semantic similarity, enabling the identification of emerging trends and topic evolution. It uses embeddings and clustering algorithms for this purpose.
+*    **`llm_providers.py`**:  Manages interactions with various Large Language Models (LLMs) like OpenAI, LMStudio, Ollama, etc., providing a flexible abstraction layer for LLM integration. 
+*   **`storage.py`**: Manages the persistence and retrieval of news articles, stories, and associated metadata using a custom storage mechanism.
 
-**3. Entry Points:** Execution begins with the `cli.py` module, which parses command-line arguments and dispatches to appropriate functions based on user input.
+**3. Entry Points:** The project's execution begins with `cli.py`, which parses command-line arguments and dispatches requests to the appropriate functions within other modules (primarily those defined in `commands.py`).
 
-**4. Data Flow:**  The system generally follows this flow:
-1.  Data is fetched from various sources using modules like `feed_catalog.py` and `rss.py`.
-2.  Articles are processed by the CLI, which can trigger tasks in other modules such as `knowledge.py`, `clustering.py`, and `summarizer.py` to extract insights, perform analysis, or generate summaries. 
-3. Extracted data is stored in a persistent storage layer managed by the `storage.py` module.
-4.  The system leverages LLMs through `llm_providers.py` for tasks like knowledge extraction and summarization. The `report.py` module aggregates results from these processes, generating reports and visualizations.
+**4. Data Flow:**  The user initiates a task through the CLI (`cli.py`). This triggers operations that often involve fetching data from various sources (`feed_catalog.py`, `rss.py`), processing articles for knowledge extraction and clustering (`knowledge.py`, `clustering.py`), leveraging LLMs via `llm_providers.py` for summarization, analysis, and prompt generation, and storing/retrieving processed information using the `storage.py` module.  The results of these operations are then presented to the user or used for further analysis.
 
 
 
@@ -41,7 +38,16 @@ Generated: 2026-01-18 16:45:45
 
 | File | Functions | Wall (s) | Tokens |
 |------|-----------|----------|--------|
-| knowledge.py | 1 | 4.3 | 1482 |
+| cli_schedule.py | 4 | 53.5 | 2241 |
+| knowledge.py | 2 | 27.7 | 2066 |
+| context_commands.py | 1 | 17.0 | 108 |
+| llm_providers.py | 1 | 16.9 | 476 |
+| commands.py | 1 | 12.9 | 290 |
+| cli_context.py | 1 | 12.8 | 139 |
+| model_manager.py | 1 | 8.6 | 23 |
+| perspectives.py | 1 | 8.6 | 45 |
+| report.py | 1 | 8.5 | 869 |
+| vector_index.py | 1 | 8.4 | 9 |
 
 ---
 
@@ -129,7 +135,7 @@ Generated: 2026-01-18 16:45:45
 - Lines 513-681: function `_run_tree_wizard` - Parses the tree taxonomy, allowing users to navigate categories, subjects, and feeds to select desired items.
 - Lines 684-734: function `run_setup_wizard_inline` - Runs an interactive setup wizard to allow users to select topics and feeds, then updates the user's profile and configuration accordingly.
 - Lines 738-798: function `setup_wizard` - Configures user interests and RSS feed subscriptions through an interactive wizard, allowing navigation and selection of categories, subjects, and feeds.
-- Lines 802-821: function `watch_topic` - Error: Timeout waiting for gateway response after 300s
+- Lines 802-821: function `watch_topic` - Adds a specified topic to the user's watch list by loading the profile, checking if the topic is already being watched, and saving the updated profile.
 - Lines 825-846: function `unwatch_topic` - Removes a specified topic from the user's watch list by updating the profile and displaying confirmation.
 
 ---
@@ -190,8 +196,8 @@ Generated: 2026-01-18 16:45:45
 - Lines 25-27: function `_get_script_path` - Returns a string representing the command to execute the `fetch` script using the current Python interpreter.
 - Lines 30-56: function `_parse_interval` - Parses an interval string (e.g., '3d', '12h', '30m') into minutes, returning None if the input is invalid.
 - Lines 59-71: function `_save_schedule_config` - Saves the schedule configuration to a JSON file, including whether the schedule is enabled and the specified interval in minutes.
-- Lines 74-85: function `_load_schedule_config` - Error: Timeout waiting for gateway response after 300s
-- Lines 88-127: function `_create_windows_task` - Error: Timeout waiting for gateway response after 300s
+- Lines 74-85: function `_load_schedule_config` - Loads schedule configuration from a JSON file, defaulting to a disabled state with a zero-minute interval if the file doesn't exist or loading fails.
+- Lines 88-127: function `_create_windows_task` - Creates a Windows Task Scheduler task to run a script at a specified interval, handling schedule type and overwriting existing tasks.
 - Lines 130-145: function `_delete_windows_task` - Deletes a Windows Task Scheduler task with the specified name and returns True if successful, otherwise indicates failure with the error message.
 - Lines 148-168: function `_get_windows_task_status` - Retrieves the status of a specified Windows Task Scheduler task by querying the task and parsing its output into a dictionary.
 - Lines 171-210: function `_create_cron_job` - Creates a cron job for a specified interval and working directory by updating the system's crontab file.
@@ -199,8 +205,8 @@ Generated: 2026-01-18 16:45:45
 - Lines 239-274: function `schedule_main` - Handles background feed fetching schedule management through interactive commands like enable, disable, and status.
 - Lines 278-332: function `enable` - Enables scheduled background fetching by setting up an OS scheduler to run the 'rss fetch' command at the specified interval.
 - Lines 336-360: function `disable` - Disables scheduled background fetching by removing the task from the operating system scheduler and updating the schedule configuration.
-- Lines 364-447: function `status` - Error: Timeout waiting for gateway response after 300s
-- Lines 451-578: function `configure` - Error: Timeout waiting for gateway response after 300s
+- Lines 364-447: function `status` - Displays the current status of background fetching, including whether it's enabled, the next scheduled run time, and the configured interval.
+- Lines 451-578: function `configure` - Configures background scheduling by prompting the user for an interval and confirming the setup.
 
 ---
 
@@ -281,7 +287,7 @@ Generated: 2026-01-18 16:45:45
 - Lines 1304-1310: function `_finish_onboarding` - Displays a completion message indicating setup is complete and the next step is to update RSS feeds.
 - Lines 1313-1431: function `_setup_new_provider` - Configures a new language model provider by prompting the user for an API key and saving the configuration to a file.
 - Lines 1434-1473: function `_show_local_setup_instructions` - Informs the user about setting up local LLM providers, including instructions for LM Studio and Ollama, and explains how the application automatically loads and unloads models.
-- Lines 1476-1505: function `_select_provider` - Error: Timeout waiting for gateway response after 300s
+- Lines 1476-1505: function `_select_provider` - Handles user selection of a provider from a list, configuring the chosen provider if available or prompting setup if not.
 - Lines 1508-1557: function `get_digest_summary` - Generates a text summary of recent articles, optionally filtered by topic and time range.
 
 ---
@@ -333,7 +339,7 @@ Generated: 2026-01-18 16:45:45
 - Lines 60-99: function `context_show` - Displays the user's personal context, including role, current projects, watched topics, pinned topics, ignored topics, personalization strength, and last updated timestamp.
 - Lines 102-138: function `context_edit` - Handles interactive editing of a user's personal context, allowing modification of role, projects, watching, and ignore lists before saving the updated profile.
 - Lines 141-153: function `context_pin` - Pins a given topic to a user's profile to prevent its relevance from decaying, printing a message indicating whether the topic was successfully pinned or was already pinned.
-- Lines 156-168: function `context_unpin` - Error: Timeout waiting for gateway response after 300s
+- Lines 156-168: function `context_unpin` - Unpins a specified topic from a user's profile, allowing for relevance decay and providing console feedback.
 - Lines 171-183: function `context_watch` - Adds a given topic to the user's watching list, updating the profile and providing feedback on the action.
 - Lines 186-198: function `context_ignore` - Adds a specified topic to the user's ignore list, updating the profile and providing feedback to the console.
 - Lines 201-231: function `context_stats` - Displays the top 15 topics with the highest engagement rates over the last 30 days in a formatted table.
@@ -507,7 +513,7 @@ Generated: 2026-01-18 16:45:45
 - Lines 2202-2234: function `build_triple_prompt` - Creates a prompt for extracting subject-predicate-object triples from a given text chunk, specifying constraints on entity types and output format.
 - Lines 2237-2307: function `parse_triple_response` - Parses a JSON string containing triples from an LLM response and saves new triples to a knowledge base while identifying existing ones.
 - Lines 2310-2336: function `build_entity_rel_prompt` - Creates a prompt for entity relationship extraction, instructing the model to identify relationships between organizations, people, and products within a given article.
-- Lines 2339-2398: function `parse_entity_rel_response` - Error: Timeout waiting for gateway response after 300s
+- Lines 2339-2398: function `parse_entity_rel_response` - Parses a JSON string containing entity relationships from an article and saves them to the knowledge base.
 - Lines 2401-2541: function `detect_connections` - Detects relationships between a new insight and existing knowledge by finding similar insights using FAISS and then classifying the relationships using an LLM.
 - Lines 2544-2567: function `format_relationship` - Formats a relationship into a human-readable string including the relationship type, target insight content, and similarity score.
 - Lines 2570-2625: function `query_knowledge_base` - Queries a knowledge base using a natural language query and an LLM to generate a summary of relevant insights.
@@ -527,7 +533,7 @@ Generated: 2026-01-18 16:45:45
 - Lines 14-29: class `ProviderType` - Defines a set of string constants representing different language model providers, each associated with a specific API or local implementation.
 - Lines 33-91: class `LLMConfig` - Creates an LLMConfig object by loading configuration from environment variables or a JSON file, allowing specification of provider, base URL, API key, model, and default settings.
 - Lines 95-106: class `UsageStats` - Creates a UsageStats object to store token counts and model/provider information from a summarization call, calculating total tokens if not already provided.
-- Lines 109-162: class `LLMProvider` - Error: Timeout waiting for gateway response after 300s
+- Lines 109-162: class `LLMProvider` - Handles LLM summarization and generation requests, tracking usage statistics and providing a default implementation for generating responses from prompts.
 - Lines 165-332: class `OpenAICompatibleProvider` - Generates text summaries or completions using an OpenAI-compatible API, handling model discovery and API interaction.
 - Lines 335-575: class `LMStudioProvider` - Handles auto-loading of a local LLM model using LM Studio, checking for resource availability and ensuring the model is loaded before making requests.
 - Lines 578-586: class `OllamaProvider` - Creates an Ollama local LLM provider using an OpenAI-compatible endpoint, defaulting to the "llama2" model.
@@ -559,7 +565,7 @@ Generated: 2026-01-18 16:45:45
 - Lines 9-16: import-block `imports` - Module imports
 - Lines 19-21: class `ModelManagerError` - Handles errors that occur during model management operations.
 - Lines 24-26: class `LMStudioNotReachableError` - Handles the error condition when the LM Studio server is unreachable, indicating a failure to connect for model management.
-- Lines 29-31: class `ModelLoadError` - Error: Timeout waiting for gateway response after 300s
+- Lines 29-31: class `ModelLoadError` - Handles errors that occur when attempting to load a machine learning model.
 - Lines 34-36: class `ModelUnloadError` - Handles errors that occur when attempting to unload a model from the model manager.
 - Lines 40-104: class `ModelConfig` - Loads model configuration from a project-local JSON file, falling back to creating a default configuration if the file doesn't exist.
 - Lines 107-107: constant `RequestType` - Defines a string literal representing the allowed types of requests: text, vision, or embedding.
@@ -579,7 +585,7 @@ Generated: 2026-01-18 16:45:45
 - Lines 3-8: import-block `imports` - Module imports
 - Lines 12-97: constant `PERSPECTIVE_CATEGORIES` - Defines a dictionary mapping perspective categories to their names and minimum source requirements.
 - Lines 100-100: constant `DEFAULT_CATEGORIES` - Defines a list of predefined categories used for classifying data.
-- Lines 104-110: class `Perspective` - Error: Timeout waiting for gateway response after 300s
+- Lines 104-110: class `Perspective` - Creates a structured representation of a story's perspective, including its category, content, source articles, confidence level, and generation timestamp.
 - Lines 113-115: class `PerspectiveError` - Defines a custom exception to handle errors that occur during perspective synthesis.
 - Lines 118-120: class `InsufficientSourcesError` - Defines a custom exception to signal when insufficient articles are available to generate a perspective.
 - Lines 123-125: class `CategoryNotApplicableError` - Defines a custom exception, CategoryNotApplicableError, to signal when a requested category is not applicable to a given story.
@@ -603,7 +609,7 @@ Generated: 2026-01-18 16:45:45
 - Lines 15-44: import-block `imports` - Module imports
 - Lines 46-46: constant `console` - Creates a Console object configured for terminal output and legacy Windows compatibility.
 - Lines 53-70: function `_cosine_similarity` - Computes the cosine similarity between two vectors by calculating their dot product and dividing by the product of their magnitudes, handling vectors of different lengths by padding the shorter one.
-- Lines 73-153: class `BatchProgress` - Error: Timeout waiting for gateway response after 300s
+- Lines 73-153: class `BatchProgress` - Handles batch processing by dividing items into batches, tracking time, and predicting the estimated time remaining.
 - Lines 160-160: constant `_cleanup_registered` - Handles whether to perform cleanup operations on registered resources.
 - Lines 163-171: function `_cleanup_gateway` - Clears the gateway's queue and unloads models to free VRAM during program exit, attempting cleanup even if errors occur.
 - Lines 174-178: function `_signal_handler` - Handles interrupt signals by cleaning up resources and exiting the program with a specific exit code.
@@ -787,7 +793,7 @@ Generated: 2026-01-18 16:45:45
 
 - Lines 1-1: global `module_docstring` - Module docstring
 - Lines 7-15: import-block `imports` - Module imports
-- Lines 17-17: constant `logger` - Error: Timeout waiting for gateway response after 300s
+- Lines 17-17: constant `logger` - Creates a logger with a name derived from the current module, enabling structured logging for debugging and monitoring.
 - Lines 21-24: class `SearchResult` - Creates a search result object containing the target ID and a similarity score representing the cosine similarity between the target and the search query.
 - Lines 27-259: class `VectorIndex` - Handles FAISS vector indexing by storing separate indices for different target types and providing methods to add, search, and check for the existence of vectors.
 - Lines 264-264: constant `_index_lock` - Handles synchronization to protect shared resources from concurrent access during interval parsing.
