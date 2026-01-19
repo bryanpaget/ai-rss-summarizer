@@ -481,7 +481,11 @@ def process_directory(directory, cache, force=False, output_file=None, workers=1
                 func['_description'] = desc
                 completed += 1
                 timing_data.append((filepath, func['name'], duration))
-                print(f"  [{completed}/{total}] {duration:.2f}s {os.path.relpath(filepath, directory)}:{func['name']}", flush=True)
+                if verbose:
+                    print(f"  [{completed}/{total}] {duration:.2f}s {os.path.relpath(filepath, directory)}:{func['name']}", flush=True)
+                else:
+                    # Brief progress indicator
+                    print(f"\r  Processing: {completed}/{total}", end='', flush=True)
 
                 # Add one to maintain queue level
                 try:
