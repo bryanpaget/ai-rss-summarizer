@@ -441,26 +441,62 @@ def process_directory(directory, cache, force=False, output_file=None, workers=1
 
     print(f"  {len(work_queue)} items need LLM, {total_stats['cached']} cached")
 
-    # Phase 3: Concurrent LLM processing
+    # Phase 3: Concurrent LLM processing with adaptive saturation
     if work_queue:
-        print(f"\n=== Phase 3: LLM descriptions ({workers} workers) ===")
-        completed = [0]  # Use list for closure mutation
+        print(f"\n=== Phase 3: LLM descriptions (adaptive, target={workers} in-flight) ===")
+        completed = 0
+        total = len(work_queue)
+        work_iter = iter(work_queue)
+        pending = set()
+        target_in_flight = workers  # Keep this many requests in flight
 
         def process_item(item):
             filepath, func = item
             desc = describe_function(func)
             return filepath, func, desc
 
-        with ThreadPoolExecutor(max_workers=workers) as executor:
-            futures = {executor.submit(process_item, item): item for item in work_queue}
+        with ThreadPoolExecutor(max_workers=workers * 2) as executor:  # Allow headroom
+            # Initial fill - submit up to target
+            for _ in range(min(target_in_flight, total)):
+                try:
+                    item = next(work_iter)
+                    future = executor.submit(process_item, item)
+                    pending.add(future)
+                except StopIteration:
+                    break
 
-            for future in as_completed(futures):
-                filepath, func, desc = future.result()
-                func['_description'] = desc
-                completed[0] += 1
-                with _print_lock:
-                    rel_path = os.path.relpath(filepath, directory)
-                    print(f"  [{completed[0]}/{len(work_queue)}] {rel_path}:{func['name']} - done")
+            # Process as they complete, keeping queue saturated
+            while pending:
+                # Wait for at least one to complete
+                done_futures = set()
+                for future in list(pending):
+                    if future.done():
+                        done_futures.add(future)
+
+                if not done_futures:
+                    # None done yet, wait briefly then check again
+                    import time
+                    time.sleep(0.01)
+                    continue
+
+                # Process completed futures
+                for future in done_futures:
+                    pending.remove(future)
+                    filepath, func, desc = future.result()
+                    func['_description'] = desc
+                    completed += 1
+                    with _print_lock:
+                        in_flight = len(pending)
+                        rel_path = os.path.relpath(filepath, directory)
+                        print(f"  [{completed}/{total}] (q:{in_flight}) {rel_path}:{func['name']}")
+
+                    # Immediately submit replacement to maintain saturation
+                    try:
+                        item = next(work_iter)
+                        new_future = executor.submit(process_item, item)
+                        pending.add(new_future)
+                    except StopIteration:
+                        pass  # No more work
 
     # Phase 4: Assemble results and update cache
     print("\n=== Phase 4: Assembling results ===")
