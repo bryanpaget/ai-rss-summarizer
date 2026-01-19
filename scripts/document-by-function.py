@@ -501,7 +501,7 @@ def process_directory(directory, cache, force=False, output_file=None, workers=1
         phase3_duration = time.time() - phase3_start
         if not verbose:
             print()  # Newline after progress indicator
-        print(f"\n  Phase 3 complete: {phase3_duration:.1f}s total, {phase3_duration/total:.2f}s avg per item", flush=True)
+        print(f"\n  Phase 3 complete: {phase3_duration:.1f}s total, {phase3_duration/total:.2f}s avg, {total_tokens} tokens ({total_tokens/phase3_duration:.0f} tok/s)", flush=True)
 
         # Write detailed timing log if requested
         if timing_log:
