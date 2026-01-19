@@ -16,42 +16,48 @@ set -euo pipefail
 NUM_REQUESTS="${1:-30}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 GATEWAY="$SCRIPT_DIR/safe-model-load.sh"
-RESULTS_DIR="/tmp/gateway-continuous-test-$$"
-mkdir -p "$RESULTS_DIR"
+RESPONSES_DIR="${HOME}/.claude/ipc/responses"
 
 echo "=== Gateway Continuous Batching Test ==="
 echo "Requests: $NUM_REQUESTS"
-echo "Results: $RESULTS_DIR"
 echo ""
 
-# Clean up on exit
-cleanup() {
-    rm -rf "$RESULTS_DIR"
-}
-trap cleanup EXIT
+# Record start time and get list of existing response files
+START_TIME=$(date +%s)
+EXISTING_FILES=$(ls "$RESPONSES_DIR"/*.json 2>/dev/null | wc -l || echo "0")
 
 # Submit all requests as fast as possible
 echo "Submitting $NUM_REQUESTS requests..."
+declare -a response_files=()
 for i in $(seq 1 "$NUM_REQUESTS"); do
     prompt="Describe this function in one sentence: function test_$i() { return $i * 2; }"
-    "$GATEWAY" request text --prompt "$prompt" > "$RESULTS_DIR/response_$i.json" 2>/dev/null &
+    # Gateway returns FILE=<path>, capture it
+    output=$("$GATEWAY" request text --prompt "$prompt" 2>/dev/null)
+    file_path="${output#FILE=}"
+    response_files+=("$file_path")
 done
 
 echo "All requests submitted, waiting for responses..."
 echo ""
 
-# Wait for all and collect completion times
-wait
+# Wait for all response files to exist and have content
+echo "Waiting for responses to complete..."
+for file_path in "${response_files[@]}"; do
+    while [[ ! -s "$file_path" ]]; do
+        sleep 0.1
+    done
+done
+
+echo "All responses received!"
+echo ""
 
 # Extract completion times from responses
 echo "Analyzing response timing..."
 declare -a completion_times=()
 
-for i in $(seq 1 "$NUM_REQUESTS"); do
-    response_file="$RESULTS_DIR/response_$i.json"
-    if [[ -f "$response_file" ]]; then
-        # Try to extract completion time from _timing metadata
-        completed_at=$(jq -r '._timing.completed_at // empty' "$response_file" 2>/dev/null || echo "")
+for file_path in "${response_files[@]}"; do
+    if [[ -f "$file_path" ]]; then
+        completed_at=$(jq -r '._timing.completed_at // empty' "$file_path" 2>/dev/null || echo "")
         if [[ -n "$completed_at" ]]; then
             completion_times+=("$completed_at")
         fi
