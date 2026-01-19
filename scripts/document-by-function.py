@@ -551,30 +551,44 @@ def process_directory(directory, cache, force=False, output_file=None, workers=1
         if timing_log:
             from datetime import datetime
             with open(timing_log, 'w', encoding='utf-8') as f:
-                f.write(f"# Timing Log\n")
-                f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-                f.write(f"Total LLM time: {phase3_duration:.1f}s\n")
-                f.write(f"Items processed: {total}\n")
-                f.write(f"Average per item: {phase3_duration/total:.2f}s\n\n")
-                f.write(f"## Per-Function Timing\n\n")
-                f.write(f"| File | Function | Duration (s) |\n")
-                f.write(f"|------|----------|-------------|\n")
-                for fpath, fname, dur in timing_data:
+                f.write(f"# Timing Log\n\n")
+                f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+                f.write(f"## Summary\n\n")
+                f.write(f"- Wall time: {phase3_duration:.1f}s\n")
+                f.write(f"- LLM time: {total_llm_time:.1f}s\n")
+                f.write(f"- Items processed: {total}\n")
+                f.write(f"- Total tokens: {total_tokens}\n")
+                f.write(f"- Errors: {errors}\n")
+                f.write(f"- Avg wall time per item: {phase3_duration/total:.2f}s\n")
+                f.write(f"- Avg LLM time per item: {total_llm_time/total:.2f}s\n")
+                if total_llm_time > 0:
+                    f.write(f"- Throughput: {total_tokens/total_llm_time:.0f} tok/s (LLM), {total_tokens/phase3_duration:.0f} tok/s (wall)\n")
+                f.write(f"\n## Per-Function Timing\n\n")
+                f.write(f"| File | Function | Wall (s) | LLM (s) | Tokens | Error |\n")
+                f.write(f"|------|----------|----------|---------|--------|-------|\n")
+                for fpath, fname, wall, tokens, llm, is_err in timing_data:
                     rel = os.path.relpath(fpath, directory)
-                    f.write(f"| {rel} | {fname} | {dur:.2f} |\n")
+                    err_mark = "ERR" if is_err else ""
+                    f.write(f"| {rel} | {fname} | {wall:.2f} | {llm:.2f} | {tokens} | {err_mark} |\n")
 
                 # Per-file summary
                 f.write(f"\n## Per-File Summary\n\n")
-                file_times = {}
-                file_counts = {}
-                for fpath, fname, dur in timing_data:
+                file_stats = {}  # rel_path -> {wall, llm, tokens, count, errors}
+                for fpath, fname, wall, tokens, llm, is_err in timing_data:
                     rel = os.path.relpath(fpath, directory)
-                    file_times[rel] = file_times.get(rel, 0) + dur
-                    file_counts[rel] = file_counts.get(rel, 0) + 1
-                f.write(f"| File | Functions | Total Time (s) | Avg (s) |\n")
-                f.write(f"|------|-----------|----------------|--------|\n")
-                for fpath in sorted(file_times.keys(), key=lambda x: -file_times[x]):
-                    f.write(f"| {fpath} | {file_counts[fpath]} | {file_times[fpath]:.1f} | {file_times[fpath]/file_counts[fpath]:.2f} |\n")
+                    if rel not in file_stats:
+                        file_stats[rel] = {'wall': 0, 'llm': 0, 'tokens': 0, 'count': 0, 'errors': 0}
+                    file_stats[rel]['wall'] += wall
+                    file_stats[rel]['llm'] += llm
+                    file_stats[rel]['tokens'] += tokens
+                    file_stats[rel]['count'] += 1
+                    if is_err:
+                        file_stats[rel]['errors'] += 1
+                f.write(f"| File | Functions | Wall (s) | LLM (s) | Tokens | Errors |\n")
+                f.write(f"|------|-----------|----------|---------|--------|--------|\n")
+                for fpath in sorted(file_stats.keys(), key=lambda x: -file_stats[x]['wall']):
+                    s = file_stats[fpath]
+                    f.write(f"| {fpath} | {s['count']} | {s['wall']:.1f} | {s['llm']:.1f} | {s['tokens']} | {s['errors']} |\n")
             print(f"  Timing log written to {timing_log}")
 
         # Store timing for output
