@@ -142,7 +142,7 @@ def update(
     articles_needing_summary = [a for a in articles if not a.summary and a.content]
     if articles_needing_summary:
         console.print(f"[dim]Summarizing {len(articles_needing_summary)} articles (batched)...[/dim]")
-        from .gateway import get_gateway
+        from safe_loading_gateway import get_gateway
         gateway = get_gateway()
 
         # Build prompts using same format as provider.summarize()
@@ -204,7 +204,7 @@ Summary:"""
     # =========================================================================
     console.print(f"[dim]Extracting knowledge from {len(articles)} articles...[/dim]")
 
-    from .gateway import get_gateway
+    from safe_loading_gateway import get_gateway
     from .embeddings import EmbeddingService
     gateway = get_gateway()
 
