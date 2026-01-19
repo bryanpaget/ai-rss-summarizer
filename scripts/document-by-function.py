@@ -386,7 +386,7 @@ Keep it under 300 words. Be specific to THIS codebase."""
     }
 
 
-def process_directory(directory, cache, force=False, output_file=None, workers=3):
+def process_directory(directory, cache, force=False, output_file=None, workers=10):
     """Process all Python files in a directory with concurrent LLM calls."""
     py_files = find_python_files(directory)
     print(f"Found {len(py_files)} Python files in {directory}")
