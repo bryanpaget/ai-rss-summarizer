@@ -1203,7 +1203,7 @@ def process_directory(directory, cache, force=False, output_file=None, workers=1
 
     # Write output
     if output_file:
-        write_output(output_file, all_results, directory, total_stats, project_stats, overview)
+        write_output(output_file, all_results, directory, total_stats, project_stats, overview, file_summaries)
         print(f"\nWritten to {output_file}")
 
     total_elapsed = time.time() - total_start
