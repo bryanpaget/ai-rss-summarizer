@@ -571,7 +571,7 @@ def synthesize_perspectives(
 
     # Try to use gateway for batched processing
     try:
-        from .gateway import get_gateway, GatewayUnavailableError
+        from safe_loading_gateway import get_gateway, GatewayUnavailableError
         gateway = get_gateway()
         use_gateway = gateway.is_available()
     except (ImportError, GatewayUnavailableError):
