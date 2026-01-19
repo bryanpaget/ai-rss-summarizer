@@ -1409,10 +1409,11 @@ def _run_connection_detection(
         total_connections += batch_connections
 
         # Batch summary
+        chunked_msg = f", {chunked_count} chunked" if chunked_count > 0 else ""
         if batch_errors > 0:
-            console.print(f"      [yellow]+{batch_triples} triples, {batch_connections} connections, {batch_errors} errors[/yellow]")
+            console.print(f"      [yellow]+{batch_triples} triples, {batch_connections} connections, {batch_errors} errors{chunked_msg}[/yellow]")
         elif batch_triples > 0 or batch_connections > 0:
-            console.print(f"      [green]+{batch_triples} triples, {batch_connections} connections[/green]")
+            console.print(f"      [green]+{batch_triples} triples, {batch_connections} connections{chunked_msg}[/green]")
 
     console.print(f"  [green]Added {total_triples} triples to knowledge graph ({total_llm_calls} LLM calls)[/green]")
     console.print(f"  [green]Found {total_connections} insight connections[/green]")
