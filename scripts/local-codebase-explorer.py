@@ -1,17 +1,16 @@
 """Document codebases by extracting functions/classes from ALL file types.
 
-CANONICAL LOCATION & SYNC POLICY:
-=================================
-This file lives in TWO places:
-  1. <project>/scripts/local-codebase-explorer.py  (CANONICAL - develop here)
-  2. ~/.claude/scripts/local-codebase-explorer.py  (COPY - for other projects)
+CANONICAL LOCATION:
+===================
+~/.claude/scripts/local-codebase-explorer.py  (THIS FILE)
 
-WHY TWO COPIES:
-- Projects must be portable (can't depend on ~/.claude existing on other machines)
-- But tools need to be available globally for projects that don't bundle them
+This is the single source of truth. Multiple systems depend on it:
+- read-size-guard hook (--file mode for section breakdown)
+- Explorer agent (directory documentation)
+- Any project can use it directly
 
-SYNC RULE: After modifying this file, copy to global:
-  cp scripts/local-codebase-explorer.py ~/.claude/scripts/
+Projects wanting portability can bundle their own copy, but those are
+downstream copies, not canonical. Fixes go here first.
 
 USAGE:
   python local-codebase-explorer.py <directory> [options]
@@ -126,8 +125,8 @@ EXTENSION_TO_LANGUAGE = {
     '.css': 'css',
     '.sql': 'sql',
 
-    # Docs
-    '.md': 'markdown',
+    # NOTE: .md intentionally NOT here - markdown needs LLM for meaningful section breakdown
+    # Tree-sitter for markdown just returns "whole file" which is useless
 }
 
 # Tree-sitter queries to extract code units per language
@@ -147,7 +146,7 @@ LANGUAGE_QUERIES = {
     """,
     'typescript': """
         (function_declaration name: (identifier) @name) @function
-        (class_declaration name: (identifier) @name) @class
+        (class_declaration name: (type_identifier) @name) @class
         (method_definition name: (property_identifier) @name) @method
         (arrow_function) @arrow
         (variable_declarator name: (identifier) @name value: (arrow_function)) @arrow_var
@@ -201,6 +200,7 @@ DATA_LANGUAGES = {'json', 'yaml', 'toml', 'html', 'css', 'markdown', 'sql'}
 TEXT_EXTENSIONS = {
     '.txt', '.rst', '.cfg', '.ini', '.conf', '.env', '.gitignore',
     '.dockerfile', '.makefile', '.cmake',
+    '.md', '.markdown',  # Markdown needs LLM for meaningful header-based sections
 }
 
 
@@ -660,18 +660,23 @@ def analyze_text_file_with_llm(filepath: str) -> list[dict]:
         }]
 
     # For larger files, ask LLM to identify sections
+    # Include line numbers so LLM can return accurate references
+    max_lines_for_prompt = 300  # Limit to keep prompt reasonable
+    numbered_lines = [f'{i+1}: {line}' for i, line in enumerate(lines[:max_lines_for_prompt])]
+    numbered_content = '\n'.join(numbered_lines)
+
     prompt = f"""Analyze this file and identify its main sections or components.
 
 FILE: {Path(filepath).name}
-CONTENT (first 3000 chars):
-{content[:3000]}
+CONTENT (with line numbers):
+{numbered_content}
 
 Return a JSON array of sections found, each with:
-- "name": section identifier
-- "type": what kind of section (config, target, rule, etc)
-- "line": approximate starting line number
+- "name": section identifier (use the heading text or section name)
+- "type": what kind of section (header, config, target, rule, etc)
+- "line": the EXACT line number where the section starts (from the line numbers shown)
 
-Example: [{{"name": "build", "type": "target", "line": 10}}, {{"name": "test", "type": "target", "line": 25}}]
+Example: [{{"name": "Why This Exists", "type": "header", "line": 3}}, {{"name": "When This Applies", "type": "header", "line": 13}}]
 
 Return ONLY the JSON array, no explanation:"""
 
@@ -1149,11 +1154,78 @@ def write_output(output_file, all_results, directory, total_stats, project_stats
             f.write(f"\n---\n\n")
 
 
+def file_mode(filepath: str, describe: bool = True, verbose: bool = False):
+    """Single-file mode: extract structure and optionally describe each unit.
+
+    Outputs hook-compatible format:
+    Lines X-Y: type `name` - description
+    """
+    # Ensure UTF-8 output on Windows
+    import io
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+
+    filepath = str(Path(filepath).resolve())
+
+    if not Path(filepath).exists():
+        print(f"Error: File not found: {filepath}", file=sys.stderr)
+        return 1
+
+    if verbose:
+        print(f"Extracting from: {filepath}", file=sys.stderr)
+
+    # Extract structure
+    units, method = extract_from_file(filepath)
+
+    if not units:
+        print(f"No extractable units found (method: {method})", file=sys.stderr)
+        return 1
+
+    if verbose:
+        print(f"Extracted {len(units)} units via {method}", file=sys.stderr)
+
+    # Get language for descriptions
+    language = get_language_for_file(filepath) or 'unknown'
+
+    # Output in hook-compatible format
+    print(f"FILE SECTION BREAKDOWN")
+    print(f"======================")
+    print(f"File: {filepath}")
+    print(f"Extraction method: {method}")
+    print(f"Units found: {len(units)}")
+    print()
+
+    for unit in units:
+        line_range = f"Lines {unit['start']}-{unit['end']}"
+        unit_type = unit['type']
+        unit_name = unit['name']
+
+        if describe and unit_type not in ('import-block', 'constant'):
+            try:
+                desc, _ = describe_code_unit(unit, language)
+            except Exception as e:
+                desc = f"(description failed: {e})"
+        else:
+            # For imports/constants, use simple descriptions
+            if unit_type == 'import-block':
+                desc = "Module imports"
+            elif unit_type == 'constant':
+                desc = "Constant/variable definition"
+            else:
+                desc = ""
+
+        print(f"{line_range}: {unit_type} `{unit_name}` - {desc}")
+
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='Document codebases by extracting functions/classes from ALL file types'
     )
-    parser.add_argument('path', help='Directory to document')
+    parser.add_argument('path', nargs='?', help='Directory to document (or use --file for single file)')
+    parser.add_argument('--file', dest='single_file', help='Single file mode: extract and describe one file')
+    parser.add_argument('--no-describe', action='store_true', help='Skip LLM descriptions (structure only)')
     parser.add_argument('-o', '--output', help='Output file path')
     parser.add_argument('-f', '--force', action='store_true', help='Force reprocess all (ignore cache)')
     parser.add_argument('-w', '--workers', type=int, default=10, help='Number of concurrent LLM workers')
@@ -1161,6 +1233,14 @@ def main():
     parser.add_argument('--timing-log', help='Write detailed timing log to file')
     parser.add_argument('-l', '--limit', type=int, help='Limit to first N files (for incremental testing)')
     args = parser.parse_args()
+
+    # Single file mode
+    if args.single_file:
+        sys.exit(file_mode(args.single_file, describe=not args.no_describe, verbose=args.verbose))
+
+    # Directory mode requires path
+    if not args.path:
+        parser.error("Either 'path' or '--file' is required")
 
     cache = load_cache()
     path = Path(args.path)
