@@ -18,6 +18,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
 
 # Gateway import is optional - auto-detected at runtime
+# If running from a project with src/, add it to path for gateway discovery
+_src_path = Path(__file__).parent.parent / "src"
+if _src_path.exists():
+    sys.path.insert(0, str(_src_path))
 
 # Thread-safe print lock
 _print_lock = threading.Lock()
