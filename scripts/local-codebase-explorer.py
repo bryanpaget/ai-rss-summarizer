@@ -28,6 +28,22 @@ _print_lock = threading.Lock()
 
 CACHE_DIR = Path(__file__).parent.parent / ".cache"
 CACHE_FILE = CACHE_DIR / "codebase_docs.json"
+LLM_LOG_FILE = CACHE_DIR / "llm_responses.log"
+
+
+def _log_llm_exchange(prompt: str, response: str, timing: float):
+    """Log every LLM prompt/response to file for debugging."""
+    from datetime import datetime
+    CACHE_DIR.mkdir(exist_ok=True)
+    with open(LLM_LOG_FILE, 'a', encoding='utf-8') as f:
+        f.write(f"\n{'='*80}\n")
+        f.write(f"TIMESTAMP: {datetime.now().isoformat()}\n")
+        f.write(f"TIMING: {timing:.2f}s\n")
+        f.write(f"PROMPT ({len(prompt)} chars):\n")
+        f.write(prompt[:2000] + ('...[truncated]' if len(prompt) > 2000 else ''))
+        f.write(f"\n\nRESPONSE ({len(response)} chars):\n")
+        f.write(response)
+        f.write(f"\n{'='*80}\n")
 
 # =============================================================================
 # LANGUAGE CONFIGURATION
