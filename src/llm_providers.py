@@ -533,7 +533,7 @@ class LMStudioProvider(OpenAICompatibleProvider):
         No need for ensure_text_model() - gateway handles it.
         NO FALLBACKS - gateway is required, fail loudly if unavailable.
         """
-        from .gateway import get_gateway, GatewayUnavailableError
+        from safe_loading_gateway import get_gateway, GatewayUnavailableError
 
         gateway = get_gateway()
         if not gateway.is_available():
