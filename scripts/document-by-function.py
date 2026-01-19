@@ -685,7 +685,7 @@ def process_directory(directory, cache, force=False, output_file=None, workers=1
             if total_stats.get('timing'):
                 f.write(f"## Timing Summary\n\n")
                 file_stats = {}
-                for fpath, fname, wall, tokens, llm, is_err in total_stats['timing']:
+                for fpath, fname, wall, tokens, llm, _ok in total_stats['timing']:
                     rel = os.path.relpath(fpath, directory)
                     if rel not in file_stats:
                         file_stats[rel] = {'wall': 0, 'llm': 0, 'tokens': 0, 'count': 0}
