@@ -17,8 +17,7 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
 
-# Add src to path for gateway import
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+# Gateway import is optional - auto-detected at runtime
 
 # Thread-safe print lock
 _print_lock = threading.Lock()
