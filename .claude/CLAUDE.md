@@ -54,6 +54,36 @@ This applies especially to:
 
 ---
 
+## Local Codebase Explorer Tool
+
+**Location:** `scripts/local-codebase-explorer.py` (CANONICAL - this project)
+**Global copy:** `~/.claude/scripts/local-codebase-explorer.py` (for other projects)
+
+This tool documents codebases by extracting functions/classes and describing each with LLM.
+
+**Usage:**
+```bash
+python scripts/local-codebase-explorer.py . -o docs/CODEBASE.md -l 50
+```
+
+**Options:**
+- `-o FILE` - Output markdown documentation
+- `-f` - Force reprocess (ignore cache)
+- `-w N` - Concurrent workers (default 10)
+- `-v` - Verbose per-item progress
+- `-l N` - Limit to first N files (incremental testing)
+
+**Outputs:**
+- `.cache/codebase_docs.json` - Hash cache (skip unchanged)
+- `.cache/llm_responses.log` - Full prompt/response log (debugging)
+
+**Sync rule:** After modifying, copy to global:
+```bash
+cp scripts/local-codebase-explorer.py ~/.claude/scripts/
+```
+
+---
+
 ## CRITICAL: No Hardcoded Limits Policy
 
 **Internal functions must NOT have hardcoded limits. The only limit is the user's `-m/--max-per-step` parameter.**
