@@ -143,7 +143,7 @@ The safe-model-load gateway (`scripts/safe-model-load.sh` in this project) handl
 
 ### Correct Pattern
 ```python
-from .gateway import get_gateway
+from safe_loading_gateway import get_gateway
 
 # TEXT: Always use gateway
 gateway = get_gateway()
