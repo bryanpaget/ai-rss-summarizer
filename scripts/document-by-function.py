@@ -472,35 +472,41 @@ def process_directory(directory, cache, force=False, output_file=None, workers=1
             while pending:
                 done_futures = {f for f in pending if f.done()}
                 if not done_futures:
-                    time.sleep(0.005)
+                    time.sleep(0.002)
                     continue
 
+                # Process ALL done futures first
                 for future in done_futures:
                     pending.remove(future)
                     filepath, func, desc = future.result()
                     func['_description'] = desc
                     completed += 1
-
-                    q = len(pending)
                     rel_path = os.path.relpath(filepath, directory)
-                    print(f"  [{completed}/{total}] q:{q} t:{current_target} | {rel_path}:{func['name']}")
+                    print(f"  [{completed}/{total}] q:{len(pending)} t:{current_target} | {rel_path}:{func['name']}")
 
-                    # Adaptive control: increase target if queue consistently low
-                    if q < min_queue_threshold:
-                        low_streak += 1
-                        if low_streak >= 3 and current_target < max_target:
-                            current_target = min(current_target + 5, max_target)
-                            print(f"  [ADAPT] Queue low, increasing target to {current_target}")
-                            low_streak = 0
-                    else:
+                # THEN fill queue back to target (batch fill, not one at a time)
+                slots_available = current_target - len(pending)
+                for _ in range(slots_available):
+                    try:
+                        pending.add(executor.submit(process_item, next(work_iter)))
+                    except StopIteration:
+                        break
+
+                # Adaptive: if queue still low after filling, increase target
+                if len(pending) < min_queue_threshold and len(pending) > 0:
+                    low_streak += 1
+                    if low_streak >= 2 and current_target < max_target:
+                        current_target = min(current_target + 10, max_target)
+                        print(f"  [ADAPT+10] -> target={current_target}")
                         low_streak = 0
-
-                    # Fill up to current target
-                    while len(pending) < current_target:
-                        try:
-                            pending.add(executor.submit(process_item, next(work_iter)))
-                        except StopIteration:
-                            break
+                        # Immediately fill new slots
+                        for _ in range(current_target - len(pending)):
+                            try:
+                                pending.add(executor.submit(process_item, next(work_iter)))
+                            except StopIteration:
+                                break
+                else:
+                    low_streak = 0
 
     # Phase 4: Assemble results and update cache
     print("\n=== Phase 4: Assembling results ===")
