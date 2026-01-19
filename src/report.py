@@ -1377,7 +1377,7 @@ def _run_connection_detection(
     # =========================================================================
     # PHASE 3: Analyze clusters (TEXT MODEL - batched with sliding window)
     # =========================================================================
-    from safe_loading_gateway import get_gateway
+    from safe_loading_gateway import get_gateway, GatewayError
 
     gateway = get_gateway()
 
