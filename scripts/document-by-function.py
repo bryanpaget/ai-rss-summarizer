@@ -176,9 +176,14 @@ def extract_nested_functions(code: str, parent_name: str) -> list:
 
 
 def describe_function(func, max_tokens=5000):
-    """Get LLM to describe a single function using sandwich prompt structure."""
+    """Get LLM to describe a single function using sandwich prompt structure.
+
+    Returns: (description, timing_info)
+        timing_info = {'llm_time': seconds, 'tokens_in': int, 'nested_calls': int}
+    """
     code = func['code']
     tokens = estimate_tokens(code)
+    timing_info = {'llm_time': 0.0, 'tokens_in': tokens, 'nested_calls': 0}
 
     # If too large, extract and describe nested functions separately
     if tokens > max_tokens and func['type'] in ('class', 'function'):
@@ -186,12 +191,16 @@ def describe_function(func, max_tokens=5000):
         if nested:
             # Describe nested items individually
             nested_descs = []
+            total_nested_time = 0.0
             for nf in nested[:10]:  # Limit to avoid runaway
-                nested_desc = describe_function(nf, max_tokens)
+                nested_desc, nested_timing = describe_function(nf, max_tokens)
+                total_nested_time += nested_timing['llm_time']
                 nested_descs.append(f"  - {nf['name']}: {nested_desc}")
 
+            timing_info['llm_time'] = total_nested_time
+            timing_info['nested_calls'] = len(nested)
             # Summary for parent
-            return f"Contains {len(nested)} methods: " + "; ".join([n['name'].split('.')[-1] for n in nested[:5]])
+            return f"Contains {len(nested)} methods: " + "; ".join([n['name'].split('.')[-1] for n in nested[:5]]), timing_info
 
     # Truncate code for prompt if still too long
     code_for_prompt = code[:8000] if len(code) > 8000 else code
@@ -216,7 +225,9 @@ EXAMPLE FORMAT (do NOT copy - reference only):
 
 ONE SENTENCE (start with verb):"""
 
-    response = call_llm(prompt)
+    response, llm_time = call_llm(prompt)
+    timing_info['llm_time'] = llm_time
+
     # Take first sentence only, clean up
     desc = response.strip().split('\n')[0].strip()
     # Remove common filler starts
@@ -227,7 +238,7 @@ ONE SENTENCE (start with verb):"""
     # Ensure starts with capital
     if desc and desc[0].islower():
         desc = desc[0].upper() + desc[1:]
-    return desc
+    return desc, timing_info
 
 
 def process_file(filepath, cache, force=False):
