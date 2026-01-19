@@ -443,11 +443,14 @@ def process_directory(directory, cache, force=False, output_file=None, workers=1
 
     # Phase 3: Fixed queue level - add one when one completes
     if work_queue:
+        import time
         total = len(work_queue)
         completed = 0
-        queue_size = workers  # Fixed queue level
+        queue_size = workers
         work_iter = iter(work_queue)
-        pending = set()
+        pending = {}  # future -> (filepath, func, start_time)
+        timing_data = []  # (filepath, func_name, duration)
+        phase3_start = time.time()
 
         print(f"\n=== Phase 3: LLM (queue={queue_size}, total={total}) ===", flush=True)
 
@@ -459,24 +462,37 @@ def process_directory(directory, cache, force=False, output_file=None, workers=1
             # Fill queue to target level
             for _ in range(min(queue_size, total)):
                 try:
-                    pending.add(executor.submit(process_item, next(work_iter)))
+                    item = next(work_iter)
+                    future = executor.submit(process_item, item)
+                    pending[future] = (item[0], item[1], time.time())
                 except StopIteration:
                     break
 
             # Process: when one completes, add one
             while pending:
-                done = next(as_completed(pending))
-                pending.discard(done)
+                done = next(as_completed(pending.keys()))
+                filepath_orig, func_orig, start_time = pending.pop(done)
                 filepath, func, desc = done.result()
+                duration = time.time() - start_time
                 func['_description'] = desc
                 completed += 1
-                print(f"  [{completed}/{total}] {os.path.relpath(filepath, directory)}:{func['name']}", flush=True)
+                timing_data.append((filepath, func['name'], duration))
+                print(f"  [{completed}/{total}] {duration:.2f}s {os.path.relpath(filepath, directory)}:{func['name']}", flush=True)
 
                 # Add one to maintain queue level
                 try:
-                    pending.add(executor.submit(process_item, next(work_iter)))
+                    item = next(work_iter)
+                    future = executor.submit(process_item, item)
+                    pending[future] = (item[0], item[1], time.time())
                 except StopIteration:
                     pass
+
+        phase3_duration = time.time() - phase3_start
+        print(f"\n  Phase 3 complete: {phase3_duration:.1f}s total, {phase3_duration/total:.2f}s avg per item", flush=True)
+
+        # Store timing for output
+        total_stats['timing'] = timing_data
+        total_stats['phase3_duration'] = phase3_duration
 
     # Phase 4: Assemble results and update cache
     print("\n=== Phase 4: Assembling results ===")
