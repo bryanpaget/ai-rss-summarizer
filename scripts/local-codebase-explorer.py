@@ -847,7 +847,10 @@ def process_directory(directory, cache, force=False, output_file=None, workers=1
         timing_data = []
         phase3_start = time.time()
 
-        print(f"\n=== Phase 3: LLM descriptions (workers={queue_size}, total={total}) ===", flush=True)
+        # Pre-submit batch size - keep this many in-flight at all times
+        in_flight_target = 20  # User preference: start with 20, replenish 1:1
+
+        print(f"\n=== Phase 3: LLM descriptions (in_flight={in_flight_target}, total={total}) ===", flush=True)
 
         def process_item(item):
             """Process single item - runs in thread pool."""
@@ -859,23 +862,33 @@ def process_directory(directory, cache, force=False, output_file=None, workers=1
             timing_info['total_time'] = t.time() - t0
             return filepath, unit, desc, timing_info
 
-        # Submit ALL work at once - let ThreadPoolExecutor manage parallelism
+        # Track in-flight requests ourselves for maximum queue saturation
         total_tokens = 0
         total_llm_time = 0.0
         fatal_error = None
+        work_iter = iter(work_queue)
+        pending = {}  # future -> (filepath, unit, start_time)
 
-        with ThreadPoolExecutor(max_workers=queue_size) as executor:
-            # Submit all items immediately
-            futures = {executor.submit(process_item, item): item for item in work_queue}
-            print(f"  Submitted {len(futures)} tasks to {queue_size} workers", flush=True)
+        with ThreadPoolExecutor(max_workers=in_flight_target) as executor:
+            # Pre-submit initial batch to saturate the queue
+            for _ in range(min(in_flight_target, total)):
+                try:
+                    item = next(work_iter)
+                    future = executor.submit(process_item, item)
+                    pending[future] = (item[0], item[1], time.time())
+                except StopIteration:
+                    break
 
-            # Process results as they complete
-            for future in as_completed(futures):
-                item = futures[future]
-                filepath_orig, unit_orig = item
+            print(f"  Pre-submitted {len(pending)} requests (target: {in_flight_target} in-flight)", flush=True)
+
+            # Process completions and replenish 1:1
+            while pending and not fatal_error:
+                # Wait for ONE completion
+                done = next(as_completed(pending.keys()))
+                filepath_orig, unit_orig, start_time = pending.pop(done)
 
                 try:
-                    filepath, unit, desc, timing_info = future.result()
+                    filepath, unit, desc, timing_info = done.result()
                 except LLMError as e:
                     fatal_error = f"{os.path.relpath(filepath_orig, directory)}:{unit_orig['name']}: {e}"
                     print(f"\n\n  FATAL ERROR: {fatal_error}", flush=True)
@@ -895,10 +908,18 @@ def process_directory(directory, cache, force=False, output_file=None, workers=1
                 completed += 1
                 timing_data.append((filepath, unit['name'], timing_info['total_time'], tokens, llm_time))
 
+                # Immediately replenish: add 1 for every 1 completed
+                try:
+                    item = next(work_iter)
+                    future = executor.submit(process_item, item)
+                    pending[future] = (item[0], item[1], time.time())
+                except StopIteration:
+                    pass  # No more work
+
                 if verbose:
-                    print(f"  [{completed}/{total}] {os.path.relpath(filepath, directory)}:{unit['name']}", flush=True)
+                    print(f"  [{completed}/{total}] in_flight={len(pending)} {os.path.relpath(filepath, directory)}:{unit['name']}", flush=True)
                 else:
-                    print(f"\r  Processing: {completed}/{total} ({total_tokens} tokens, {queue_size} workers)", end='', flush=True)
+                    print(f"\r  Processing: {completed}/{total} (in_flight={len(pending)}, {total_tokens} tok)", end='', flush=True)
 
         if fatal_error:
             raise LLMError(f"Documentation run aborted: {fatal_error}")
