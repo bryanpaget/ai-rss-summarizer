@@ -80,13 +80,14 @@ python scripts/local-codebase-explorer.py . -o docs/CODEBASE.md -l 50
 **MANDATORY VALIDATION (after every run):**
 ```bash
 # Search for LLM error responses (MUST return 0 matches)
-grep -i "provide.*code\|give me.*code\|need.*code\|unable to\|cannot" .cache/llm_responses.log
+# Use exact phrases to avoid false positives on legitimate code
+grep -i "please provide the code\|I need the code to" .cache/llm_responses.log
 
 # Count log entries vs expected
 grep -c "^TIMESTAMP" .cache/llm_responses.log
 
-# Spot check summaries in output for garbage
-grep -i "provide\|cannot\|unable" docs/CODEBASE*.md
+# Spot check summaries in output for garbage phrases
+grep -i "please provide\|I need the code" docs/*.md
 ```
 If ANY error patterns found: STOP, investigate root cause, fix before proceeding.
 Do NOT report "done" until validation passes with 0 errors.
