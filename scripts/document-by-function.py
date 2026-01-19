@@ -601,6 +601,8 @@ def main():
     parser.add_argument('-o', '--output', help='Output file path')
     parser.add_argument('-f', '--force', action='store_true', help='Force reprocess all (ignore cache)')
     parser.add_argument('-w', '--workers', type=int, default=10, help='Number of concurrent LLM workers (default: 10)')
+    parser.add_argument('-v', '--verbose', action='store_true', help='Show detailed timing for each operation')
+    parser.add_argument('--timing-log', help='Write detailed timing log to file')
     args = parser.parse_args()
 
     cache = load_cache()
@@ -610,7 +612,8 @@ def main():
     if path.is_dir():
         # Directory mode - process all files and generate overview
         all_results, total_stats, overview = process_directory(
-            str(path), cache, force=args.force, output_file=args.output, workers=args.workers
+            str(path), cache, force=args.force, output_file=args.output, workers=args.workers,
+            verbose=args.verbose, timing_log=args.timing_log
         )
         print(f"\n=== SUMMARY ===")
         print(f"Files: {len(all_results)}")
