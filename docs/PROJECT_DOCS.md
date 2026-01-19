@@ -1,18 +1,39 @@
 # Project Documentation
 
-Generated: 2026-01-18 16:44:19
+Generated: 2026-01-18 16:45:45
 
 **Stats:** 39 files, 259 functions, 93 classes, ~22831 lines
 
-**Cache:** 451 cached, 17 new, 8 changed
+**Cache:** 475 cached, 0 new, 1 changed
 
-**Timing:** 310.5s total LLM time, 12.42s avg per function
+**Timing:** 4.3s total LLM time, 4.32s avg per function
 
 ---
 
 ## System Overview
 
-('## Architecture Overview\n\n**1. Purpose:** This Python project is a comprehensive news and information processing system designed to extract insights, build knowledge graphs, and provide advanced analytical capabilities. It combines data ingestion, natural language processing (NLP), machine learning (ML), and knowledge representation techniques to deliver valuable information and trends.\n\n**2. Key Modules:**\n\n*   **`cli.py`**:  The primary command-line interface, handling user interactions for core functionalities like fetching data, summarizing content, and managing contexts. It acts as the central entry point for most operations.\n*   **`knowledge.py`**: This module is responsible for building and managing the knowledge graph. It extracts entities, relationships, and insights from news articles, storing them in a structured format. \n*   **`llm_providers.py`**:  Manages interactions with various Large Language Models (LLMs) like OpenAI, LMStudio, Ollama, etc., providing abstraction for different LLM APIs. This allows the system to leverage diverse AI capabilities.\n*   **`storage.py`**: Handles data persistence and retrieval of news articles, stories, and related metadata. It provides a structured way to store and access information processed by the system.\n*  **`report.py`**: Generates reports and visualizations based on processed data, including progress tracking and data cleanup operations.\n\n**3. Entry Points:** Execution typically begins with `cli.py`, which parses command-line arguments and dispatches requests to the appropriate modules. \n\n**4. Data Flow:**  The system generally follows this flow: Data is ingested through feeds (`feed_catalog.py`, `rss.py`). The data is then processed by various modules (e.g., `knowledge.py`, `embeddings.py`) to extract entities, relationships, and insights. These extracted elements are stored in the `storage.py` module.  The `llm_providers.py` module facilitates interaction with LLMs for tasks like summarization, prompt generation, and analysis. Finally, results are presented or used for downstream applications through modules like `report.py`.\n\n\n\n', 12.838247299194336)
+## Architecture Overview
+
+**1. Purpose:** This Python project is a comprehensive news and information processing system designed for advanced analysis, including clustering, summarization, knowledge extraction, and trend identification. It aims to provide insights from diverse sources through sophisticated natural language processing and machine learning techniques.
+
+**2. Key Modules:**
+
+*   **`cli.py`**:  The primary command-line interface, handling user interactions like fetching data, summarizing content, and managing contexts.
+*   **`knowledge.py`**: Responsible for extracting structured knowledge (entities, relationships, insights) from news articles using LLMs and other techniques. This forms the core of the system's analytical capabilities.
+*   **`clustering.py`**:  Implements algorithms to group similar news articles together based on content and semantic similarity. 
+*   **`llm_providers.py`**: Manages interactions with various Large Language Models (LLMs) like OpenAI, LMStudio, Ollama, and others, providing a flexible and extensible architecture for leveraging different AI models.
+
+**3. Entry Points:** Execution begins with the `cli.py` module, which parses command-line arguments and dispatches to appropriate functions based on user input.
+
+**4. Data Flow:**  The system generally follows this flow:
+1.  Data is fetched from various sources using modules like `feed_catalog.py` and `rss.py`.
+2.  Articles are processed by the CLI, which can trigger tasks in other modules such as `knowledge.py`, `clustering.py`, and `summarizer.py` to extract insights, perform analysis, or generate summaries. 
+3. Extracted data is stored in a persistent storage layer managed by the `storage.py` module.
+4.  The system leverages LLMs through `llm_providers.py` for tasks like knowledge extraction and summarization. The `report.py` module aggregates results from these processes, generating reports and visualizations.
+
+
+
+
 
 ---
 
@@ -20,13 +41,7 @@ Generated: 2026-01-18 16:44:19
 
 | File | Functions | Wall (s) | Tokens |
 |------|-----------|----------|--------|
-| cli_context.py | 17 | 441.4 | 7621 |
-| emergence.py | 2 | 20.9 | 997 |
-| clustering.py | 2 | 20.8 | 3470 |
-| feed_discovery.py | 1 | 11.5 | 176 |
-| knowledge.py | 1 | 10.5 | 1482 |
-| perspectives.py | 1 | 10.4 | 561 |
-| cli_perspectives.py | 1 | 9.5 | 2326 |
+| knowledge.py | 1 | 4.3 | 1482 |
 
 ---
 
