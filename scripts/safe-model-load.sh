@@ -1008,6 +1008,7 @@ process_batch() {
     local model="$2"
     local count=0
     local pids=()  # Track curl PIDs to wait for
+    declare -A pid_sizes  # Track size per PID for accurate decrement
     local request_files=()  # Track request files for cleanup
     local embedding_batch_files=()  # Collect embedding requests for batching
     local embedding_batch_bytes=0   # Track total bytes in current batch
