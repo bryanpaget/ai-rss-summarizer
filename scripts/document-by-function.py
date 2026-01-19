@@ -441,72 +441,26 @@ def process_directory(directory, cache, force=False, output_file=None, workers=1
 
     print(f"  {len(work_queue)} items need LLM, {total_stats['cached']} cached")
 
-    # Phase 3: Concurrent LLM processing with adaptive control loop
+    # Phase 3: Submit ALL work upfront, executor manages queue saturation
     if work_queue:
-        import time
-        completed = 0
         total = len(work_queue)
-        work_iter = iter(work_queue)
-        pending = set()
-        current_target = workers
-        max_target = 50
-        min_queue_threshold = 3
-        low_streak = 0
+        completed = [0]
 
-        print(f"\n=== Phase 3: LLM descriptions (adaptive control, start={current_target}) ===")
+        print(f"\n=== Phase 3: LLM ({workers} workers, {total} queued) ===")
 
         def process_item(item):
             filepath, func = item
-            desc = describe_function(func)
-            return filepath, func, desc
+            return filepath, func, describe_function(func)
 
-        with ThreadPoolExecutor(max_workers=max_target) as executor:
-            # Initial fill to current target
-            for _ in range(min(current_target, total)):
-                try:
-                    item = next(work_iter)
-                    pending.add(executor.submit(process_item, item))
-                except StopIteration:
-                    break
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            # Submit everything immediately - workers stay saturated
+            futures = {executor.submit(process_item, item): item for item in work_queue}
 
-            while pending:
-                done_futures = {f for f in pending if f.done()}
-                if not done_futures:
-                    time.sleep(0.002)
-                    continue
-
-                # Process ALL done futures first
-                for future in done_futures:
-                    pending.remove(future)
-                    filepath, func, desc = future.result()
-                    func['_description'] = desc
-                    completed += 1
-                    rel_path = os.path.relpath(filepath, directory)
-                    print(f"  [{completed}/{total}] q:{len(pending)} t:{current_target} | {rel_path}:{func['name']}")
-
-                # THEN fill queue back to target (batch fill, not one at a time)
-                slots_available = current_target - len(pending)
-                for _ in range(slots_available):
-                    try:
-                        pending.add(executor.submit(process_item, next(work_iter)))
-                    except StopIteration:
-                        break
-
-                # Adaptive: if queue still low after filling, increase target
-                if len(pending) < min_queue_threshold and len(pending) > 0:
-                    low_streak += 1
-                    if low_streak >= 2 and current_target < max_target:
-                        current_target = min(current_target + 10, max_target)
-                        print(f"  [ADAPT+10] -> target={current_target}")
-                        low_streak = 0
-                        # Immediately fill new slots
-                        for _ in range(current_target - len(pending)):
-                            try:
-                                pending.add(executor.submit(process_item, next(work_iter)))
-                            except StopIteration:
-                                break
-                else:
-                    low_streak = 0
+            for future in as_completed(futures):
+                filepath, func, desc = future.result()
+                func['_description'] = desc
+                completed[0] += 1
+                print(f"  [{completed[0]}/{total}] {os.path.relpath(filepath, directory)}:{func['name']}")
 
     # Phase 4: Assemble results and update cache
     print("\n=== Phase 4: Assembling results ===")
