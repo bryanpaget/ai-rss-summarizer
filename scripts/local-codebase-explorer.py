@@ -1308,8 +1308,14 @@ Do NOT list every function - synthesize the overall purpose and key capabilities
     return file_summaries
 
 
-def generate_overview(all_results, directory, file_summaries=None):
-    """Generate system architecture overview from file summaries."""
+def generate_overview(all_results, directory, file_summaries_dict=None):
+    """Generate system architecture overview from file summaries.
+
+    Args:
+        all_results: Dict of filepath -> list of function results
+        directory: Base directory for relative paths
+        file_summaries_dict: Dict of filepath -> file summary string (from generate_file_summaries)
+    """
     files_data = []
     total_functions = 0
     total_classes = 0
@@ -1319,12 +1325,13 @@ def generate_overview(all_results, directory, file_summaries=None):
         if not results:
             continue
         rel_path = os.path.relpath(filepath, directory)
-        functions = [r for r in results if r['type'] in ('function', 'method', 'arrow', 'arrow_var', 'func_expr')]
+        functions = [r for r in results if r['type'] in ('function', 'method', 'arrow', 'arrow_var', 'func_expr', 'proc', 'subroutine')]
         classes = [r for r in results if r['type'] in ('class', 'struct', 'interface', 'type', 'enum', 'trait')]
         max_line = max((r['end'] for r in results), default=0)
 
         files_data.append({
             'path': rel_path,
+            'filepath': filepath,
             'functions': functions,
             'classes': classes,
             'line_count': max_line
@@ -1334,17 +1341,25 @@ def generate_overview(all_results, directory, file_summaries=None):
         total_classes += len(classes)
         total_lines += max_line
 
-    # Build overview prompt
-    file_summaries = []
-    for fd in files_data[:30]:  # Limit for prompt size
-        func_names = [f['name'] for f in fd['functions'][:5]]
-        class_names = [c['name'] for c in fd['classes'][:5]]
-        summary = f"- **{fd['path']}** ({fd['line_count']} lines): "
-        if class_names:
-            summary += f"Classes: {', '.join(class_names)}. "
-        if func_names:
-            summary += f"Functions: {', '.join(func_names)}"
-        file_summaries.append(summary)
+    # Build overview prompt using file summaries (not function names)
+    summary_lines = []
+    for fd in sorted(files_data, key=lambda x: x['line_count'], reverse=True)[:30]:
+        if file_summaries_dict and fd['filepath'] in file_summaries_dict:
+            # Use the generated file summary (truncate for prompt size)
+            file_sum = file_summaries_dict[fd['filepath']]
+            if len(file_sum) > 300:
+                file_sum = file_sum[:300] + "..."
+            summary_lines.append(f"- **{fd['path']}** ({fd['line_count']} lines): {file_sum}")
+        else:
+            # Fallback to function/class names
+            func_names = [f['name'] for f in fd['functions'][:5]]
+            class_names = [c['name'] for c in fd['classes'][:5]]
+            summary = f"- **{fd['path']}** ({fd['line_count']} lines): "
+            if class_names:
+                summary += f"Classes: {', '.join(class_names)}. "
+            if func_names:
+                summary += f"Functions: {', '.join(func_names)}"
+            summary_lines.append(summary)
 
     overview_prompt = f"""You are a software architect creating a system overview document.
 
@@ -1356,8 +1371,8 @@ PROJECT STATS:
 - {total_classes} classes/types
 - ~{total_lines} total lines
 
-FILE SUMMARIES:
-{chr(10).join(file_summaries)}
+FILE SUMMARIES (largest files first):
+{chr(10).join(summary_lines)}
 
 Create a brief architecture overview with these sections:
 1. **Purpose**: What does this project do? (1-2 sentences)
@@ -1376,8 +1391,12 @@ Keep it under 300 words. Be specific to THIS codebase."""
     }
 
 
-def write_output(output_file, all_results, directory, total_stats, project_stats, overview):
-    """Write documentation to output file."""
+def write_output(output_file, all_results, directory, total_stats, project_stats, overview, file_summaries_dict=None):
+    """Write documentation to output file.
+
+    Args:
+        file_summaries_dict: Dict of filepath -> file summary string (optional, for file-level summaries)
+    """
     from datetime import datetime
 
     with open(output_file, 'w', encoding='utf-8') as f:
