@@ -77,6 +77,20 @@ python scripts/local-codebase-explorer.py . -o docs/CODEBASE.md -l 50
 - `.cache/codebase_docs.json` - Hash cache (skip unchanged)
 - `.cache/llm_responses.log` - Full prompt/response log (debugging)
 
+**MANDATORY VALIDATION (after every run):**
+```bash
+# Search for LLM error responses (MUST return 0 matches)
+grep -i "provide.*code\|give me.*code\|need.*code\|unable to\|cannot" .cache/llm_responses.log
+
+# Count log entries vs expected
+grep -c "^TIMESTAMP" .cache/llm_responses.log
+
+# Spot check summaries in output for garbage
+grep -i "provide\|cannot\|unable" docs/CODEBASE*.md
+```
+If ANY error patterns found: STOP, investigate root cause, fix before proceeding.
+Do NOT report "done" until validation passes with 0 errors.
+
 **Sync rule:** After modifying, copy to global:
 ```bash
 cp scripts/local-codebase-explorer.py ~/.claude/scripts/
