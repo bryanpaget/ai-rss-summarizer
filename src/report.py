@@ -1387,60 +1387,39 @@ def _run_connection_detection(
     console.print(f"  [green]Found {len(clusters)} clusters[/green]")
 
     # =========================================================================
-    # PHASE 3: Analyze clusters (TEXT MODEL - batched with sliding window)
+    # PHASE 3: Analyze clusters (TEXT MODEL - sliding window to prevent queue buildup)
     # =========================================================================
     from safe_loading_gateway import get_gateway, GatewayError
 
     gateway = get_gateway()
+    gateway.timeout = 600  # Generous timeout for legitimate long operations
 
     # Apply limit to clusters
     clusters_to_process = clusters[:limit] if limit > 0 else clusters
 
-    # Process in batches to avoid timeout issues
-    # With 120s timeout, batches of 50 are safe (processor handles ~1/sec)
-    BATCH_SIZE = 50
+    # Sliding window prevents queue buildup that causes queue-based timeouts
+    # Keep only MAX_IN_FLIGHT requests pending at once
+    MAX_IN_FLIGHT = 10
     total_triples = 0
     total_connections = 0
     total_llm_calls = 0
 
-    num_batches = (len(clusters_to_process) + BATCH_SIZE - 1) // BATCH_SIZE
-    console.print(f"  Analyzing {len(clusters_to_process)} clusters in {num_batches} batches...")
+    # Flatten clusters into work items (chunks)
+    work_items = []
+    for cluster in clusters_to_process:
+        chunks = chunk_large_cluster(cluster)
+        for chunk in chunks:
+            prompt = build_cluster_analysis_prompt(chunk)
+            if prompt:
+                work_items.append((chunk, prompt))
 
-    for batch_idx in range(num_batches):
-        batch_start_idx = batch_idx * BATCH_SIZE
-        batch_end_idx = min(batch_start_idx + BATCH_SIZE, len(clusters_to_process))
-        batch_clusters = clusters_to_process[batch_start_idx:batch_end_idx]
+    console.print(f"  Analyzing {len(clusters_to_process)} clusters ({len(work_items)} work items, window={MAX_IN_FLIGHT})...")
 
-        # Calculate ETA based on previous batches
-        if batch_idx > 0 and total_llm_calls > 0:
-            # Rough estimate: ~1 second per LLM call
-            remaining_clusters = len(clusters_to_process) - batch_start_idx
-            eta_str = f" [~{format_duration(remaining_clusters)} remaining]"
-        else:
-            eta_str = ""
-
-        console.print(f"    [dim]Batch {batch_idx+1}/{num_batches} ({len(batch_clusters)} clusters){eta_str}...[/dim]")
-
-        # Submit batch
-        cluster_handles = []
-        chunked_count = 0
-        cluster_sizes = [len(c) for c in batch_clusters]
-        max_size = max(cluster_sizes) if cluster_sizes else 0
-        if max_size > 10:
-            console.print(f"      [dim]Cluster sizes: min={min(cluster_sizes)}, max={max_size}, >15: {sum(1 for s in cluster_sizes if s > 15)}[/dim]")
-        for cluster in batch_clusters:
-            # Chunk large clusters to prevent timeouts
-            chunks = chunk_large_cluster(cluster)
-            if len(chunks) > 1:
-                chunked_count += 1
-            for chunk in chunks:
-                prompt = build_cluster_analysis_prompt(chunk)
-                if prompt:
-                    handle = gateway.submit_text(prompt, temperature=0.3)
-                    cluster_handles.append((chunk, handle))
-                    total_llm_calls += 1
-
-        # Collect batch with adaptive retry on timeout
+    # Sliding window: submit up to MAX_IN_FLIGHT, collect as they complete, refill
+    pending = []  # (chunk, handle) tuples
+    work_idx = 0
+    completed = 0
+    retry_items = []  # Items to retry after timeout
         batch_triples = 0
         batch_connections = 0
         batch_errors = 0
