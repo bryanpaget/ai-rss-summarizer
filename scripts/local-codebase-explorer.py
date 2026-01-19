@@ -844,8 +844,6 @@ def process_directory(directory, cache, force=False, output_file=None, workers=1
         total = len(work_queue)
         completed = 0
         queue_size = workers
-        work_iter = iter(work_queue)
-        pending = {}
         timing_data = []
         phase3_start = time.time()
 
