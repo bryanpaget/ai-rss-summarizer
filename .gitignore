@@ -72,6 +72,7 @@ config/user_context.json
 # Generated documentation (can be regenerated)
 docs/CODEBASE_TEST.md
 docs/CODEBASE_VERIFY.md
+docs/ERROR_HANDLING_STRATEGY.md
 docs/LM_STUDIO_VERIFICATION.md
 docs/PROJECT_DOCS.md
 docs/SCRIPTS_DOCUMENTATION.md
