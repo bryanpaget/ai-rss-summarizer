@@ -544,6 +544,13 @@ def process_directory(directory, cache, force=False, output_file=None, workers=1
             f.write(f"**Stats:** {project_stats['files']} files, {project_stats['functions']} functions, ")
             f.write(f"{project_stats['classes']} classes, ~{project_stats['lines']} lines\n\n")
             f.write(f"**Cache:** {total_stats['cached']} cached, {total_stats['new']} new, {total_stats['changed']} changed\n\n")
+            if 'phase3_duration' in total_stats:
+                f.write(f"**Timing:** {total_stats['phase3_duration']:.1f}s total LLM time")
+                if total_stats.get('timing'):
+                    avg = total_stats['phase3_duration'] / len(total_stats['timing'])
+                    f.write(f", {avg:.2f}s avg per function\n\n")
+                else:
+                    f.write("\n\n")
             f.write(f"---\n\n")
             f.write(f"## System Overview\n\n{overview}\n\n")
             f.write(f"---\n\n")
