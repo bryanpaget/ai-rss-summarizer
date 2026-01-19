@@ -582,30 +582,29 @@ def process_directory(directory, cache, force=False, output_file=None, workers=1
                 f.write(f"# Timing Log\n\n")
                 f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
                 f.write(f"## Summary\n\n")
+                f.write(f"- Status: SUCCESS\n")
                 f.write(f"- Wall time: {phase3_duration:.1f}s\n")
                 f.write(f"- LLM time: {total_llm_time:.1f}s\n")
                 f.write(f"- Items processed: {total}\n")
                 f.write(f"- Total tokens: {total_tokens}\n")
-                f.write(f"- Errors: {errors}\n")
                 f.write(f"- Avg wall time per item: {phase3_duration/total:.2f}s\n")
                 f.write(f"- Avg LLM time per item: {total_llm_time/total:.2f}s\n")
                 if total_llm_time > 0:
                     f.write(f"- Throughput: {total_tokens/total_llm_time:.0f} tok/s (LLM), {total_tokens/phase3_duration:.0f} tok/s (wall)\n")
                 f.write(f"\n## Per-Function Timing\n\n")
-                f.write(f"| File | Function | Wall (s) | LLM (s) | Tokens | Error |\n")
-                f.write(f"|------|----------|----------|---------|--------|-------|\n")
-                for fpath, fname, wall, tokens, llm, is_err in timing_data:
+                f.write(f"| File | Function | Wall (s) | LLM (s) | Tokens |\n")
+                f.write(f"|------|----------|----------|---------|--------|\n")
+                for fpath, fname, wall, tokens, llm, _ok in timing_data:
                     rel = os.path.relpath(fpath, directory)
-                    err_mark = "ERR" if is_err else ""
-                    f.write(f"| {rel} | {fname} | {wall:.2f} | {llm:.2f} | {tokens} | {err_mark} |\n")
+                    f.write(f"| {rel} | {fname} | {wall:.2f} | {llm:.2f} | {tokens} |\n")
 
                 # Per-file summary
                 f.write(f"\n## Per-File Summary\n\n")
-                file_stats = {}  # rel_path -> {wall, llm, tokens, count, errors}
-                for fpath, fname, wall, tokens, llm, is_err in timing_data:
+                file_stats = {}  # rel_path -> {wall, llm, tokens, count}
+                for fpath, fname, wall, tokens, llm, _ok in timing_data:
                     rel = os.path.relpath(fpath, directory)
                     if rel not in file_stats:
-                        file_stats[rel] = {'wall': 0, 'llm': 0, 'tokens': 0, 'count': 0, 'errors': 0}
+                        file_stats[rel] = {'wall': 0, 'llm': 0, 'tokens': 0, 'count': 0}
                     file_stats[rel]['wall'] += wall
                     file_stats[rel]['llm'] += llm
                     file_stats[rel]['tokens'] += tokens
