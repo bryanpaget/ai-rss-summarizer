@@ -609,13 +609,11 @@ def process_directory(directory, cache, force=False, output_file=None, workers=1
                     file_stats[rel]['llm'] += llm
                     file_stats[rel]['tokens'] += tokens
                     file_stats[rel]['count'] += 1
-                    if is_err:
-                        file_stats[rel]['errors'] += 1
-                f.write(f"| File | Functions | Wall (s) | LLM (s) | Tokens | Errors |\n")
-                f.write(f"|------|-----------|----------|---------|--------|--------|\n")
+                f.write(f"| File | Functions | Wall (s) | LLM (s) | Tokens |\n")
+                f.write(f"|------|-----------|----------|---------|--------|\n")
                 for fpath in sorted(file_stats.keys(), key=lambda x: -file_stats[x]['wall']):
                     s = file_stats[fpath]
-                    f.write(f"| {fpath} | {s['count']} | {s['wall']:.1f} | {s['llm']:.1f} | {s['tokens']} | {s['errors']} |\n")
+                    f.write(f"| {fpath} | {s['count']} | {s['wall']:.1f} | {s['llm']:.1f} | {s['tokens']} |\n")
             print(f"  Timing log written to {timing_log}")
 
         # Store timing for output
