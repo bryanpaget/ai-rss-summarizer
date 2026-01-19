@@ -189,43 +189,49 @@ Or edit `config/feeds.txt` directly.
 
 ## LLM Providers
 
-The summarizer supports multiple LLM providers. Run `rss setup` for guided configuration.
+### Recommended: LM Studio (Free, Local, Fast)
 
-### Local Providers (Free, No API Key)
+**LM Studio is the best choice for this tool.** Here's why:
 
-| Provider | Description |
-|----------|-------------|
-| **LM Studio** | Local LLM server (auto-detected at localhost:1234) |
-| **Ollama** | Local LLM runner (auto-detected at localhost:11434) |
-| **Transformers** | HuggingFace models (requires `pip install transformers torch`) |
+1. **Cost:** $0 forever vs $5-20+ per session with APIs
+2. **Speed:** No network latency, parallel requests
+3. **Privacy:** Your data never leaves your machine
+4. **Reliability:** No rate limits, no outages, no API changes
 
-### Cloud Providers (API-based)
+**Quick Setup:**
+```bash
+# 1. Download LM Studio from https://lmstudio.ai
+# 2. In LM Studio, download these models:
+#    - Text: google/gemma-3n-e4b (or any instruct model)
+#    - Embeddings: nomic-embed-text-v1.5
+# 3. Start the local server (click "Start Server")
+# 4. Run:
+rss setup  # Auto-detects LM Studio
+```
 
-| Provider | Setup |
-|----------|-------|
-| **Gemini** | Free tier available. `pip install google-generativeai`, set `GOOGLE_API_KEY` |
-| **Claude Agent SDK** | Uses Claude Code auth (no API key!). `pip install claude-agent-sdk` |
-| **Claude API** | Requires separate API key. `pip install anthropic`, set `ANTHROPIC_API_KEY` |
-| **Grok** | xAI API. Set `XAI_API_KEY` |
-| **OpenAI** | Set `OPENAI_API_KEY` |
+**Hardware Requirements:**
+- Minimum: 8GB RAM, any modern CPU
+- Recommended: 16GB+ RAM, GPU optional but helpful
+- The `gemma-3n-e4b` model runs well on modest hardware
 
-### Quick Setup Examples
+### Alternative: Ollama
 
 ```bash
-# Gemini (free tier - recommended for new users)
-pip install google-generativeai
-export GOOGLE_API_KEY="your-api-key"
-rss setup
-
-# Claude Agent SDK (for Claude Code users - no API key needed!)
-pip install claude-agent-sdk
-rss setup
-
-# Local with LM Studio
-# 1. Download LM Studio from https://lmstudio.ai
-# 2. Load a model and start the server
-# 3. Run: rss setup (it auto-detects)
+# Install Ollama from https://ollama.ai
+ollama pull gemma:2b
+ollama serve
+rss setup  # Auto-detects Ollama
 ```
+
+### Cloud Providers (For Light Use Only)
+
+Cloud APIs work but get expensive fast. Only recommended for testing or occasional use.
+
+| Provider | Setup | Note |
+|----------|-------|------|
+| **Gemini** | `pip install google-generativeai`, set `GOOGLE_API_KEY` | Free tier has limits |
+| **Claude** | `pip install anthropic`, set `ANTHROPIC_API_KEY` | Expensive for heavy use |
+| **OpenAI** | Set `OPENAI_API_KEY` | Expensive for heavy use |
 
 ## Project Structure
 
