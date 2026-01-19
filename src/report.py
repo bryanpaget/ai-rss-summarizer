@@ -1372,9 +1372,12 @@ def _run_connection_detection(
 
         # Submit batch
         cluster_handles = []
+        chunked_count = 0
         for cluster in batch_clusters:
             # Chunk large clusters to prevent timeouts
             chunks = chunk_large_cluster(cluster)
+            if len(chunks) > 1:
+                chunked_count += 1
             for chunk in chunks:
                 prompt = build_cluster_analysis_prompt(chunk)
                 if prompt:
