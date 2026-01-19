@@ -1,34 +1,32 @@
 # Project Documentation
 
-Generated: 2026-01-18 16:30:04
+Generated: 2026-01-18 16:44:19
 
-**Stats:** 39 files, 246 functions, 93 classes, ~21985 lines
+**Stats:** 39 files, 259 functions, 93 classes, ~22831 lines
 
-**Cache:** 73 cached, 384 new, 0 changed
+**Cache:** 451 cached, 17 new, 8 changed
+
+**Timing:** 310.5s total LLM time, 12.42s avg per function
 
 ---
 
 ## System Overview
 
-## Architecture Overview: Project [Project Name - *Please Replace*]
+('## Architecture Overview\n\n**1. Purpose:** This Python project is a comprehensive news and information processing system designed to extract insights, build knowledge graphs, and provide advanced analytical capabilities. It combines data ingestion, natural language processing (NLP), machine learning (ML), and knowledge representation techniques to deliver valuable information and trends.\n\n**2. Key Modules:**\n\n*   **`cli.py`**:  The primary command-line interface, handling user interactions for core functionalities like fetching data, summarizing content, and managing contexts. It acts as the central entry point for most operations.\n*   **`knowledge.py`**: This module is responsible for building and managing the knowledge graph. It extracts entities, relationships, and insights from news articles, storing them in a structured format. \n*   **`llm_providers.py`**:  Manages interactions with various Large Language Models (LLMs) like OpenAI, LMStudio, Ollama, etc., providing abstraction for different LLM APIs. This allows the system to leverage diverse AI capabilities.\n*   **`storage.py`**: Handles data persistence and retrieval of news articles, stories, and related metadata. It provides a structured way to store and access information processed by the system.\n*  **`report.py`**: Generates reports and visualizations based on processed data, including progress tracking and data cleanup operations.\n\n**3. Entry Points:** Execution typically begins with `cli.py`, which parses command-line arguments and dispatches requests to the appropriate modules. \n\n**4. Data Flow:**  The system generally follows this flow: Data is ingested through feeds (`feed_catalog.py`, `rss.py`). The data is then processed by various modules (e.g., `knowledge.py`, `embeddings.py`) to extract entities, relationships, and insights. These extracted elements are stored in the `storage.py` module.  The `llm_providers.py` module facilitates interaction with LLMs for tasks like summarization, prompt generation, and analysis. Finally, results are presented or used for downstream applications through modules like `report.py`.\n\n\n\n', 12.838247299194336)
 
-**1. Purpose:** This Python project focuses on processing and analyzing news content, with a strong emphasis on knowledge extraction, trend analysis, and personalized perspectives. It aims to provide insights from news articles through clustering, embedding, and sophisticated analytical techniques.
+---
 
-**2. Key Modules:**
+## Timing Summary
 
-*   **`commands.py`**:  This module houses the core command-line interface (CLI) logic, handling user interactions and orchestrating various functionalities like updating data, displaying digests, and managing the setup process.
-*   **`knowledge.py`**: This is a central module responsible for extracting knowledge from news articles, including entities, relationships, and insights. It utilizes LLMs and vector embeddings to build a comprehensive knowledge base.
-*   **`clustering.py`**:  This module implements algorithms for clustering news articles based on content similarity, enabling the identification of emerging trends and related stories.
-*   **`llm_providers.py`**: This module provides an abstraction layer for interacting with various Large Language Models (LLMs) like OpenAI, LMStudio, Ollama, etc., offering flexibility in model selection.
-*   **`storage.py`**: Manages the storage and retrieval of news articles, chunks, embeddings, and associated metadata.
-
-**3. Entry Points:** The project's execution typically begins with `cli.py`, which parses command-line arguments and calls appropriate functions based on user requests.  The `cli_daemon.py` file also provides an entry point for running the system as a background process.
-
-**4. Data Flow:** User input through the CLI triggers actions that involve fetching news content (`rss.py`, `feed_discovery.py`), processing articles (`knowledge.py`, `clustering.py`), embedding text (`embeddings.py`), and storing data in the storage layer (`storage.py`). The `llm_providers.py` module acts as a bridge, sending prompts to selected LLMs for tasks like insight extraction and perspective generation.  The `report.py` module aggregates results from various processes into reports.
-
-
-
-
+| File | Functions | Wall (s) | Tokens |
+|------|-----------|----------|--------|
+| cli_context.py | 17 | 441.4 | 7621 |
+| emergence.py | 2 | 20.9 | 997 |
+| clustering.py | 2 | 20.8 | 3470 |
+| feed_discovery.py | 1 | 11.5 | 176 |
+| knowledge.py | 1 | 10.5 | 1482 |
+| perspectives.py | 1 | 10.4 | 561 |
+| cli_perspectives.py | 1 | 9.5 | 2326 |
 
 ---
 
@@ -66,7 +64,7 @@ Generated: 2026-01-18 16:30:04
 - Lines 540-636: function `discover` - Discovers RSS feeds relevant to a given topic by prompting an LLM to identify and return URLs and descriptions of suitable sources.
 - Lines 640-713: function `help_cmd` - Displays help information for the RSS Summarizer, either for a specific command or a comprehensive overview of available commands and setup status.
 - Lines 717-738: function `providers` - Lists available LLM providers and their current status (available or not) in a formatted table.
-- Lines 742-823: function `extract_knowledge` - Extracts knowledge from a specified number of articles, processing each article to generate insights, triples, and entity relationships, and updating a knowledge base with the extracted information.
+- Lines 742-823: function `extract_knowledge` - Extracts knowledge insights from a specified number of articles, processing each article to detect relationships, extract triples, and identify entity relationships, then updates a knowledge base and displays relevant statistics.
 - Lines 827-848: function `query` - Queries a knowledge base using a natural language query and displays the summary of the results.
 - Lines 852-880: function `contradictions` - Identifies and displays contradictions within a knowledge base by retrieving and presenting conflicting insights and their associated confidence levels.
 - Lines 884-908: function `knowledge_stats` - Retrieves and displays key statistics about a knowledge base, including insights, entities, relationships, and contradictions.
@@ -97,8 +95,27 @@ Generated: 2026-01-18 16:30:04
 
 ### cli_context.py
 
-**Lines:** 0
+**Lines:** 846
 
+- Lines 1-1: global `module_docstring` - Module docstring
+- Lines 3-19: import-block `imports` - Module imports
+- Lines 22-47: function `_add_feeds_to_config` - Adds new feed URLs to a configuration file, avoiding duplicates and returning the number of feeds newly added.
+- Lines 49-53: constant `app` - Creates a Typer application named "context" for managing user context commands.
+- Lines 54-54: constant `console` - Creates a Console object configured for terminal output and legacy Windows compatibility.
+- Lines 58-101: function `context_main` - Presents interactive help and command options for managing user contexts, including project, interest, and watching topics.
+- Lines 105-155: function `add_context` - Creates a new user context in the knowledge base with the specified type, name, and optional description.
+- Lines 159-214: function `list_contexts` - Lists user contexts, optionally filtered by type and status, from a specified knowledge base and displays them in a table.
+- Lines 218-260: function `remove_context` - Removes a specified user context from the knowledge base by deleting its ID or deactivating it if deletion is unavailable.
+- Lines 264-309: function `show_context` - Displays detailed information about a specific context from the knowledge base, including its type, status, description, and keywords.
+- Lines 314-483: constant `FEED_TAXONOMY` - Organizes news sources by category and subcategory, providing URLs for each.
+- Lines 486-489: constant `SETUP_CATEGORIES` - Creates a dictionary mapping categories to lists of subjects based on the FEED_TAXONOMY data.
+- Lines 492-499: function `_show_selection_summary` - Returns a comma-separated string summarizing the number of selected feeds and topics, or "nothing selected" if no items are chosen.
+- Lines 502-510: function `_show_cli_help` - Displays helpful command reminders for interacting with the RSS context feature.
+- Lines 513-681: function `_run_tree_wizard` - Parses the tree taxonomy, allowing users to navigate categories, subjects, and feeds to select desired items.
+- Lines 684-734: function `run_setup_wizard_inline` - Runs an interactive setup wizard to allow users to select topics and feeds, then updates the user's profile and configuration accordingly.
+- Lines 738-798: function `setup_wizard` - Configures user interests and RSS feed subscriptions through an interactive wizard, allowing navigation and selection of categories, subjects, and feeds.
+- Lines 802-821: function `watch_topic` - Error: Timeout waiting for gateway response after 300s
+- Lines 825-846: function `unwatch_topic` - Removes a specified topic from the user's watch list by updating the profile and displaying confirmation.
 
 ---
 
@@ -142,7 +159,7 @@ Generated: 2026-01-18 16:30:04
 - Lines 1-1: global `module_docstring` - Module docstring
 - Lines 3-6: import-block `imports` - Module imports
 - Lines 9-9: constant `console` - Creates a Console object configured for terminal output and legacy Windows compatibility.
-- Lines 12-248: function `add_perspective_commands` - Displays synthesized perspectives on stories, allowing users to view different angles and insights by combining multiple sources, optionally filtering by story ID, categories, and controlling the number of stories displayed.
+- Lines 12-248: function `add_perspective_commands` - Displays synthesized perspectives on stories, allowing users to specify story IDs, categories, and the number of stories to show.
 
 ---
 
@@ -210,7 +227,7 @@ Generated: 2026-01-18 16:30:04
 - Lines 1-1: global `module_docstring` - Module docstring
 - Lines 3-12: import-block `imports` - Module imports
 - Lines 15-17: class `ClusteringError` - Handles errors that occur during clustering operations.
-- Lines 20-347: class `StoryClusterer` - Clusters articles into existing stories or creates new ones by comparing article embeddings to story embeddings, using an LLM for metadata generation.
+- Lines 20-347: class `StoryClusterer` - Clusters an article into an existing story or creates a new story based on vector similarity using embeddings and optionally leveraging an LLM for metadata generation.
 - Lines 355-559: class `NewsItemExtractor` - Extracts new information from an article by generating a prompt, parsing the LLM response, deduplicating items, and saving new findings to storage.
 - Lines 562-672: class `StoryEvolutionTracker` - Tracks story lifecycle by updating states based on activity, calculating velocity, and determining the next state transition.
 - Lines 675-732: function `process_article_clustering` - Processes an article by clustering it into a story, optionally extracting news items, and returns a dictionary of processing statistics.
@@ -370,9 +387,9 @@ Generated: 2026-01-18 16:30:04
 - Lines 3-9: import-block `imports` - Module imports
 - Lines 13-24: constant `EMERGENCE_CONFIG` - Defines configuration parameters for identifying emerging trends, including thresholds for mentions, velocity changes, and comparison windows.
 - Lines 28-40: class `EmergingTrend` - Represents an emerging trend with attributes like mentions, velocity, confidence, and related domains to provide insights into its current state and potential trajectory.
-- Lines 43-109: function `extract_terms` - Extracts potential emerging terms from text by identifying multi-word phrases, capitalized terms, and technical terminology patterns, then filters them based on length and stopwords.
+- Lines 43-109: function `extract_terms` - Extracts potential emerging terms from text by identifying capitalized multi-word phrases, technical terminology patterns, and acronyms with expansions, then filters the results based on length and stopword exclusion.
 - Lines 112-126: function `calculate_velocity` - Calculates the percentage change in a quantity between two counts, handling division by zero by returning 100% if the previous count is zero and the current count is positive, or 0% if both are zero.
-- Lines 129-175: function `classify_trajectory` - Classifies a term's trajectory as "Research → Blogs → Mainstream", "Technical → Business adoption", "Blogs → Mainstream", "Niche (single domain)", or "Niche → Widespread" based on historical counts and domains.
+- Lines 129-175: function `classify_trajectory` - Classifies a term's trajectory based on historical counts and domains, categorizing it as Research → Blogs → Mainstream, Technical → Business adoption, or Niche → Widespread.
 - Lines 178-201: function `assign_confidence` - Assigns a confidence level ("High", "Medium", "Low", or "Watch") to an emerging trend prediction based on velocity, current mentions, domain count, and weeks of data.
 - Lines 204-220: function `generate_action_recommendation` - Returns an actionable recommendation based on the provided confidence level, velocity, and trajectory.
 - Lines 223-377: function `detect_emerging_trends` - Detects emerging trends by analyzing term mentions in recent articles, considering historical data, velocity, and confidence levels to identify promising topics.
