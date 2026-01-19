@@ -532,6 +532,7 @@ def call_llm(prompt, max_retries=3, base_delay=2.0):
         try:
             response = call_fn(prompt)
             llm_time = time.time() - t0
+            _log_llm_exchange(prompt, response, llm_time)
             return response, llm_time
         except Exception as e:
             elapsed = time.time() - t0
