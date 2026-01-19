@@ -1115,6 +1115,7 @@ def main():
     parser.add_argument('-w', '--workers', type=int, default=10, help='Number of concurrent LLM workers')
     parser.add_argument('-v', '--verbose', action='store_true', help='Show detailed progress')
     parser.add_argument('--timing-log', help='Write detailed timing log to file')
+    parser.add_argument('-l', '--limit', type=int, help='Limit to first N files (for incremental testing)')
     args = parser.parse_args()
 
     cache = load_cache()
