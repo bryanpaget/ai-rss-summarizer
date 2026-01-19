@@ -1212,8 +1212,104 @@ def process_directory(directory, cache, force=False, output_file=None, workers=1
     return all_results, total_stats, overview
 
 
-def generate_overview(all_results, directory):
-    """Generate system architecture overview from all file documentation."""
+def calculate_summary_length(line_count: int, function_count: int) -> tuple[int, int]:
+    """Calculate target summary length based on file complexity.
+
+    Returns (min_sentences, max_sentences) for the file summary.
+    Heuristic: ~1 sentence per 100 lines, with floor/ceiling.
+    """
+    # Base: 1 sentence per 100 lines
+    base_sentences = max(2, line_count // 100)
+
+    # Adjust for function density
+    if function_count > 20:
+        base_sentences = max(base_sentences, 5)
+    elif function_count > 10:
+        base_sentences = max(base_sentences, 3)
+
+    # Cap at reasonable maximum
+    max_sentences = min(base_sentences + 2, 15)
+    min_sentences = max(2, base_sentences - 1)
+
+    return min_sentences, max_sentences
+
+
+def generate_file_summaries(all_results: dict, directory: str) -> dict:
+    """Generate proportional summaries for each file from function descriptions.
+
+    Returns dict mapping filepath -> file_summary string.
+    Each summary is proportional to file size (bigger files = longer summaries).
+    """
+    file_summaries = {}
+
+    # Build work queue
+    work_items = []
+    for filepath, results in all_results.items():
+        if not results:
+            continue
+        rel_path = os.path.relpath(filepath, directory)
+        max_line = max((r['end'] for r in results), default=0)
+        function_count = len([r for r in results if r['type'] in
+                            ('function', 'method', 'arrow', 'arrow_var', 'func_expr', 'proc', 'subroutine')])
+
+        min_sent, max_sent = calculate_summary_length(max_line, function_count)
+
+        # Build function descriptions list
+        func_descs = []
+        for r in results:
+            desc = r.get('description', '')
+            if desc:
+                func_descs.append(f"- {r['type']} `{r['name']}`: {desc}")
+
+        if func_descs:
+            work_items.append({
+                'filepath': filepath,
+                'rel_path': rel_path,
+                'line_count': max_line,
+                'function_count': function_count,
+                'min_sentences': min_sent,
+                'max_sentences': max_sent,
+                'func_descs': func_descs
+            })
+
+    print(f"  Generating summaries for {len(work_items)} files")
+
+    # Process each file
+    for i, item in enumerate(work_items):
+        # Build prompt with proportional length guidance
+        func_text = '\n'.join(item['func_descs'][:50])  # Limit for prompt size
+
+        prompt = f"""Summarize this source file based on its function descriptions.
+
+FILE: {item['rel_path']}
+LINES: {item['line_count']}
+FUNCTIONS: {item['function_count']}
+
+FUNCTION DESCRIPTIONS:
+{func_text}
+
+Write a summary of {item['min_sentences']}-{item['max_sentences']} sentences that explains:
+1. What this file/module does (its purpose)
+2. The main functionality it provides
+3. Key functions or classes and what they handle
+4. Any important patterns or dependencies
+
+Be specific and technical. Focus on WHAT the code does, not implementation details.
+Do NOT list every function - synthesize the overall purpose and key capabilities."""
+
+        try:
+            summary, _ = call_llm(prompt)
+            file_summaries[item['filepath']] = summary.strip()
+            print(f"  [{i+1}/{len(work_items)}] {item['rel_path']}: {len(summary.split('.'))} sentences")
+        except Exception as e:
+            print(f"  [{i+1}/{len(work_items)}] {item['rel_path']}: ERROR - {e}")
+            file_summaries[item['filepath']] = f"File with {item['function_count']} functions ({item['line_count']} lines)"
+
+    return file_summaries
+
+
+def generate_overview(all_results, directory, file_summaries=None):
+    """Generate system architecture overview from file summaries."""
     files_data = []
     total_functions = 0
     total_classes = 0
