@@ -477,8 +477,13 @@ def process_directory(directory, cache, force=False, output_file=None, workers=1
         print(f"\n=== Phase 3: LLM (queue={queue_size}, total={total}) ===", flush=True)
 
         def process_item(item):
+            """Returns (filepath, func, desc, timing_info)"""
+            import time as t
+            t0 = t.time()
             filepath, func = item
-            return filepath, func, describe_function(func)
+            desc, timing_info = describe_function(func)
+            timing_info['total_time'] = t.time() - t0  # wall clock including overhead
+            return filepath, func, desc, timing_info
 
         with ThreadPoolExecutor(max_workers=queue_size) as executor:
             # Fill queue to target level
@@ -492,21 +497,38 @@ def process_directory(directory, cache, force=False, output_file=None, workers=1
 
             # Process: when one completes, add one
             total_tokens = 0
+            total_llm_time = 0.0
+            errors = 0
             while pending:
                 done = next(as_completed(pending.keys()))
                 filepath_orig, func_orig, start_time = pending.pop(done)
-                filepath, func, desc = done.result()
-                duration = time.time() - start_time
-                tokens = estimate_tokens(func['code'])
+                try:
+                    filepath, func, desc, timing_info = done.result()
+                    is_error = desc.startswith('Error:')
+                    if is_error:
+                        errors += 1
+                except Exception as e:
+                    filepath, func = filepath_orig, func_orig
+                    desc = f"Error: {e}"
+                    timing_info = {'llm_time': 0, 'tokens_in': 0, 'total_time': 0}
+                    is_error = True
+                    errors += 1
+
+                wall_time = time.time() - start_time
+                tokens = timing_info['tokens_in']
+                llm_time = timing_info['llm_time']
                 total_tokens += tokens
+                total_llm_time += llm_time
                 func['_description'] = desc
                 completed += 1
-                timing_data.append((filepath, func['name'], duration, tokens))
+                timing_data.append((filepath, func['name'], wall_time, tokens, llm_time, is_error))
+
                 if verbose:
-                    print(f"  [{completed}/{total}] {duration:.2f}s {tokens:>5}tok {os.path.relpath(filepath, directory)}:{func['name']}", flush=True)
+                    err_flag = " ERR" if is_error else ""
+                    print(f"  [{completed}/{total}] wall={wall_time:.2f}s llm={llm_time:.2f}s {tokens:>5}tok {os.path.relpath(filepath, directory)}:{func['name']}{err_flag}", flush=True)
                 else:
                     # Brief progress indicator
-                    print(f"\r  Processing: {completed}/{total} ({total_tokens} tokens)", end='', flush=True)
+                    print(f"\r  Processing: {completed}/{total} ({total_tokens} tokens, {errors} errors)", end='', flush=True)
 
                 # Add one to maintain queue level
                 try:
