@@ -120,15 +120,22 @@ def extract_functions(filepath):
 
 
 def call_llm(prompt):
-    """Call LLM via project's gateway (handles model loading)."""
+    """Call LLM via project's gateway (handles model loading).
+
+    Returns: (response, llm_time_seconds)
+    """
+    import time
     from gateway import get_gateway
 
+    t0 = time.time()
     try:
         gateway = get_gateway()
         response = gateway.request_text(prompt)
-        return response
+        llm_time = time.time() - t0
+        return response, llm_time
     except Exception as e:
-        return f"Error: {e}"
+        llm_time = time.time() - t0
+        return f"Error: {e}", llm_time
 
 
 def estimate_tokens(text: str) -> int:
