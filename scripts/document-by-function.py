@@ -285,7 +285,7 @@ def process_file(filepath, cache, force=False):
             elif func['type'] == 'global' and func['name'] == 'module_docstring':
                 desc = "Module docstring"
             else:
-                desc = describe_function(func)
+                desc, timing_info = describe_function(func)
         else:
             desc = cached_desc
 
