@@ -386,10 +386,11 @@ Keep it under 300 words. Be specific to THIS codebase."""
     }
 
 
-def process_directory(directory, cache, force=False, output_file=None, workers=10):
+def process_directory(directory, cache, force=False, output_file=None, workers=10, verbose=False, timing_log=None):
     """Process all Python files in a directory with concurrent LLM calls."""
     import time
     total_start = time.time()
+    timing_entries = []  # For detailed timing log
 
     py_files = find_python_files(directory)
     print(f"Found {len(py_files)} Python files in {directory}")
