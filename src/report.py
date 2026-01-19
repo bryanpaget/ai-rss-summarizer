@@ -1416,114 +1416,80 @@ def _run_connection_detection(
     console.print(f"  Analyzing {len(clusters_to_process)} clusters ({len(work_items)} work items, window={MAX_IN_FLIGHT})...")
 
     # Sliding window: submit up to MAX_IN_FLIGHT, collect as they complete, refill
-    pending = []  # (chunk, handle) tuples
+    pending = []  # (chunk, handle, prompt) tuples
     work_idx = 0
-    completed = 0
-    retry_items = []  # Items to retry after timeout
-        batch_triples = 0
-        batch_connections = 0
-        batch_errors = 0
-        retry_queue = []  # Clusters to retry with smaller size
+    total_errors = 0
 
-        for cluster, handle in cluster_handles:
-            try:
-                response = gateway.collect_text(handle)
-                new_triples, connections = parse_cluster_analysis_response(response, cluster, kb)
+    def submit_next():
+        """Submit next work item if available."""
+        nonlocal work_idx, total_llm_calls
+        if work_idx < len(work_items):
+            chunk, prompt = work_items[work_idx]
+            handle = gateway.submit_text(prompt, temperature=0.3)
+            pending.append((chunk, handle, prompt))
+            work_idx += 1
+            total_llm_calls += 1
+            return True
+        return False
 
-                batch_triples += len(new_triples)
-                batch_connections += len(connections)
-                stats["connections"] += len(connections)
-                stats["cluster_triples"] += len(new_triples)
-
-            except GatewayError as e:
-                error_str = str(e)
-                if "Timeout" in error_str:
-                    # Timeout detected - learn and retry
-                    cluster_size = len(cluster)
-                    update_learned_max_size(cluster_size)
-
-                    # Split and queue for retry
-                    halves = split_cluster_in_half(cluster)
-                    if len(halves) > 1:
-                        retry_queue.extend(halves)
-                        console.print(f"      [yellow]Timeout on cluster size {cluster_size}, splitting for retry[/yellow]")
-                    else:
-                        # Can't split further, log error
-                        console.print(f"      [red]Timeout on min-size cluster ({cluster_size}), skipping[/red]")
-                        stats["errors"] += 1
-                        batch_errors += 1
-                else:
-                    # Non-timeout gateway error
-                    console.print(f"      [red]Gateway error: {e}[/red]")
-                    stats["errors"] += 1
-                    batch_errors += 1
-
-            except Exception as e:
-                console.print(f"      [red]Cluster ERROR: {e}[/red]")
+    def process_result(chunk, handle, prompt):
+        """Collect result and handle errors. Returns (triples, connections, should_retry, retry_prompt)."""
+        nonlocal total_errors
+        try:
+            response = gateway.collect_text(handle)
+            new_triples, connections = parse_cluster_analysis_response(response, chunk, kb)
+            stats["connections"] += len(connections)
+            stats["cluster_triples"] += len(new_triples)
+            return len(new_triples), len(connections), False, None
+        except GatewayError as e:
+            if "Timeout" in str(e):
+                # Timeout - resubmit (likely never started due to queue)
+                console.print(f"    [yellow]Timeout, resubmitting...[/yellow]")
+                return 0, 0, True, prompt
+            else:
+                console.print(f"    [red]Gateway error: {e}[/red]")
                 stats["errors"] += 1
-                batch_errors += 1
+                total_errors += 1
+                return 0, 0, False, None
+        except Exception as e:
+            console.print(f"    [red]Error: {e}[/red]")
+            stats["errors"] += 1
+            total_errors += 1
+            return 0, 0, False, None
 
-        # Process retry queue (timed-out clusters split into smaller pieces)
-        retry_round = 0
-        while retry_queue and retry_round < 3:  # Max 3 retry rounds
-            retry_round += 1
-            current_retry = retry_queue
-            retry_queue = []  # Fresh queue for next round
+    # Initial fill of the window
+    while len(pending) < MAX_IN_FLIGHT and submit_next():
+        pass
 
-            console.print(f"      [dim]Retry round {retry_round}: {len(current_retry)} chunks[/dim]")
+    # Process until all work complete
+    last_progress = 0
+    while pending:
+        # Collect first pending result
+        chunk, handle, prompt = pending.pop(0)
+        triples, connections, should_retry, retry_prompt = process_result(chunk, handle, prompt)
 
-            # Submit retry chunks
-            retry_handles = []
-            for chunk in current_retry:
-                prompt = build_cluster_analysis_prompt(chunk)
-                if prompt:
-                    handle = gateway.submit_text(prompt, temperature=0.3)
-                    retry_handles.append((chunk, handle))
-                    total_llm_calls += 1
+        total_triples += triples
+        total_connections += connections
 
-            # Collect retry results
-            for chunk, handle in retry_handles:
-                try:
-                    response = gateway.collect_text(handle)
-                    new_triples, connections = parse_cluster_analysis_response(response, chunk, kb)
+        if should_retry:
+            # Resubmit timed-out request
+            new_handle = gateway.submit_text(retry_prompt, temperature=0.3)
+            pending.append((chunk, new_handle, retry_prompt))
+            total_llm_calls += 1
+        else:
+            # Refill window with new work
+            submit_next()
 
-                    batch_triples += len(new_triples)
-                    batch_connections += len(connections)
-                    stats["connections"] += len(connections)
-                    stats["cluster_triples"] += len(new_triples)
-
-                except GatewayError as e:
-                    if "Timeout" in str(e):
-                        chunk_size = len(chunk)
-                        update_learned_max_size(chunk_size)
-                        halves = split_cluster_in_half(chunk)
-                        if len(halves) > 1:
-                            retry_queue.extend(halves)
-                        else:
-                            console.print(f"      [red]Retry timeout on min-size chunk ({chunk_size})[/red]")
-                            stats["errors"] += 1
-                            batch_errors += 1
-                    else:
-                        console.print(f"      [red]Retry gateway error: {e}[/red]")
-                        stats["errors"] += 1
-                        batch_errors += 1
-                except Exception as e:
-                    console.print(f"      [red]Retry error: {e}[/red]")
-                    stats["errors"] += 1
-                    batch_errors += 1
-
-        total_triples += batch_triples
-        total_connections += batch_connections
-
-        # Batch summary
-        chunked_msg = f", {chunked_count} chunked" if chunked_count > 0 else ""
-        if batch_errors > 0:
-            console.print(f"      [yellow]+{batch_triples} triples, {batch_connections} connections, {batch_errors} errors{chunked_msg}[/yellow]")
-        elif batch_triples > 0 or batch_connections > 0:
-            console.print(f"      [green]+{batch_triples} triples, {batch_connections} connections{chunked_msg}[/green]")
+        # Progress update every 10 completions
+        done = work_idx - len(pending)
+        if done - last_progress >= 10:
+            console.print(f"    [dim]{done}/{len(work_items)} complete, {total_triples} triples, {total_connections} connections[/dim]")
+            last_progress = done
 
     console.print(f"  [green]Added {total_triples} triples to knowledge graph ({total_llm_calls} LLM calls)[/green]")
     console.print(f"  [green]Found {total_connections} insight connections[/green]")
+    if total_errors > 0:
+        console.print(f"  [yellow]{total_errors} errors[/yellow]")
     console.print()
 
 
