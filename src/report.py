@@ -1373,6 +1373,10 @@ def _run_connection_detection(
         # Submit batch
         cluster_handles = []
         chunked_count = 0
+        cluster_sizes = [len(c) for c in batch_clusters]
+        max_size = max(cluster_sizes) if cluster_sizes else 0
+        if max_size > 10:
+            console.print(f"      [dim]Cluster sizes: min={min(cluster_sizes)}, max={max_size}, >15: {sum(1 for s in cluster_sizes if s > 15)}[/dim]")
         for cluster in batch_clusters:
             # Chunk large clusters to prevent timeouts
             chunks = chunk_large_cluster(cluster)
