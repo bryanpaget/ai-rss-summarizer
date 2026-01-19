@@ -1,6 +1,30 @@
 # AI RSS Summarizer
 
-An AI-powered RSS feed summarizer with trend prediction. Fetch articles from multiple RSS feeds, generate summaries, and analyze trending topics.
+Transform your RSS feeds into personalized intelligence briefings. This tool fetches articles, extracts insights, builds a knowledge graph, clusters related stories, and generates daily briefings tailored to your interests.
+
+**Best with [LM Studio](https://lmstudio.ai)** - Run everything locally, completely free, with no API costs or rate limits.
+
+## Why Local LLMs?
+
+This tool makes **hundreds of LLM calls per session** - extracting insights, generating summaries, analyzing clusters, detecting connections. Using cloud APIs would cost $5-20+ per report. With LM Studio:
+
+| Benefit | Cloud APIs | LM Studio |
+|---------|-----------|-----------|
+| Cost per report | $5-20+ | **$0** |
+| Rate limits | Yes | **None** |
+| Privacy | Data sent to cloud | **100% local** |
+| Speed | Network latency | **Instant** |
+| Availability | Depends on provider | **Always on** |
+
+The app includes a **smart gateway system** that automatically:
+- Loads the right model for each task (text vs embeddings)
+- Batches requests to minimize model switching
+- Handles concurrent requests safely
+- Retries on failures
+
+**Recommended models for LM Studio:**
+- **Text:** `google/gemma-3n-e4b` (4GB, fast) or `mistral-7b-instruct` (7GB, quality)
+- **Embeddings:** `nomic-embed-text-v1.5` (274MB, excellent quality)
 
 ## Features
 
