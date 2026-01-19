@@ -26,29 +26,50 @@ echo ""
 START_TIME=$(date +%s)
 EXISTING_FILES=$(ls "$RESPONSES_DIR"/*.json 2>/dev/null | wc -l || echo "0")
 
-# Submit all requests as fast as possible
+# Submit all requests as fast as possible (in parallel)
 echo "Submitting $NUM_REQUESTS requests..."
-declare -a response_files=()
+PATHS_FILE="/tmp/gateway-test-paths-$$"
+> "$PATHS_FILE"
+
 for i in $(seq 1 "$NUM_REQUESTS"); do
-    prompt="Describe this function in one sentence: function test_$i() { return $i * 2; }"
-    # Gateway returns FILE=<path>, capture it
-    output=$("$GATEWAY" request text --prompt "$prompt" 2>/dev/null)
-    file_path="${output#FILE=}"
-    response_files+=("$file_path")
+    (
+        prompt="Describe this function in one sentence: function test_$i() { return $i * 2; }"
+        output=$("$GATEWAY" request text --prompt "$prompt" 2>/dev/null)
+        file_path="${output#FILE=}"
+        echo "$file_path" >> "$PATHS_FILE"
+    ) &
 done
 
-echo "All requests submitted, waiting for responses..."
-echo ""
+# Wait for all submissions to complete
+wait
+echo "All requests submitted!"
 
-# Wait for all response files to exist and have content
-echo "Waiting for responses to complete..."
+# Read the file paths
+declare -a response_files=()
+while IFS= read -r line; do
+    [[ -n "$line" ]] && response_files+=("$line")
+done < "$PATHS_FILE"
+rm -f "$PATHS_FILE"
+
+echo "Waiting for ${#response_files[@]} responses..."
+
+# Wait for responses with timeout
+TIMEOUT=60
+START_WAIT=$(date +%s)
+completed=0
 for file_path in "${response_files[@]}"; do
     while [[ ! -s "$file_path" ]]; do
         sleep 0.1
+        NOW=$(date +%s)
+        if [[ $((NOW - START_WAIT)) -gt $TIMEOUT ]]; then
+            echo "TIMEOUT waiting for responses (completed: $completed/${#response_files[@]})"
+            break 2
+        fi
     done
+    completed=$((completed + 1))
 done
 
-echo "All responses received!"
+echo "Responses received: $completed/${#response_files[@]}"
 echo ""
 
 # Extract completion times from responses
