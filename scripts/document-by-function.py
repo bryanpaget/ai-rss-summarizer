@@ -473,19 +473,22 @@ def process_directory(directory, cache, force=False, output_file=None, workers=1
                     break
 
             # Process: when one completes, add one
+            total_tokens = 0
             while pending:
                 done = next(as_completed(pending.keys()))
                 filepath_orig, func_orig, start_time = pending.pop(done)
                 filepath, func, desc = done.result()
                 duration = time.time() - start_time
+                tokens = estimate_tokens(func['code'])
+                total_tokens += tokens
                 func['_description'] = desc
                 completed += 1
-                timing_data.append((filepath, func['name'], duration))
+                timing_data.append((filepath, func['name'], duration, tokens))
                 if verbose:
-                    print(f"  [{completed}/{total}] {duration:.2f}s {os.path.relpath(filepath, directory)}:{func['name']}", flush=True)
+                    print(f"  [{completed}/{total}] {duration:.2f}s {tokens:>5}tok {os.path.relpath(filepath, directory)}:{func['name']}", flush=True)
                 else:
                     # Brief progress indicator
-                    print(f"\r  Processing: {completed}/{total}", end='', flush=True)
+                    print(f"\r  Processing: {completed}/{total} ({total_tokens} tokens)", end='', flush=True)
 
                 # Add one to maintain queue level
                 try:
