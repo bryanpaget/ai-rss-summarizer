@@ -1413,12 +1413,19 @@ def _run_connection_detection(
             if prompt:
                 work_items.append((chunk, prompt))
 
-    console.print(f"  Analyzing {len(clusters_to_process)} clusters ({len(work_items)} work items, window={MAX_IN_FLIGHT})...")
+    # Process in batches of 10 with timing/ETA like rest of app
+    REPORT_BATCH_SIZE = 10
+    num_batches = (len(work_items) + REPORT_BATCH_SIZE - 1) // REPORT_BATCH_SIZE
+    console.print(f"  Analyzing {len(clusters_to_process)} clusters ({len(work_items)} work items) in {num_batches} batches...")
 
     # Sliding window: submit up to MAX_IN_FLIGHT, collect as they complete, refill
     pending = []  # (chunk, handle, prompt) tuples
     work_idx = 0
     total_errors = 0
+    completed = 0
+    batch_times = []
+    batch_start = time.time()
+    batch_num = 1
 
     def submit_next():
         """Submit next work item if available."""
@@ -1444,25 +1451,38 @@ def _run_connection_detection(
         except GatewayError as e:
             if "Timeout" in str(e):
                 # Timeout - resubmit (likely never started due to queue)
-                console.print(f"    [yellow]Timeout, resubmitting...[/yellow]")
                 return 0, 0, True, prompt
             else:
-                console.print(f"    [red]Gateway error: {e}[/red]")
+                console.print(f" [red]error[/red]")
                 stats["errors"] += 1
                 total_errors += 1
                 return 0, 0, False, None
         except Exception as e:
-            console.print(f"    [red]Error: {e}[/red]")
+            console.print(f" [red]error: {e}[/red]")
             stats["errors"] += 1
             total_errors += 1
             return 0, 0, False, None
+
+    def get_eta():
+        """Calculate ETA based on average batch time."""
+        if not batch_times:
+            return ""
+        avg_time = sum(batch_times) / len(batch_times)
+        remaining_batches = num_batches - batch_num
+        eta_seconds = avg_time * remaining_batches
+        if eta_seconds < 1:
+            return ""
+        return f"~{format_duration(eta_seconds)} remaining"
 
     # Initial fill of the window
     while len(pending) < MAX_IN_FLIGHT and submit_next():
         pass
 
+    # Print first batch header
+    console.print(f"    [dim]Batch {batch_num}/{num_batches}...[/dim]", end="")
+
     # Process until all work complete
-    last_progress = 0
+    retries = 0
     while pending:
         # Collect first pending result
         chunk, handle, prompt = pending.pop(0)
@@ -1476,18 +1496,40 @@ def _run_connection_detection(
             new_handle = gateway.submit_text(retry_prompt, temperature=0.3)
             pending.append((chunk, new_handle, retry_prompt))
             total_llm_calls += 1
+            retries += 1
         else:
             # Refill window with new work
             submit_next()
+            completed += 1
 
-        # Progress update every 10 completions
-        done = work_idx - len(pending)
-        if done - last_progress >= 10:
-            console.print(f"    [dim]{done}/{len(work_items)} complete, {total_triples} triples, {total_connections} connections[/dim]")
-            last_progress = done
+        # Check if batch complete (every REPORT_BATCH_SIZE completions)
+        if completed > 0 and completed % REPORT_BATCH_SIZE == 0:
+            batch_duration = time.time() - batch_start
+            batch_times.append(batch_duration)
 
-    console.print(f"  [green]Added {total_triples} triples to knowledge graph ({total_llm_calls} LLM calls)[/green]")
-    console.print(f"  [green]Found {total_connections} insight connections[/green]")
+            # Print batch completion
+            retry_msg = f", {retries} retries" if retries > 0 else ""
+            console.print(f" [green]done[/green] [dim]({format_duration(batch_duration)}){retry_msg}[/dim]")
+
+            batch_num += 1
+            retries = 0
+            batch_start = time.time()
+
+            # Print next batch header if more work
+            if completed < len(work_items):
+                eta = get_eta()
+                eta_str = f" [{eta}]" if eta else ""
+                console.print(f"    [dim]Batch {batch_num}/{num_batches}{eta_str}...[/dim]", end="")
+
+    # Final partial batch
+    if completed % REPORT_BATCH_SIZE != 0:
+        batch_duration = time.time() - batch_start
+        batch_times.append(batch_duration)
+        retry_msg = f", {retries} retries" if retries > 0 else ""
+        console.print(f" [green]done[/green] [dim]({format_duration(batch_duration)}){retry_msg}[/dim]")
+
+    total_time = sum(batch_times)
+    console.print(f"  [green]Added {total_triples} triples, {total_connections} connections[/green] [dim]({format_duration(total_time)} total)[/dim]")
     if total_errors > 0:
         console.print(f"  [yellow]{total_errors} errors[/yellow]")
     console.print()
