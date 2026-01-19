@@ -659,15 +659,20 @@ def process_directory(directory, cache, force=False, output_file=None, workers=1
             # Per-file timing summary
             if total_stats.get('timing'):
                 f.write(f"## Timing Summary\n\n")
-                file_times = {}
-                for fpath, fname, dur in total_stats['timing']:
+                file_stats = {}
+                for fpath, fname, wall, tokens, llm, is_err in total_stats['timing']:
                     rel = os.path.relpath(fpath, directory)
-                    file_times[rel] = file_times.get(rel, 0) + dur
-                f.write(f"| File | Time (s) | Functions |\n")
-                f.write(f"|------|----------|----------|\n")
-                for fpath, total_time in sorted(file_times.items(), key=lambda x: -x[1]):
-                    func_count = len([t for t in total_stats['timing'] if os.path.relpath(t[0], directory) == fpath])
-                    f.write(f"| {fpath} | {total_time:.1f} | {func_count} |\n")
+                    if rel not in file_stats:
+                        file_stats[rel] = {'wall': 0, 'llm': 0, 'tokens': 0, 'count': 0}
+                    file_stats[rel]['wall'] += wall
+                    file_stats[rel]['llm'] += llm
+                    file_stats[rel]['tokens'] += tokens
+                    file_stats[rel]['count'] += 1
+                f.write(f"| File | Functions | Wall (s) | Tokens |\n")
+                f.write(f"|------|-----------|----------|--------|\n")
+                for fpath in sorted(file_stats.keys(), key=lambda x: -file_stats[x]['wall']):
+                    s = file_stats[fpath]
+                    f.write(f"| {fpath} | {s['count']} | {s['wall']:.1f} | {s['tokens']} |\n")
                 f.write(f"\n---\n\n")
 
             f.write(f"## File Documentation\n\n")
