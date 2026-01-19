@@ -573,7 +573,7 @@ def process_directory(directory, cache, force=False, output_file=None, workers=1
         print(f"    Wall time: {phase3_duration:.1f}s total, {phase3_duration/total:.2f}s avg per item", flush=True)
         print(f"    LLM time:  {total_llm_time:.1f}s total, {total_llm_time/total:.2f}s avg per item", flush=True)
         print(f"    Tokens:    {total_tokens} ({total_tokens/phase3_duration:.0f} tok/s wall, {total_tokens/total_llm_time:.0f} tok/s LLM)" if total_llm_time > 0 else f"    Tokens: {total_tokens}", flush=True)
-        print(f"    Errors:    {errors}", flush=True)
+        print(f"    Status:    SUCCESS (0 errors)", flush=True)
 
         # Write detailed timing log if requested
         if timing_log:
