@@ -450,7 +450,7 @@ class SignalTagger:
         if not articles:
             return []
 
-        from .gateway import get_gateway
+        from safe_loading_gateway import get_gateway
 
         gateway = get_gateway()
         if not gateway.is_available():
@@ -537,7 +537,7 @@ Return ONLY a JSON object in this exact format (no markdown, no explanation):
             # For LM Studio, use the gateway (handles model switching automatically)
             # NO FALLBACKS - gateway is required for LM Studio
             if "localhost:1234" in self.provider.base_url:
-                from .gateway import get_gateway
+                from safe_loading_gateway import get_gateway
 
                 gateway = get_gateway()
                 if not gateway.is_available():
