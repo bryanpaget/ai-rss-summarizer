@@ -395,7 +395,7 @@ Create a brief architecture overview with these sections:
 
 Keep it under 300 words. Be specific to THIS codebase."""
 
-    overview = call_llm(overview_prompt)
+    overview, overview_time = call_llm(overview_prompt)
     return overview, {
         'files': len(files_data),
         'functions': total_functions,
