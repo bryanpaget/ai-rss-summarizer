@@ -554,6 +554,21 @@ def process_directory(directory, cache, force=False, output_file=None, workers=1
             f.write(f"---\n\n")
             f.write(f"## System Overview\n\n{overview}\n\n")
             f.write(f"---\n\n")
+
+            # Per-file timing summary
+            if total_stats.get('timing'):
+                f.write(f"## Timing Summary\n\n")
+                file_times = {}
+                for fpath, fname, dur in total_stats['timing']:
+                    rel = os.path.relpath(fpath, directory)
+                    file_times[rel] = file_times.get(rel, 0) + dur
+                f.write(f"| File | Time (s) | Functions |\n")
+                f.write(f"|------|----------|----------|\n")
+                for fpath, total_time in sorted(file_times.items(), key=lambda x: -x[1]):
+                    func_count = len([t for t in total_stats['timing'] if os.path.relpath(t[0], directory) == fpath])
+                    f.write(f"| {fpath} | {total_time:.1f} | {func_count} |\n")
+                f.write(f"\n---\n\n")
+
             f.write(f"## File Documentation\n\n")
 
             for filepath in sorted(all_results.keys()):
