@@ -593,7 +593,7 @@ Only include feeds you're confident are real and active."""
             # OpenAI-compatible provider
             # For LM Studio, use the gateway (NO FALLBACKS)
             if "localhost:1234" in provider.base_url:
-                from .gateway import get_gateway
+                from safe_loading_gateway import get_gateway
 
                 gateway = get_gateway()
                 if not gateway.is_available():
