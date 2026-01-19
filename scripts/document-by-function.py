@@ -46,7 +46,7 @@ def hash_code(code: str) -> str:
 
 def extract_functions(filepath):
     """Use AST to extract all functions/classes with exact line numbers."""
-    with open(filepath) as f:
+    with open(filepath, encoding='utf-8') as f:
         content = f.read()
 
     tree = ast.parse(content)
