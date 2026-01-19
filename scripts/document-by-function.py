@@ -588,6 +588,10 @@ def process_directory(directory, cache, force=False, output_file=None, workers=1
 
         print(f"\nWritten to {output_file}")
 
+    total_elapsed = time.time() - total_start
+    total_stats['total_elapsed'] = total_elapsed
+    print(f"\n=== COMPLETE: {total_elapsed:.1f}s total ===")
+
     return all_results, total_stats, overview
 
 
