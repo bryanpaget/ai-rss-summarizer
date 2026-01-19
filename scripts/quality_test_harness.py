@@ -268,7 +268,7 @@ def run_quality_test(
 
     if llm_provider is None:
         # Use gateway for LLM access
-        from src.gateway import get_gateway
+        from safe_loading_gateway import get_gateway
         gateway = get_gateway()
         if not gateway.is_available():
             print("ERROR: LLM gateway not available", file=sys.stderr)
