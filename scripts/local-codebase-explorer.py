@@ -1,12 +1,42 @@
 """Document codebases by extracting functions/classes from ALL file types.
 
-Architecture:
-1. Tree-sitter: Languages with grammars (Python, JS, TS, Go, Rust, Java, C, etc.)
-2. LLM fallback: Text files without grammar support -> send to LLM for structure analysis
-3. "Couldn't parse": Only if LLM returns unusable response
+CANONICAL LOCATION & SYNC POLICY:
+=================================
+This file lives in TWO places:
+  1. <project>/scripts/local-codebase-explorer.py  (CANONICAL - develop here)
+  2. ~/.claude/scripts/local-codebase-explorer.py  (COPY - for other projects)
 
-Uses hash-based caching to skip unchanged functions.
-Uses concurrent processing to keep multiple LLM requests in flight.
+WHY TWO COPIES:
+- Projects must be portable (can't depend on ~/.claude existing on other machines)
+- But tools need to be available globally for projects that don't bundle them
+
+SYNC RULE: After modifying this file, copy to global:
+  cp scripts/local-codebase-explorer.py ~/.claude/scripts/
+
+USAGE:
+  python local-codebase-explorer.py <directory> [options]
+
+OPTIONS:
+  -o, --output FILE    Write markdown documentation to FILE
+  -f, --force          Ignore cache, reprocess everything
+  -w, --workers N      Concurrent LLM workers (default: 10)
+  -v, --verbose        Show per-item progress
+  -l, --limit N        Process only first N files (for incremental testing)
+  --timing-log FILE    Write timing data to FILE
+
+OUTPUTS:
+  .cache/codebase_docs.json   Hash-based cache (skip unchanged code)
+  .cache/llm_responses.log    Full prompt/response log (for debugging)
+
+ARCHITECTURE:
+  1. Tree-sitter: Languages with grammars (Python, JS, TS, Go, Rust, Java, C, etc.)
+  2. LLM fallback: Text files without grammar support
+  3. "Couldn't parse": Only if LLM returns unusable response
+
+LLM BACKENDS (auto-detected in order):
+  1. Project gateway (if src/gateway.py exists)
+  2. LM Studio at localhost:1234
+  3. OpenAI via OPENAI_API_KEY env var
 """
 import sys
 import os
