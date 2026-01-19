@@ -257,16 +257,105 @@ LANGUAGE_QUERIES = {
     'bash': """
         (function_definition name: (word) @name) @function
     """,
+    'powershell': """
+        (function_definition name: (bareword_string) @name) @function
+        (class_definition name: (type_identifier) @name) @class
+    """,
+    'lua': """
+        (function_declaration name: (identifier) @name) @function
+        (local_function_declaration name: (identifier) @name) @function
+    """,
+    'perl': """
+        (subroutine_declaration name: (bareword) @name) @function
+        (package_declaration name: (package_name) @name) @package
+    """,
+    'php': """
+        (function_definition name: (name) @name) @function
+        (class_declaration name: (name) @name) @class
+        (method_declaration name: (name) @name) @method
+    """,
+    'kotlin': """
+        (function_declaration (simple_identifier) @name) @function
+        (class_declaration (type_identifier) @name) @class
+    """,
+    'scala': """
+        (function_definition name: (identifier) @name) @function
+        (class_definition name: (identifier) @name) @class
+        (object_definition name: (identifier) @name) @object
+    """,
+    'swift': """
+        (function_declaration name: (simple_identifier) @name) @function
+        (class_declaration name: (type_identifier) @name) @class
+        (struct_declaration name: (type_identifier) @name) @struct
+    """,
+    'haskell': """
+        (function name: (variable) @name) @function
+        (type_signature name: (variable) @name) @signature
+    """,
+    'elixir': """
+        (call target: (identifier) @name) @function
+        (stab_clause) @clause
+    """,
+    'clojure': """
+        (list_lit (sym_lit) @name) @form
+    """,
+    'julia': """
+        (function_definition name: (identifier) @name) @function
+        (struct_definition name: (identifier) @name) @struct
+    """,
+    'fortran': """
+        (subroutine name: (name) @name) @subroutine
+        (function name: (name) @name) @function
+        (module name: (name) @name) @module
+    """,
+    'dart': """
+        (function_signature name: (identifier) @name) @function
+        (class_definition name: (identifier) @name) @class
+    """,
+    'zig': """
+        (function name: (identifier) @name) @function
+        (struct name: (identifier) @name) @struct
+    """,
+    'nim': """
+        (proc_declaration name: (identifier) @name) @proc
+        (type_definition name: (identifier) @name) @type
+    """,
+    'ocaml': """
+        (value_definition (value_name) @name) @value
+        (type_definition (type_constructor) @name) @type
+    """,
+    'r': """
+        (binary_operator lhs: (identifier) @name) @assignment
+        (function_definition) @function
+    """,
+    'cmake': """
+        (function_def name: (argument) @name) @function
+        (macro_def name: (argument) @name) @macro
+    """,
+    'proto': """
+        (message name: (message_name) @name) @message
+        (service name: (service_name) @name) @service
+        (rpc name: (rpc_name) @name) @rpc
+    """,
+    'graphql': """
+        (type_definition name: (name) @name) @type
+        (field_definition name: (name) @name) @field
+        (operation_definition name: (name) @name) @operation
+    """,
+    'cuda': """
+        (function_definition declarator: (function_declarator declarator: (identifier) @name)) @function
+        (declaration declarator: (function_declarator declarator: (identifier) @name)) @declaration
+    """,
 }
 
 # Languages where we don't extract functions (data/config files)
 # We still parse them to validate syntax but just describe the file as a whole
-DATA_LANGUAGES = {'json', 'yaml', 'toml', 'html', 'css', 'markdown', 'sql'}
+DATA_LANGUAGES = {'json', 'yaml', 'toml', 'html', 'css', 'markdown', 'sql', 'xml', 'csv', 'rst', 'latex', 'vim'}
 
 # Text file extensions that get LLM analysis (no tree-sitter grammar)
 TEXT_EXTENSIONS = {
-    '.txt', '.rst', '.cfg', '.ini', '.conf', '.env', '.gitignore',
-    '.dockerfile', '.makefile', '.cmake',
+    '.txt', '.cfg', '.ini', '.conf', '.env', '.gitignore',
+    '.dockerfile', '.makefile',
     '.md', '.markdown',  # Markdown needs LLM for meaningful header-based sections
 }
 
