@@ -1238,6 +1238,17 @@ def _run_connection_detection(
 
     console.print("[bold]Step 4.5:[/bold] Detecting connections (cluster-based)...")
 
+    # Ensure embedding model is loaded (LLM phase switched to text model)
+    # This is required because the _model_loaded flag in LMStudioProvider
+    # becomes stale after the LLM phase - the gateway needs to switch back
+    from safe_loading_gateway import get_gateway
+    gateway = get_gateway()
+    if gateway and gateway.is_available():
+        try:
+            gateway.request_embedding("model_load_trigger")
+        except Exception:
+            pass  # Best effort - batch embedding will fail more clearly if needed
+
     # =========================================================================
     # PHASE 1: Batch embed all new insights (EMBEDDING MODEL)
     # =========================================================================
