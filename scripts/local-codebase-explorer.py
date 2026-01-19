@@ -1193,9 +1193,13 @@ def process_directory(directory, cache, force=False, output_file=None, workers=1
 
     save_cache(cache)
 
-    # Generate overview
+    # Generate file-level summaries (proportional to file size)
+    print("\n=== Generating File Summaries ===")
+    file_summaries = generate_file_summaries(all_results, directory)
+
+    # Generate overview from file summaries (not function names)
     print("\n=== Generating System Overview ===")
-    overview, project_stats = generate_overview(all_results, directory)
+    overview, project_stats = generate_overview(all_results, directory, file_summaries)
 
     # Write output
     if output_file:
