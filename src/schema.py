@@ -8,7 +8,7 @@ import json
 import re
 from typing import Optional
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, model_validator
 
 
 # ============================================================================
@@ -97,6 +97,22 @@ class SemanticChunk(BaseModel):
     content: str
     insights: list[ExtractedInsight] = Field(default_factory=list)
     triples: list[ExtractedTriple] = Field(default_factory=list)
+
+    @model_validator(mode='before')
+    @classmethod
+    def filter_invalid_triples(cls, data):
+        """Filter out triples with None values (LLM sometimes returns incomplete triples)."""
+        if isinstance(data, dict) and 'triples' in data:
+            valid_triples = []
+            for t in data['triples']:
+                if isinstance(t, dict):
+                    # Keep only triples where subject, predicate, object are all non-None strings
+                    if (t.get('subject') is not None and 
+                        t.get('predicate') is not None and 
+                        t.get('object') is not None):
+                        valid_triples.append(t)
+            data['triples'] = valid_triples
+        return data
 
 
 class CombinedExtractionResult(BaseModel):
