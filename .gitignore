@@ -42,3 +42,10 @@ models/
 
 # Auto Claude data directory
 .auto-claude/
+
+# Claude Code session files (not part of application)
+.claude/
+.auto-claude-security.json
+
+# Test profiles (local testing only)
+rssTestProfile*/
