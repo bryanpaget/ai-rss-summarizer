@@ -1007,7 +1007,7 @@ def batch_process_articles(
     Returns:
         Dictionary with batch processing stats
     """
-    from .gateway import get_gateway
+    from safe_loading_gateway import get_gateway
 
     # Create shared KB instance if not provided
     if kb is None:
