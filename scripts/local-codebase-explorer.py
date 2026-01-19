@@ -383,14 +383,127 @@ class LLMError(Exception):
     pass
 
 
+# Global LLM backend configuration
+_llm_backend = None  # 'gateway', 'lmstudio', or 'openai'
+_llm_config = {}
+
+
+def configure_llm(backend: str, **config):
+    """Configure LLM backend.
+
+    Backends:
+    - 'gateway': Use project's gateway (requires gateway module in path)
+    - 'lmstudio': Direct LM Studio API (config: base_url, model)
+    - 'openai': OpenAI API (config: api_key, model)
+    """
+    global _llm_backend, _llm_config
+    _llm_backend = backend
+    _llm_config = config
+
+
+def _detect_llm_backend():
+    """Auto-detect available LLM backend."""
+    global _llm_backend, _llm_config
+
+    # Try gateway first (project-specific)
+    try:
+        from gateway import get_gateway
+        _llm_backend = 'gateway'
+        return
+    except ImportError:
+        pass
+
+    # Try LM Studio (local)
+    try:
+        import httpx
+        resp = httpx.get('http://localhost:1234/v1/models', timeout=2)
+        if resp.status_code == 200:
+            models = resp.json().get('data', [])
+            if models:
+                _llm_backend = 'lmstudio'
+                _llm_config = {
+                    'base_url': 'http://localhost:1234/v1',
+                    'model': models[0]['id']
+                }
+                return
+    except Exception:
+        pass
+
+    # Try OpenAI
+    api_key = os.environ.get('OPENAI_API_KEY')
+    if api_key:
+        _llm_backend = 'openai'
+        _llm_config = {
+            'api_key': api_key,
+            'model': os.environ.get('OPENAI_MODEL', 'gpt-4o-mini')
+        }
+        return
+
+    raise LLMError("No LLM backend available. Start LM Studio or set OPENAI_API_KEY.")
+
+
+def _call_gateway(prompt: str) -> str:
+    """Call LLM via project gateway."""
+    from gateway import get_gateway
+    gateway = get_gateway()
+    return gateway.request_text(prompt)
+
+
+def _call_lmstudio(prompt: str) -> str:
+    """Call LM Studio directly."""
+    import httpx
+    response = httpx.post(
+        f"{_llm_config['base_url']}/chat/completions",
+        json={
+            'model': _llm_config['model'],
+            'messages': [{'role': 'user', 'content': prompt}],
+            'temperature': 0.3,
+        },
+        timeout=60
+    )
+    response.raise_for_status()
+    return response.json()['choices'][0]['message']['content']
+
+
+def _call_openai(prompt: str) -> str:
+    """Call OpenAI API."""
+    import httpx
+    response = httpx.post(
+        'https://api.openai.com/v1/chat/completions',
+        headers={'Authorization': f"Bearer {_llm_config['api_key']}"},
+        json={
+            'model': _llm_config['model'],
+            'messages': [{'role': 'user', 'content': prompt}],
+            'temperature': 0.3,
+        },
+        timeout=60
+    )
+    response.raise_for_status()
+    return response.json()['choices'][0]['message']['content']
+
+
 def call_llm(prompt, max_retries=3, base_delay=2.0):
-    """Call LLM via project's gateway with retry logic.
+    """Call LLM with auto-detected or configured backend.
 
     Returns: (response, llm_time_seconds)
     Raises: LLMError if all retries fail
     """
     import time
-    from gateway import get_gateway
+    global _llm_backend
+
+    if _llm_backend is None:
+        _detect_llm_backend()
+        print(f"  Using LLM backend: {_llm_backend}")
+
+    # Select call function based on backend
+    call_fn = {
+        'gateway': _call_gateway,
+        'lmstudio': _call_lmstudio,
+        'openai': _call_openai,
+    }.get(_llm_backend)
+
+    if not call_fn:
+        raise LLMError(f"Unknown LLM backend: {_llm_backend}")
 
     last_error = None
     total_time = 0
@@ -398,8 +511,7 @@ def call_llm(prompt, max_retries=3, base_delay=2.0):
     for attempt in range(max_retries):
         t0 = time.time()
         try:
-            gateway = get_gateway()
-            response = gateway.request_text(prompt)
+            response = call_fn(prompt)
             llm_time = time.time() - t0
             return response, llm_time
         except Exception as e:
