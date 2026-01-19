@@ -1424,6 +1424,11 @@ def write_output(output_file, all_results, directory, total_stats, project_stats
             f.write(f"### {rel_path}\n\n")
             f.write(f"**Lines:** {max_line}\n\n")
 
+            # Include file summary if available
+            if file_summaries_dict and filepath in file_summaries_dict:
+                f.write(f"**Summary:** {file_summaries_dict[filepath]}\n\n")
+
+            f.write(f"**Functions/Classes:**\n\n")
             for r in results:
                 f.write(f"- Lines {r['start']}-{r['end']}: {r['type']} `{r['name']}` - {r['description']}\n")
             f.write(f"\n---\n\n")
