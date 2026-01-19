@@ -785,13 +785,16 @@ def find_files(directory: str, exclude_patterns: list[str] = None) -> list[str]:
 # =============================================================================
 
 def process_directory(directory, cache, force=False, output_file=None, workers=10,
-                     verbose=False, timing_log=None):
+                     verbose=False, timing_log=None, file_limit=None):
     """Process all files in a directory with concurrent LLM calls."""
     import time
     total_start = time.time()
 
     files = find_files(directory)
-    print(f"Found {len(files)} files in {directory}")
+    total_files = len(files)
+    if file_limit:
+        files = files[:file_limit]
+    print(f"Processing {len(files)}/{total_files} files in {directory}")
 
     # Phase 1: Extract all code units from all files (mostly fast, tree-sitter)
     print("\n=== Phase 1: Extracting code structure ===")
