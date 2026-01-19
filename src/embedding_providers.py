@@ -209,7 +209,7 @@ class LMStudioProvider(EmbeddingProvider):
 
         NO FALLBACKS - gateway is required, fail loudly if unavailable.
         """
-        from .gateway import get_gateway
+        from safe_loading_gateway import get_gateway
 
         gateway = get_gateway()
         if not gateway.is_available():
@@ -239,7 +239,7 @@ class LMStudioProvider(EmbeddingProvider):
         # This is a one-time ~7-10s cost to load the model
         # All subsequent batch calls are fast (direct API)
         if not self._model_loaded:
-            from .gateway import get_gateway
+            from safe_loading_gateway import get_gateway
             gateway = get_gateway()
             if not gateway.is_available():
                 raise EmbeddingProviderError(
