@@ -441,26 +441,42 @@ def process_directory(directory, cache, force=False, output_file=None, workers=1
 
     print(f"  {len(work_queue)} items need LLM, {total_stats['cached']} cached")
 
-    # Phase 3: Submit ALL work upfront, executor manages queue saturation
+    # Phase 3: Fixed queue level - add one when one completes
     if work_queue:
         total = len(work_queue)
-        completed = [0]
+        completed = 0
+        queue_size = workers  # Fixed queue level
+        work_iter = iter(work_queue)
+        pending = set()
 
-        print(f"\n=== Phase 3: LLM ({workers} workers, {total} queued) ===")
+        print(f"\n=== Phase 3: LLM (queue={queue_size}, total={total}) ===", flush=True)
 
         def process_item(item):
             filepath, func = item
             return filepath, func, describe_function(func)
 
-        with ThreadPoolExecutor(max_workers=workers) as executor:
-            # Submit everything immediately - workers stay saturated
-            futures = {executor.submit(process_item, item): item for item in work_queue}
+        with ThreadPoolExecutor(max_workers=queue_size) as executor:
+            # Fill queue to target level
+            for _ in range(min(queue_size, total)):
+                try:
+                    pending.add(executor.submit(process_item, next(work_iter)))
+                except StopIteration:
+                    break
 
-            for future in as_completed(futures):
-                filepath, func, desc = future.result()
+            # Process: when one completes, add one
+            while pending:
+                done = next(as_completed(pending))
+                pending.discard(done)
+                filepath, func, desc = done.result()
                 func['_description'] = desc
-                completed[0] += 1
-                print(f"  [{completed[0]}/{total}] {os.path.relpath(filepath, directory)}:{func['name']}")
+                completed += 1
+                print(f"  [{completed}/{total}] {os.path.relpath(filepath, directory)}:{func['name']}", flush=True)
+
+                # Add one to maintain queue level
+                try:
+                    pending.add(executor.submit(process_item, next(work_iter)))
+                except StopIteration:
+                    pass
 
     # Phase 4: Assemble results and update cache
     print("\n=== Phase 4: Assembling results ===")
