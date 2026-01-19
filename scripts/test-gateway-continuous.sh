@@ -34,7 +34,7 @@ trap cleanup EXIT
 echo "Submitting $NUM_REQUESTS requests..."
 for i in $(seq 1 "$NUM_REQUESTS"); do
     prompt="Describe this function in one sentence: function test_$i() { return $i * 2; }"
-    "$GATEWAY" text "$prompt" > "$RESULTS_DIR/response_$i.json" 2>/dev/null &
+    "$GATEWAY" request text --prompt "$prompt" > "$RESULTS_DIR/response_$i.json" 2>/dev/null &
 done
 
 echo "All requests submitted, waiting for responses..."
