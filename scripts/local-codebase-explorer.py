@@ -849,9 +849,10 @@ def process_directory(directory, cache, force=False, output_file=None, workers=1
         timing_data = []
         phase3_start = time.time()
 
-        print(f"\n=== Phase 3: LLM descriptions (queue={queue_size}, total={total}) ===", flush=True)
+        print(f"\n=== Phase 3: LLM descriptions (workers={queue_size}, total={total}) ===", flush=True)
 
         def process_item(item):
+            """Process single item - runs in thread pool."""
             import time as t
             t0 = t.time()
             filepath, unit = item
@@ -860,63 +861,49 @@ def process_directory(directory, cache, force=False, output_file=None, workers=1
             timing_info['total_time'] = t.time() - t0
             return filepath, unit, desc, timing_info
 
+        # Submit ALL work at once - let ThreadPoolExecutor manage parallelism
+        total_tokens = 0
+        total_llm_time = 0.0
+        fatal_error = None
+
         with ThreadPoolExecutor(max_workers=queue_size) as executor:
-            # Fill queue
-            for _ in range(min(queue_size, total)):
-                try:
-                    item = next(work_iter)
-                    future = executor.submit(process_item, item)
-                    pending[future] = (item[0], item[1], time.time())
-                except StopIteration:
-                    break
+            # Submit all items immediately
+            futures = {executor.submit(process_item, item): item for item in work_queue}
+            print(f"  Submitted {len(futures)} tasks to {queue_size} workers", flush=True)
 
-            total_tokens = 0
-            total_llm_time = 0.0
-            fatal_error = None
-
-            while pending and not fatal_error:
-                done = next(as_completed(pending.keys()))
-                filepath_orig, unit_orig, start_time = pending.pop(done)
+            # Process results as they complete
+            for future in as_completed(futures):
+                item = futures[future]
+                filepath_orig, unit_orig = item
 
                 try:
-                    filepath, unit, desc, timing_info = done.result()
+                    filepath, unit, desc, timing_info = future.result()
                 except LLMError as e:
                     fatal_error = f"{os.path.relpath(filepath_orig, directory)}:{unit_orig['name']}: {e}"
                     print(f"\n\n  FATAL ERROR: {fatal_error}", flush=True)
-                    for f in pending:
-                        f.cancel()
+                    executor.shutdown(wait=False, cancel_futures=True)
                     break
                 except Exception as e:
                     fatal_error = f"{os.path.relpath(filepath_orig, directory)}:{unit_orig['name']}: {e}"
                     print(f"\n\n  FATAL ERROR: {fatal_error}", flush=True)
-                    for f in pending:
-                        f.cancel()
+                    executor.shutdown(wait=False, cancel_futures=True)
                     break
 
-                wall_time = time.time() - start_time
                 tokens = timing_info['tokens_in']
                 llm_time = timing_info['llm_time']
                 total_tokens += tokens
                 total_llm_time += llm_time
                 unit['_description'] = desc
                 completed += 1
-                timing_data.append((filepath, unit['name'], wall_time, tokens, llm_time))
+                timing_data.append((filepath, unit['name'], timing_info['total_time'], tokens, llm_time))
 
                 if verbose:
                     print(f"  [{completed}/{total}] {os.path.relpath(filepath, directory)}:{unit['name']}", flush=True)
                 else:
-                    print(f"\r  Processing: {completed}/{total} ({total_tokens} tokens)", end='', flush=True)
+                    print(f"\r  Processing: {completed}/{total} ({total_tokens} tokens, {queue_size} workers)", end='', flush=True)
 
-                # Replenish queue
-                try:
-                    item = next(work_iter)
-                    future = executor.submit(process_item, item)
-                    pending[future] = (item[0], item[1], time.time())
-                except StopIteration:
-                    pass
-
-            if fatal_error:
-                raise LLMError(f"Documentation run aborted: {fatal_error}")
+        if fatal_error:
+            raise LLMError(f"Documentation run aborted: {fatal_error}")
 
         phase3_duration = time.time() - phase3_start
         if not verbose:
