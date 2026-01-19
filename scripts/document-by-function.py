@@ -441,62 +441,66 @@ def process_directory(directory, cache, force=False, output_file=None, workers=1
 
     print(f"  {len(work_queue)} items need LLM, {total_stats['cached']} cached")
 
-    # Phase 3: Concurrent LLM processing with adaptive saturation
+    # Phase 3: Concurrent LLM processing with adaptive control loop
     if work_queue:
-        print(f"\n=== Phase 3: LLM descriptions (adaptive, target={workers} in-flight) ===")
+        import time
         completed = 0
         total = len(work_queue)
         work_iter = iter(work_queue)
         pending = set()
-        target_in_flight = workers  # Keep this many requests in flight
+        current_target = workers
+        max_target = 50
+        min_queue_threshold = 3
+        low_streak = 0
+
+        print(f"\n=== Phase 3: LLM descriptions (adaptive control, start={current_target}) ===")
 
         def process_item(item):
             filepath, func = item
             desc = describe_function(func)
             return filepath, func, desc
 
-        with ThreadPoolExecutor(max_workers=workers * 2) as executor:  # Allow headroom
-            # Initial fill - submit up to target
-            for _ in range(min(target_in_flight, total)):
+        with ThreadPoolExecutor(max_workers=max_target) as executor:
+            # Initial fill to current target
+            for _ in range(min(current_target, total)):
                 try:
                     item = next(work_iter)
-                    future = executor.submit(process_item, item)
-                    pending.add(future)
+                    pending.add(executor.submit(process_item, item))
                 except StopIteration:
                     break
 
-            # Process as they complete, keeping queue saturated
             while pending:
-                # Wait for at least one to complete
-                done_futures = set()
-                for future in list(pending):
-                    if future.done():
-                        done_futures.add(future)
-
+                done_futures = {f for f in pending if f.done()}
                 if not done_futures:
-                    # None done yet, wait briefly then check again
-                    import time
-                    time.sleep(0.01)
+                    time.sleep(0.005)
                     continue
 
-                # Process completed futures
                 for future in done_futures:
                     pending.remove(future)
                     filepath, func, desc = future.result()
                     func['_description'] = desc
                     completed += 1
-                    with _print_lock:
-                        in_flight = len(pending)
-                        rel_path = os.path.relpath(filepath, directory)
-                        print(f"  [{completed}/{total}] (q:{in_flight}) {rel_path}:{func['name']}")
 
-                    # Immediately submit replacement to maintain saturation
-                    try:
-                        item = next(work_iter)
-                        new_future = executor.submit(process_item, item)
-                        pending.add(new_future)
-                    except StopIteration:
-                        pass  # No more work
+                    q = len(pending)
+                    rel_path = os.path.relpath(filepath, directory)
+                    print(f"  [{completed}/{total}] q:{q} t:{current_target} | {rel_path}:{func['name']}")
+
+                    # Adaptive control: increase target if queue consistently low
+                    if q < min_queue_threshold:
+                        low_streak += 1
+                        if low_streak >= 3 and current_target < max_target:
+                            current_target = min(current_target + 5, max_target)
+                            print(f"  [ADAPT] Queue low, increasing target to {current_target}")
+                            low_streak = 0
+                    else:
+                        low_streak = 0
+
+                    # Fill up to current target
+                    while len(pending) < current_target:
+                        try:
+                            pending.add(executor.submit(process_item, next(work_iter)))
+                        except StopIteration:
+                            break
 
     # Phase 4: Assemble results and update cache
     print("\n=== Phase 4: Assembling results ===")
