@@ -258,8 +258,8 @@ LANGUAGE_QUERIES = {
         (function_definition name: (word) @name) @function
     """,
     'powershell': """
-        (function_definition name: (bareword_string) @name) @function
-        (class_definition name: (type_identifier) @name) @class
+        (function_statement name: (bareword_string) @name) @function
+        (class_statement name: (type_identifier) @name) @class
     """,
     'lua': """
         (function_declaration name: (identifier) @name) @function
