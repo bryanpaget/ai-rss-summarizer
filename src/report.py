@@ -163,7 +163,7 @@ _cleanup_registered = False
 def _cleanup_gateway():
     """Clean up gateway on exit - clear queue and unload models."""
     try:
-        from .gateway import get_gateway
+        from safe_loading_gateway import get_gateway
         gateway = get_gateway()
         gateway.clear_queue()
         gateway.unload()  # Free VRAM
@@ -561,7 +561,7 @@ def _run_llm_phase(
 
     NO SILENT FAILURES - Every error is surfaced to the user.
     """
-    from .gateway import get_gateway
+    from safe_loading_gateway import get_gateway
     from .knowledge import build_extraction_prompt, process_extraction_response
 
     console.print("[bold]Step 3:[/bold] LLM Analysis...")
@@ -1299,7 +1299,7 @@ def _run_connection_detection(
     # =========================================================================
     # PHASE 3: Analyze clusters (TEXT MODEL - batched with sliding window)
     # =========================================================================
-    from .gateway import get_gateway
+    from safe_loading_gateway import get_gateway
 
     gateway = get_gateway()
 
