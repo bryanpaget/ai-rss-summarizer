@@ -67,6 +67,7 @@ done
 if [[ ${#completion_times[@]} -lt 5 ]]; then
     echo "ERROR: Not enough responses with timing data (got ${#completion_times[@]})"
     echo "Check that gateway is running and LM Studio is available"
+    echo "Response files: ${response_files[*]}"
     exit 1
 fi
 
