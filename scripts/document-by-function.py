@@ -119,23 +119,41 @@ def extract_functions(filepath):
     return results
 
 
-def call_llm(prompt):
-    """Call LLM via project's gateway (handles model loading).
+class LLMError(Exception):
+    """Raised when LLM call fails after all retries."""
+    pass
+
+
+def call_llm(prompt, max_retries=3, base_delay=2.0):
+    """Call LLM via project's gateway with retry logic.
 
     Returns: (response, llm_time_seconds)
+    Raises: LLMError if all retries fail
     """
     import time
     from gateway import get_gateway
 
-    t0 = time.time()
-    try:
-        gateway = get_gateway()
-        response = gateway.request_text(prompt)
-        llm_time = time.time() - t0
-        return response, llm_time
-    except Exception as e:
-        llm_time = time.time() - t0
-        return f"Error: {e}", llm_time
+    last_error = None
+    total_time = 0
+
+    for attempt in range(max_retries):
+        t0 = time.time()
+        try:
+            gateway = get_gateway()
+            response = gateway.request_text(prompt)
+            llm_time = time.time() - t0
+            return response, llm_time
+        except Exception as e:
+            elapsed = time.time() - t0
+            total_time += elapsed
+            last_error = e
+            if attempt < max_retries - 1:
+                delay = base_delay * (2 ** attempt)  # Exponential backoff
+                print(f"    RETRY {attempt+1}/{max_retries}: {e} (waiting {delay}s)", flush=True)
+                time.sleep(delay)
+
+    # All retries failed - raise, don't return error string
+    raise LLMError(f"Failed after {max_retries} attempts ({total_time:.1f}s total): {last_error}")
 
 
 def estimate_tokens(text: str) -> int:
