@@ -79,6 +79,7 @@ def _log_llm_exchange(prompt: str, response: str, timing: float):
 # =============================================================================
 
 # Map file extensions to tree-sitter language names
+# Comprehensive coverage - 50+ languages from tree-sitter-language-pack
 EXTENSION_TO_LANGUAGE = {
     # Python
     '.py': 'python',
@@ -92,6 +93,8 @@ EXTENSION_TO_LANGUAGE = {
     '.cjs': 'javascript',
     '.ts': 'typescript',
     '.tsx': 'typescript',
+    '.mts': 'typescript',
+    '.cts': 'typescript',
 
     # Systems languages
     '.c': 'c',
@@ -103,21 +106,85 @@ EXTENSION_TO_LANGUAGE = {
     '.hxx': 'cpp',
     '.rs': 'rust',
     '.go': 'go',
+    '.zig': 'zig',
+    '.nim': 'nim',
+
+    # CUDA
+    '.cu': 'cuda',
+    '.cuh': 'cuda',
 
     # JVM languages
     '.java': 'java',
+    '.kt': 'kotlin',
+    '.kts': 'kotlin',
+    '.scala': 'scala',
+    '.clj': 'clojure',
+    '.cljs': 'clojure',
+    '.cljc': 'clojure',
+
+    # .NET
+    '.cs': 'c_sharp',
+
+    # Apple/Swift
+    '.swift': 'swift',
 
     # Scripting
     '.rb': 'ruby',
     '.sh': 'bash',
     '.bash': 'bash',
     '.zsh': 'bash',
+    '.ps1': 'powershell',
+    '.psm1': 'powershell',
+    '.psd1': 'powershell',
+    '.lua': 'lua',
+    '.pl': 'perl',
+    '.pm': 'perl',
+    '.php': 'php',
+    '.r': 'r',
+    '.R': 'r',
+
+    # Functional languages
+    '.hs': 'haskell',
+    '.lhs': 'haskell',
+    '.ml': 'ocaml',
+    '.mli': 'ocaml',
+    '.ex': 'elixir',
+    '.exs': 'elixir',
+    '.erl': 'erlang',
+    '.hrl': 'erlang',
+    '.lisp': 'commonlisp',
+    '.cl': 'commonlisp',
+    '.scm': 'scheme',
+    '.ss': 'scheme',
+    '.rkt': 'racket',
+
+    # Scientific/Data
+    '.jl': 'julia',
+    '.f': 'fortran',
+    '.f90': 'fortran',
+    '.f95': 'fortran',
+    '.f03': 'fortran',
+    '.for': 'fortran',
+
+    # Modern languages
+    '.dart': 'dart',
+
+    # Build/Config with structure
+    '.cmake': 'cmake',
+    '.proto': 'proto',
+    '.graphql': 'graphql',
+    '.gql': 'graphql',
+    '.tex': 'latex',
+    '.vim': 'vim',
 
     # Data/Config (parseable but may not have "functions")
     '.json': 'json',
     '.yaml': 'yaml',
     '.yml': 'yaml',
     '.toml': 'toml',
+    '.xml': 'xml',
+    '.csv': 'csv',
+    '.rst': 'rst',
 
     # Web
     '.html': 'html',
