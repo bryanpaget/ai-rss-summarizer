@@ -88,16 +88,16 @@ def main():
     )
 
     # Categorize by what they actually need
-    needs_llm = []  # Missing summary OR trend_tags OR signal_tags
-    needs_embedding_only = []  # Has all tags but missing embedding
+    # NOTE: trend_tags come from EMBEDDING phase (cosine similarity), NOT LLM
+    needs_llm = []  # Missing summary OR signal_tags (NOT trend_tags)
+    needs_embedding_only = []  # Has summary+signal_tags but missing embedding or trend_tags
 
     for article in correct_selected:
         needs_summary = not article.summary
-        needs_trends = not article.trend_tags
         needs_signals = not article.signal_tags
         needs_embed = storage.get_embedding(article.id) is None
 
-        if needs_summary or needs_trends or needs_signals:
+        if needs_summary or needs_signals:
             needs_llm.append(article)
         elif needs_embed:
             needs_embedding_only.append(article)
