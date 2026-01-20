@@ -297,8 +297,9 @@ def _run_verification_step(
             gaps["insights_missing_embeddings"] += 1
 
     # Track what will actually be processed (from limited list)
+    # NOTE: trend_tags come from EMBEDDING phase (cosine similarity), NOT LLM
     for article in articles:
-        needs_llm = not article.summary or not article.trend_tags or not article.signal_tags
+        needs_llm = not article.summary or not article.signal_tags
         needs_embedding = storage.get_embedding(article.id) is None
         if needs_llm:
             gaps["articles_needing_llm"].append(article)
