@@ -315,7 +315,7 @@ Respond with JSON:
     def update_story_with_article(self, story: Story, article: Article) -> Story:
         """Add an article to an existing story.
 
-        Updates keywords and refreshes story embedding if keywords changed significantly.
+        Updates keywords from the article's already-extracted metadata (NO LLM calls).
         """
         # Add article ID if not already present
         if article.id not in story.article_ids:
@@ -324,14 +324,19 @@ Respond with JSON:
         # Update last_updated timestamp
         story.last_updated = datetime.now()
 
-        # Update story metadata (keywords may evolve)
-        old_keyword_count = len(story.keywords)
-        new_keywords = self._extract_keywords(article)
-        keywords_added = 0
+        # Update story metadata using article's ALREADY EXTRACTED keywords (no LLM)
+        # Same pattern as create_new_story
+        if article.keywords:
+            try:
+                new_keywords = json.loads(article.keywords) if isinstance(article.keywords, str) else article.keywords
+            except (json.JSONDecodeError, TypeError):
+                new_keywords = []
+        else:
+            new_keywords = []
+
         for kw in new_keywords:
             if kw not in story.keywords:
                 story.keywords.append(kw)
-                keywords_added += 1
 
         # Keep only top keywords
         story.keywords = story.keywords[:20]
@@ -339,10 +344,6 @@ Respond with JSON:
         # Save updates
         self.storage.update_story(story)
         self.storage.update_article_story(article.id, story.id)
-
-        # NOTE: Story re-embedding is deferred to avoid model switching during LLM phase.
-        # Story embeddings are refreshed during the next embedding phase when needed.
-        # The keywords are stored, so semantic matching will still work reasonably well.
 
         return story
 
