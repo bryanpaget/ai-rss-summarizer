@@ -24,7 +24,7 @@ def main():
     print()
 
     # Get all articles for analysis
-    all_articles = storage.get_all_articles()
+    all_articles = storage.get_articles()
     print(f"Total articles in database: {len(all_articles)}")
     print()
 
