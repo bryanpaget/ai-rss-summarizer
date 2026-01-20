@@ -1833,14 +1833,14 @@ def generate_report(
     _run_pre_embedding_phase(storage, kb, embedding_service, stats, limit)
     console.print(f"  [dim]Step 2 completed in {time.time() - step_start:.1f}s[/dim]\n")
 
-    # Step 3: LLM Phase (now has embeddings to compare against)
+    # Step 3: LLM Phase - ONLY articles missing summary/tags (not already-processed ones)
     step_start = time.time()
-    processed_articles = _run_llm_phase(articles, storage, kb, provider, stats, embedding_service, limit)
+    processed_articles = _run_llm_phase(gaps["articles_needing_llm"], storage, kb, provider, stats, embedding_service, limit)
     console.print(f"  [dim]Step 3 completed in {time.time() - step_start:.1f}s[/dim]\n")
 
-    # Step 4: Embedding Phase (for new articles)
+    # Step 4: Embedding Phase - ONLY articles missing embeddings
     step_start = time.time()
-    _run_embedding_phase(articles, storage, kb, stats, embedding_service, limit)
+    _run_embedding_phase(gaps["articles_needing_embedding"], storage, kb, stats, embedding_service, limit)
     console.print(f"  [dim]Step 4 completed in {time.time() - step_start:.1f}s[/dim]\n")
 
     # Step 4.5: Batched Connection Detection (AFTER embeddings, no model switching)
