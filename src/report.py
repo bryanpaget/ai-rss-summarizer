@@ -1772,8 +1772,8 @@ def generate_report(
     if not isinstance(skipped_short, int):
         skipped_short = 0  # Handle mocked storage in tests
 
-    # Filter short articles at DB level - they'll never be long enough, no need to see them
-    articles = storage.get_unanalyzed_articles(exclude_spam=True, min_content_length=MIN_CONTENT_LENGTH)
+    # Get ALL articles with gaps (missing summary, tags, or embedding) - fill the backlog
+    articles = storage.get_articles_with_gaps(exclude_spam=True, min_content_length=MIN_CONTENT_LENGTH)
 
     if not articles and new_article_ids:
         articles = storage.get_articles_by_ids(new_article_ids)
