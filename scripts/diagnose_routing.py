@@ -50,7 +50,7 @@ def main():
     # VERSION 2: BROKEN CHANGE (get_articles_with_gaps → all to LLM)
     # =======================================================================
     print("-" * 70)
-    print("VERSION 2: BROKEN CHANGE (all gaps → all to LLM)")
+    print("VERSION 2: BROKEN CHANGE (all gaps -> all to LLM)")
     print("-" * 70)
 
     broken_selected = storage.get_articles_with_gaps(
