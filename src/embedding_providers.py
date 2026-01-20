@@ -220,71 +220,36 @@ class LMStudioProvider(EmbeddingProvider):
         return gateway.request_embedding(text)
 
     def embed_batch(self, texts: list[str]) -> list[list[float]]:
-        """Generate embeddings for multiple texts in ONE API call.
+        """Generate embeddings for multiple texts in ONE subprocess call.
 
-        Uses TRUE server-side batching - sends all texts in a single request
-        to the /v1/embeddings endpoint with input as an array.
+        Uses gateway.batch_embedding_direct() which:
+        1. Writes all texts to ONE file
+        2. Makes ONE subprocess call to gateway
+        3. Gateway loads embedding model (if needed)
+        4. Makes ONE API call with array input
+        5. Returns all embeddings
 
-        This is CRITICAL for performance:
-        - Gateway subprocess calls: ~7s overhead PER text
-        - Direct batch API call: ONE call for ALL texts
-
-        The embedding model must already be loaded. If not loaded,
-        make one gateway.request_embedding() call first to trigger model loading.
+        This maintains ALL gateway guarantees (model management, no race conditions)
+        while avoiding the N-subprocess-call overhead of the old approach.
         """
         if not texts:
             return []
 
-        # Ensure embedding model is loaded via ONE gateway call (once per session)
-        # This is a one-time ~7-10s cost to load the model
-        # All subsequent batch calls are fast (direct API)
-        if not self._model_loaded:
-            from safe_loading_gateway import get_gateway
-            gateway = get_gateway()
-            if not gateway.is_available():
-                raise EmbeddingProviderError(
-                    "Gateway not available. LM Studio must be running.\n"
-                    "Start LM Studio and ensure it's listening on localhost:1234"
-                )
+        from safe_loading_gateway import get_gateway, GatewayError, GatewayUnavailableError
 
-            # Trigger model load - gateway handles model switching
-            try:
-                gateway.request_embedding("model_load_trigger")
-                self._model_loaded = True
-            except Exception as e:
-                # If this fails, the model might not load - but try the batch anyway
-                pass
-
-        # TRUE batch API call directly to LM Studio
-        # Model should now be loaded, so direct call works
-        try:
-            response = httpx.post(
-                f"{self.url}/embeddings",
-                json={
-                    "input": texts,
-                    "model": self.model_name,
-                },
-                timeout=self.timeout * len(texts),  # Scale timeout with batch size
-            )
-
-            if not response.is_success:
-                raise EmbeddingProviderError(
-                    f"Batch embedding failed: {response.status_code} - {response.text}"
-                )
-
-            data = response.json()
-
-            # Response format: {"data": [{"embedding": [...], "index": 0}, ...]}
-            # Sort by index to maintain order
-            embeddings_data = sorted(data.get("data", []), key=lambda x: x.get("index", 0))
-            return [item["embedding"] for item in embeddings_data]
-
-        except httpx.TimeoutException:
+        gateway = get_gateway()
+        if not gateway.is_available():
             raise EmbeddingProviderError(
-                f"Batch embedding timed out after {self.timeout * len(texts)}s for {len(texts)} texts"
+                "Gateway not available. LM Studio must be running.\n"
+                "Start LM Studio and ensure it's listening on localhost:1234"
             )
-        except httpx.RequestError as e:
-            raise EmbeddingProviderError(f"Batch embedding request failed: {e}")
+
+        try:
+            return gateway.batch_embedding_direct(texts)
+        except GatewayUnavailableError as e:
+            raise EmbeddingProviderError(f"Gateway unavailable: {e}")
+        except GatewayError as e:
+            raise EmbeddingProviderError(f"Batch embedding failed: {e}")
 
 
 class OllamaProvider(EmbeddingProvider):
