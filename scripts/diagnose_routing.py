@@ -47,7 +47,7 @@ def main():
     print()
 
     # =======================================================================
-    # VERSION 2: BROKEN CHANGE (get_articles_with_gaps → all to LLM)
+    # VERSION 2: BROKEN CHANGE (get_articles_with_gaps -> all to LLM)
     # =======================================================================
     print("-" * 70)
     print("VERSION 2: BROKEN CHANGE (all gaps -> all to LLM)")
@@ -106,8 +106,8 @@ def main():
     print(f"Articles selected: {len(correct_selected)}")
     print()
     print(f"ROUTING:")
-    print(f"  → LLM phase: {len(needs_llm)} articles (missing summary/tags)")
-    print(f"  → Embedding only: {len(needs_embedding_only)} articles (have summary, need embedding)")
+    print(f"  -> LLM phase: {len(needs_llm)} articles (missing summary/tags)")
+    print(f"  -> Embedding only: {len(needs_embedding_only)} articles (have summary, need embedding)")
     print()
     print(f"EXISTING WORK TOUCHED: 0")
     print()
