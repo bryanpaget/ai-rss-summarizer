@@ -423,6 +423,40 @@ class Storage:
             rows = conn.execute(query, params).fetchall()
             return [self._row_to_article(row) for row in rows]
 
+    def get_articles_with_gaps(
+        self,
+        exclude_spam: bool = True,
+        min_content_length: int = 0,
+    ) -> list[Article]:
+        """Get all articles missing ANY processing step.
+
+        Returns articles where summary, trend_tags, signal_tags, OR embedding is NULL.
+        This is the default for filling gaps from previous runs.
+
+        Args:
+            exclude_spam: If True, excludes articles flagged as spam
+            min_content_length: Minimum content length (filters out short articles)
+        """
+        query = """SELECT * FROM articles
+                   WHERE (summary IS NULL
+                          OR trend_tags IS NULL
+                          OR signal_tags IS NULL
+                          OR embedding IS NULL)"""
+        params: list = []
+
+        if exclude_spam:
+            query += " AND (spam_status IS NULL OR spam_status != 'spam')"
+
+        if min_content_length > 0:
+            query += " AND content IS NOT NULL AND LENGTH(content) >= ?"
+            params.append(min_content_length)
+
+        query += " ORDER BY published DESC"
+
+        with self._connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+            return [self._row_to_article(row) for row in rows]
+
     def mark_as_analyzed(self, article_id: str) -> None:
         """Mark an article as analyzed."""
         with self._connect() as conn:
