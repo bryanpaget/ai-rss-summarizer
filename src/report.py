@@ -667,6 +667,7 @@ Return ONLY a JSON object in this exact format (no markdown, no explanation):
         else:
             # Article too short - mark extraction as done
             article_data[idx]["extraction_done"] = True
+            console.print(f"[dim][{idx + 1}/{total_articles}] {article.title[:50]}... (too short, skipped)[/dim]")
 
         # Submit tagging (if not already tagged)
         if not article.signal_tags:
@@ -676,6 +677,11 @@ Return ONLY a JSON object in this exact format (no markdown, no explanation):
         else:
             # Already tagged - mark tagging as done
             article_data[idx]["tagging_done"] = True
+
+        # If BOTH are already done (too short + already tagged), finalize immediately
+        # Otherwise this article would never be finalized since no completion event fires
+        if article_data[idx]["extraction_done"] and article_data[idx]["tagging_done"]:
+            maybe_finalize_article(idx, article)
 
     def fill_pipeline():
         """Submit new articles to keep pipeline full."""
