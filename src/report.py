@@ -457,7 +457,7 @@ def _run_pre_embedding_phase(
     insights_needing_embedding = [i for i in insights if not embedding_service.get_embedding(i.id, "insight")]
 
     if insights_needing_embedding:
-        progress = BatchProgress(len(insights_needing_embedding), batch_size=10, label="insights")
+        progress = BatchProgress(len(insights_needing_embedding), batch_size=50, label="insights")
         console.print(f"  Embedding {progress.total_items} insights in {progress.num_batches} batches...")
 
         for batch_num, batch in progress.iterate(insights_needing_embedding):
