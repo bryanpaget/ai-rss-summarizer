@@ -503,7 +503,7 @@ def _run_pre_embedding_phase(
     stories_needing_embedding = [s for s in stories if not embedding_service.get_embedding(s.id, "story")]
 
     if stories_needing_embedding:
-        progress = BatchProgress(len(stories_needing_embedding), batch_size=10, label="stories")
+        progress = BatchProgress(len(stories_needing_embedding), batch_size=50, label="stories")
         console.print(f"  Embedding {progress.total_items} stories in {progress.num_batches} batches...")
 
         for batch_num, batch in progress.iterate(stories_needing_embedding):
@@ -1029,7 +1029,7 @@ def _run_embedding_phase(
     stories_needing_embedding = [s for s in stories if not embedding_service.get_embedding(s.id, "story")]
 
     if stories_needing_embedding:
-        progress = BatchProgress(len(stories_needing_embedding), batch_size=10, label="stories")
+        progress = BatchProgress(len(stories_needing_embedding), batch_size=50, label="stories")
         console.print(f"  Embedding {progress.total_items} new stories in {progress.num_batches} batches...")
 
         for batch_num, batch in progress.iterate(stories_needing_embedding):
