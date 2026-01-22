@@ -288,6 +288,72 @@ class EmbeddingService:
         except EmbeddingProviderError as e:
             raise EmbeddingError(f"Batch embedding failed: {e}") from e
 
+    def embed_batch_with_chunks(
+        self, texts: list[str]
+    ) -> list[tuple[EmbeddingResult, list[tuple[str, list[float]]]]]:
+        """Generate embeddings for multiple texts, preserving chunk data.
+
+        Like embed_batch but also returns individual chunk embeddings for
+        fine-grained matching. Uses ONE API call for all chunks across all texts.
+
+        Args:
+            texts: List of texts to embed.
+
+        Returns:
+            List of tuples, one per input text:
+                - EmbeddingResult with averaged vector
+                - List of (chunk_text, chunk_embedding) tuples
+        """
+        if not texts:
+            return []
+
+        try:
+            provider = self._get_provider()
+
+            # Chunk all texts upfront
+            all_chunks = []  # (text_idx, chunk_text)
+            text_chunk_ranges = []  # (start_idx, end_idx) for each text
+
+            for text_idx, text in enumerate(texts):
+                start_idx = len(all_chunks)
+                if len(text) <= 2000:
+                    all_chunks.append((text_idx, text))
+                else:
+                    chunks = self._chunk_at_sentences(text, max_chunk_size=1800)
+                    for chunk in chunks:
+                        all_chunks.append((text_idx, chunk))
+                end_idx = len(all_chunks)
+                text_chunk_ranges.append((start_idx, end_idx))
+
+            # ONE API call for all chunks
+            chunk_texts = [chunk for _, chunk in all_chunks]
+            all_vectors = provider.embed_batch(chunk_texts)
+
+            # Reassemble results per text
+            results = []
+            for text_idx, (start_idx, end_idx) in enumerate(text_chunk_ranges):
+                chunk_vectors = all_vectors[start_idx:end_idx]
+                chunk_texts_for_text = [all_chunks[i][1] for i in range(start_idx, end_idx)]
+
+                # Average for backward compatibility
+                if len(chunk_vectors) == 1:
+                    averaged = chunk_vectors[0]
+                else:
+                    averaged = self._average_vectors(chunk_vectors)
+
+                result = EmbeddingResult(
+                    vector=averaged,
+                    model=provider.model_name,
+                    dimensions=len(averaged),
+                )
+
+                chunk_data = list(zip(chunk_texts_for_text, chunk_vectors))
+                results.append((result, chunk_data))
+
+            return results
+        except EmbeddingProviderError as e:
+            raise EmbeddingError(f"Batch embedding with chunks failed: {e}") from e
+
     def embed_article(self, article: Article) -> EmbeddingResult:
         """Generate embedding for an article.
 
