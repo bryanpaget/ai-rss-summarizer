@@ -464,7 +464,7 @@ def _run_pre_embedding_phase(
     insights_needing_embedding = [i for i in insights if not embedding_service.get_embedding(i.id, "insight")]
 
     if insights_needing_embedding:
-        progress = BatchProgress(len(insights_needing_embedding), batch_size=50, label="insights")
+        progress = BatchProgress(len(insights_needing_embedding), batch_size=EMBEDDING_BATCH_SIZE, label="insights")
         console.print(f"  Embedding {progress.total_items} insights in {progress.num_batches} batches...")
 
         for batch_num, batch in progress.iterate(insights_needing_embedding):
@@ -510,7 +510,7 @@ def _run_pre_embedding_phase(
     stories_needing_embedding = [s for s in stories if not embedding_service.get_embedding(s.id, "story")]
 
     if stories_needing_embedding:
-        progress = BatchProgress(len(stories_needing_embedding), batch_size=50, label="stories")
+        progress = BatchProgress(len(stories_needing_embedding), batch_size=EMBEDDING_BATCH_SIZE, label="stories")
         console.print(f"  Embedding {progress.total_items} stories in {progress.num_batches} batches...")
 
         for batch_num, batch in progress.iterate(stories_needing_embedding):
@@ -963,7 +963,7 @@ def _run_embedding_phase(
     if not needs_embedding:
         console.print("  [dim]All articles already have embeddings[/dim]")
     else:
-        progress = BatchProgress(len(needs_embedding), batch_size=50, label="articles")
+        progress = BatchProgress(len(needs_embedding), batch_size=EMBEDDING_BATCH_SIZE, label="articles")
         console.print(f"  Embedding {progress.total_items} articles in {progress.num_batches} batches...")
 
         for batch_num, batch in progress.iterate(needs_embedding):
@@ -1008,7 +1008,7 @@ def _run_embedding_phase(
     # Only tag articles that HAVE embeddings - skip those that don't
     needs_trends = [a for a in articles if not a.trend_tags and storage.get_embedding(a.id) is not None]
     if needs_trends:
-        progress = BatchProgress(len(needs_trends), batch_size=50, label="articles")
+        progress = BatchProgress(len(needs_trends), batch_size=EMBEDDING_BATCH_SIZE, label="articles")
         console.print(f"  Tagging {progress.total_items} articles with trend categories...")
 
         for batch_num, batch in progress.iterate(needs_trends):
@@ -1036,7 +1036,7 @@ def _run_embedding_phase(
     stories_needing_embedding = [s for s in stories if not embedding_service.get_embedding(s.id, "story")]
 
     if stories_needing_embedding:
-        progress = BatchProgress(len(stories_needing_embedding), batch_size=50, label="stories")
+        progress = BatchProgress(len(stories_needing_embedding), batch_size=EMBEDDING_BATCH_SIZE, label="stories")
         console.print(f"  Embedding {progress.total_items} new stories in {progress.num_batches} batches...")
 
         for batch_num, batch in progress.iterate(stories_needing_embedding):
@@ -1465,7 +1465,7 @@ def _run_connection_detection(
             insights_to_embed.append(ins)
 
     if insights_to_embed:
-        progress = BatchProgress(len(insights_to_embed), batch_size=50, label="insights")
+        progress = BatchProgress(len(insights_to_embed), batch_size=EMBEDDING_BATCH_SIZE, label="insights")
         console.print(f"  Embedding {progress.total_items} new insights in {progress.num_batches} batches...")
 
         for batch_num, batch in progress.iterate(insights_to_embed):
