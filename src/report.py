@@ -681,14 +681,15 @@ Return ONLY a JSON object in this exact format (no markdown, no explanation):
             next_extraction_idx += 1
 
     def process_extraction_complete(idx: int, article: Article, response: str):
-        """Handle completed extraction - process results and submit tagging."""
+        """Handle completed extraction - process results."""
         nonlocal total_llm_calls
 
         data = article_data[idx]
+        data["extraction_done"] = True
 
         # Article header
         console.print(f"[bold cyan][{idx + 1}/{total_articles}][/bold cyan] {article.title}")
-        console.print("  [dim]- Extracting insights and facts...[/dim]")
+        console.print("  [dim]- Extraction complete...[/dim]")
 
         if response is None:
             console.print("    [dim]Article too short, skipped[/dim]")
@@ -739,8 +740,8 @@ Return ONLY a JSON object in this exact format (no markdown, no explanation):
                 console.print(f"    [red]ERROR: {error_msg}[/red]")
                 stats["errors"] += 1
 
-        # Submit tagging (non-blocking)
-        submit_tagging(idx, article)
+        # Check if article is fully done
+        maybe_finalize_article(idx, article)
 
     def process_tagging_complete(idx: int, article: Article, response: str):
         """Handle completed tagging - store tags and finalize article."""
