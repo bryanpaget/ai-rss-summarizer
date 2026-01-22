@@ -1458,7 +1458,7 @@ def _run_connection_detection(
             insights_to_embed.append(ins)
 
     if insights_to_embed:
-        progress = BatchProgress(len(insights_to_embed), batch_size=10, label="insights")
+        progress = BatchProgress(len(insights_to_embed), batch_size=50, label="insights")
         console.print(f"  Embedding {progress.total_items} new insights in {progress.num_batches} batches...")
 
         for batch_num, batch in progress.iterate(insights_to_embed):
