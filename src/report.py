@@ -70,6 +70,14 @@ def _cosine_similarity(vec1: list[float], vec2: list[float]) -> float:
     return dot_product / (mag1 * mag2)
 
 
+def _timed(name: str, func, *args, **kwargs):
+    """Execute a function and print its execution time."""
+    start = time.time()
+    result = func(*args, **kwargs)
+    console.print(f"  [dim]{name} completed in {time.time() - start:.1f}s[/dim]\n")
+    return result
+
+
 class BatchProgress:
     """
     Helper for batch processing with timing and ETA prediction.
