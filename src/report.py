@@ -37,7 +37,7 @@ from .knowledge import (
 from .llm_providers import get_best_provider, get_setup_instructions
 from .rss import fetch_all_feeds, load_feeds
 from .trends import analyze_article
-from .signal_tagger import SignalTagger
+from .signal_tagger import SignalTagger, SignalTags
 from .embeddings import EmbeddingService
 from .clustering import StoryClusterer
 from .storage_perspectives import add_perspective_methods
