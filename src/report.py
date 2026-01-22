@@ -829,13 +829,12 @@ Return ONLY a JSON object in this exact format (no markdown, no explanation):
         # Check each in-flight request
         for i, (work_type, idx, article, handle, start_time, extra) in enumerate(in_flight):
             if handle is None:
-                # No LLM call needed (article too short)
+                # No LLM call needed (article too short) - shouldn't happen with new logic
                 in_flight.pop(i)
                 if work_type == "extraction":
                     process_extraction_complete(idx, article, None)
-                    # If already tagged, finalize immediately
-                    if article.signal_tags:
-                        finalize_without_tagging(idx, article)
+                else:
+                    process_tagging_complete(idx, article, None)
                 fill_pipeline()
                 break
 
@@ -845,9 +844,6 @@ Return ONLY a JSON object in this exact format (no markdown, no explanation):
                 in_flight.pop(i)
                 if work_type == "extraction":
                     process_extraction_complete(idx, article, response)
-                    # If already tagged, finalize immediately
-                    if article.signal_tags:
-                        finalize_without_tagging(idx, article)
                 else:  # tagging
                     process_tagging_complete(idx, article, response)
                 fill_pipeline()
