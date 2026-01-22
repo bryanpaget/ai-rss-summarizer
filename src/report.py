@@ -1936,36 +1936,16 @@ def generate_report(
     # Track total pipeline time
     pipeline_start = time.time()
 
-    # Step 1: Verification (Self-Healing) - Corpus State Snapshot
-    step_start = time.time()
-    gaps = _run_verification_step(storage, kb, articles, embedding_service, limit, MIN_CONTENT_LENGTH, new_article_ids)
-    console.print(f"  [dim]Step 1 completed in {time.time() - step_start:.1f}s[/dim]\n")
-
-    # Step 2: Pre-embed existing stories/insights
-    # This MUST happen before LLM phase so detect_connections has embeddings to compare against
-    step_start = time.time()
-    _run_pre_embedding_phase(storage, kb, embedding_service, stats, limit)
-    console.print(f"  [dim]Step 2 completed in {time.time() - step_start:.1f}s[/dim]\n")
-
-    # Step 3: LLM Phase - ONLY articles missing summary/tags (not already-processed ones)
-    step_start = time.time()
-    processed_articles = _run_llm_phase(gaps["articles_needing_llm"], storage, kb, provider, stats, embedding_service, limit)
-    console.print(f"  [dim]Step 3 completed in {time.time() - step_start:.1f}s[/dim]\n")
-
-    # Step 4: Embedding Phase - ONLY articles missing embeddings
-    step_start = time.time()
-    _run_embedding_phase(gaps["articles_needing_embedding"], storage, kb, stats, embedding_service, limit)
-    console.print(f"  [dim]Step 4 completed in {time.time() - step_start:.1f}s[/dim]\n")
-
-    # Step 4.5: Batched Connection Detection (AFTER embeddings, no model switching)
-    step_start = time.time()
-    _run_connection_detection(processed_articles, kb, provider, stats, embedding_service, limit)
-    console.print(f"  [dim]Step 4.5 completed in {time.time() - step_start:.1f}s[/dim]\n")
-
-    # Step 5: Story Matching
-    step_start = time.time()
-    _run_story_matching(articles, storage, kb, provider, stats, embedding_service, limit)
-    console.print(f"  [dim]Step 5 completed in {time.time() - step_start:.1f}s[/dim]\n")
+    # Run pipeline twice - second pass catches anything created in first pass
+    for pass_num in range(2):
+        if pass_num == 1:
+            console.print("[bold]Verification Pass:[/bold]\n")
+        gaps = _timed("Step 1", _run_verification_step, storage, kb, articles, embedding_service, limit, MIN_CONTENT_LENGTH, new_article_ids)
+        _timed("Step 2", _run_pre_embedding_phase, storage, kb, embedding_service, stats, limit)
+        processed_articles = _timed("Step 3", _run_llm_phase, gaps["articles_needing_llm"], storage, kb, provider, stats, embedding_service, limit)
+        _timed("Step 4", _run_embedding_phase, gaps["articles_needing_embedding"], storage, kb, stats, embedding_service, limit)
+        _timed("Step 4.5", _run_connection_detection, processed_articles, kb, provider, stats, embedding_service, limit)
+        _timed("Step 5", _run_story_matching, articles, storage, kb, provider, stats, embedding_service, limit)
 
     # Show total pipeline time
     total_time = time.time() - pipeline_start
