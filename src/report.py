@@ -956,7 +956,7 @@ def _run_embedding_phase(
     if not needs_embedding:
         console.print("  [dim]All articles already have embeddings[/dim]")
     else:
-        progress = BatchProgress(len(needs_embedding), batch_size=10, label="articles")
+        progress = BatchProgress(len(needs_embedding), batch_size=50, label="articles")
         console.print(f"  Embedding {progress.total_items} articles in {progress.num_batches} batches...")
 
         for batch_num, batch in progress.iterate(needs_embedding):
@@ -965,27 +965,33 @@ def _run_embedding_phase(
             batch_errors = 0
             limit_reached = False
 
-            for article in batch:
-                if limit > 0 and progress.total_processed + batch_success >= limit:
-                    limit_reached = True
-                    break
-                try:
-                    semantic_card = _create_semantic_card(article)
-                    # Use embed_text_with_chunks to preserve individual chunk embeddings
-                    result, chunk_data = embedding_service.embed_text_with_chunks(semantic_card)
-                    # Save averaged embedding (for backward compatibility)
+            # Check limit before processing batch
+            if limit > 0 and progress.total_processed >= limit:
+                progress.end_batch(0, 0, stopped=True)
+                break
+
+            # Apply limit to batch
+            if limit > 0:
+                remaining = limit - progress.total_processed
+                batch = batch[:remaining]
+
+            try:
+                # Create semantic cards for all articles in batch
+                semantic_cards = [_create_semantic_card(article) for article in batch]
+                # ONE API call for entire batch, preserving chunk data
+                results = embedding_service.embed_batch_with_chunks(semantic_cards)
+
+                # Save each result
+                for article, (result, chunk_data) in zip(batch, results):
                     storage.save_embedding(article.id, result.vector)
-                    # Save individual chunk embeddings (for fine-grained matching)
                     storage.save_chunk_embeddings(article.id, chunk_data)
                     batch_success += 1
-                except Exception as e:
-                    console.print(f"\n  [red]ERROR: {e}[/red]", end="")
-                    stats["errors"] += 1
-                    batch_errors += 1
+            except Exception as e:
+                console.print(f"\n  [red]Batch embedding failed: {e}[/red]", end="")
+                stats["errors"] += len(batch)
+                batch_errors = len(batch)
 
             progress.end_batch(batch_success, batch_errors, stopped=limit_reached)
-            if limit_reached:
-                break
 
         progress.summary(f"Embedded {progress.total_processed} articles")
         stats["embeddings_generated"] = progress.total_processed
