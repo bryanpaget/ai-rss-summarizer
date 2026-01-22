@@ -744,10 +744,11 @@ Return ONLY a JSON object in this exact format (no markdown, no explanation):
         maybe_finalize_article(idx, article)
 
     def process_tagging_complete(idx: int, article: Article, response: str):
-        """Handle completed tagging - store tags and finalize article."""
-        nonlocal total_llm_calls, completed_count
+        """Handle completed tagging - store tags."""
+        nonlocal total_llm_calls
 
         data = article_data[idx]
+        data["tagging_done"] = True
 
         console.print(f"  [dim]- Tagging complete for [{idx + 1}]...[/dim]")
 
@@ -772,50 +773,18 @@ Return ONLY a JSON object in this exact format (no markdown, no explanation):
                 data["errors"].append("Failed to parse tagging response")
                 console.print(f"    [yellow]Could not parse tagging response[/yellow]")
 
-        # Mark article as analyzed and complete
-        stats["processed"] += 1
-        storage.mark_as_analyzed(article.id)
-        completed_count += 1
+        # Check if article is fully done
+        maybe_finalize_article(idx, article)
 
-        # Store processed data
-        processed_articles.append({
-            "article": article,
-            "insights": data["insights"],
-            "triples": data["triples"],
-            "connections": [],
-            "errors": data["errors"],
-        })
-
-        # Summary with timing and ETA
-        article_elapsed = time.time() - data["start_time"]
-        articles_remaining = total_articles - completed_count
-
-        if articles_remaining > 0 and completed_count > 0:
-            step_elapsed = time.time() - step_start
-            rate_per_article = step_elapsed / completed_count
-            eta_seconds = articles_remaining * rate_per_article
-            eta_str = f"~{format_duration(eta_seconds)} remaining"
-
-            if data["errors"]:
-                console.print(f"  [yellow][!] {article_elapsed:.1f}s | {eta_str}[/yellow]")
-            else:
-                console.print(f"  [bold green][OK][/bold green] [dim]{article_elapsed:.1f}s | {eta_str}[/dim]")
-        else:
-            if data["errors"]:
-                console.print(f"  [yellow][!] {article_elapsed:.1f}s[/yellow]")
-            else:
-                console.print(f"  [bold green][OK][/bold green] [dim]{article_elapsed:.1f}s[/dim]")
-        console.print()
-
-    def finalize_without_tagging(idx: int, article: Article):
-        """Finalize article that was already tagged or skipped tagging."""
+    def maybe_finalize_article(idx: int, article: Article):
+        """Finalize article if both extraction and tagging are complete."""
         nonlocal completed_count
 
         data = article_data[idx]
 
-        # Check if already tagged
-        if article.signal_tags:
-            console.print(f"  [dim]- Already tagged[/dim]")
+        # Only finalize when both are done
+        if not (data["extraction_done"] and data["tagging_done"]):
+            return
 
         # Mark article as analyzed and complete
         stats["processed"] += 1
