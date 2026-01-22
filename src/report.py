@@ -161,19 +161,24 @@ _cleanup_registered = False
 
 
 def _cleanup_gateway():
-    """Clean up gateway on exit - clear queue and unload models."""
+    """Clean up gateway on exit - cancel pending requests only.
+
+    IMPORTANT: Do NOT unload the model. The gateway manages model lifecycle
+    (auto-unloads after 5 minutes idle). Unloading here would kill the model
+    for other processes using the same gateway.
+    """
     try:
         from safe_loading_gateway import get_gateway
         gateway = get_gateway()
-        gateway.clear_queue()
-        gateway.unload()  # Free VRAM
+        gateway.clear_queue()  # Cancel our pending requests
+        # Do NOT call gateway.unload() - let gateway manage model lifecycle
     except Exception:
         pass  # Best effort cleanup
 
 
 def _signal_handler(signum, frame):
     """Handle interrupt signals by cleaning up and exiting."""
-    console.print("\n[yellow]Interrupted - cleaning up and unloading models...[/yellow]")
+    console.print("\n[yellow]Interrupted - canceling pending requests...[/yellow]")
     _cleanup_gateway()
     sys.exit(130)  # Standard exit code for SIGINT
 
