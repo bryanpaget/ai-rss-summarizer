@@ -47,6 +47,13 @@ console = Console(force_terminal=True, legacy_windows=True)
 
 
 # =============================================================================
+# CONFIGURATION - Change these values to tune performance
+# =============================================================================
+
+EMBEDDING_BATCH_SIZE = 100  # Number of items per embedding API call
+
+
+# =============================================================================
 # HELPER FUNCTIONS
 # =============================================================================
 
