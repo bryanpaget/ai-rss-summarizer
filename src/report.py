@@ -641,34 +641,43 @@ Return ONLY a JSON object in this exact format (no markdown, no explanation):
         except Exception:
             return None
 
-    def submit_extraction(idx: int):
-        """Submit extraction request for article at index."""
-        article = articles_to_process[idx]
-        prompt = build_extraction_prompt(article)
-        start_time = time.time()
-        article_data[idx] = {"insights": [], "triples": [], "errors": [], "start_time": start_time}
+    def submit_article(idx: int):
+        """Submit BOTH extraction and tagging for an article at once.
 
-        if prompt:
-            handle = gateway.submit_text(prompt, temperature=0.3)
+        Tagging doesn't depend on extraction results - both just need article content.
+        Submitting both together keeps the queue mixed and avoids batch-by-type behavior.
+        """
+        article = articles_to_process[idx]
+        start_time = time.time()
+        article_data[idx] = {
+            "insights": [], "triples": [], "errors": [], "start_time": start_time,
+            "extraction_done": False, "tagging_done": False
+        }
+
+        # Submit extraction
+        extraction_prompt = build_extraction_prompt(article)
+        if extraction_prompt:
+            handle = gateway.submit_text(extraction_prompt, temperature=0.3)
             in_flight.append(("extraction", idx, article, handle, start_time, None))
         else:
-            # Article too short - mark as needing immediate completion
-            in_flight.append(("extraction", idx, article, None, start_time, None))
+            # Article too short - mark extraction as done
+            article_data[idx]["extraction_done"] = True
 
-    def submit_tagging(idx: int, article: Article):
-        """Submit tagging request for article."""
-        if article.signal_tags:
-            # Already tagged, skip
-            return
-        prompt = build_tagging_prompt(article)
-        handle = gateway.submit_text(prompt, temperature=0.3)
-        in_flight.append(("tagging", idx, article, handle, time.time(), None))
+        # Submit tagging (if not already tagged)
+        if not article.signal_tags:
+            tagging_prompt = build_tagging_prompt(article)
+            handle = gateway.submit_text(tagging_prompt, temperature=0.3)
+            in_flight.append(("tagging", idx, article, handle, start_time, None))
+        else:
+            # Already tagged - mark tagging as done
+            article_data[idx]["tagging_done"] = True
 
     def fill_pipeline():
-        """Submit new extractions to keep pipeline full."""
+        """Submit new articles to keep pipeline full."""
         nonlocal next_extraction_idx
+        # Each article adds up to 2 requests, so check against PIPELINE_SIZE
         while len(in_flight) < PIPELINE_SIZE and next_extraction_idx < total_articles:
-            submit_extraction(next_extraction_idx)
+            submit_article(next_extraction_idx)
             next_extraction_idx += 1
 
     def process_extraction_complete(idx: int, article: Article, response: str):
