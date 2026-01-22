@@ -554,8 +554,9 @@ def _run_llm_phase(
     """
     Step 3: LLM processing for all articles.
 
-    Generates: summaries, insights, facts (triples), signal tags, trend tags.
-    Uses pipelining to keep 2 requests in flight at all times.
+    Generates: summaries, insights, facts (triples), signal tags.
+    Uses pipelining to keep ~5 requests in flight at all times.
+    Both extraction and tagging requests share the same queue.
 
     NOTE: Model loading is handled by the gateway - no ensure_*_model() calls needed.
     The gateway automatically loads the correct model based on request type.
@@ -564,13 +565,12 @@ def _run_llm_phase(
     """
     from safe_loading_gateway import get_gateway
     from .knowledge import build_extraction_prompt, process_extraction_response
+    from .constitution import get_constitution_context
 
     console.print("[bold]Step 3:[/bold] LLM Analysis...")
     console.print(f"  [green]Using {provider.name}[/green]")
 
     gateway = get_gateway()
-    tagger = SignalTagger(use_llm=True, provider=provider)
-    processed_articles = []
     step_start = time.time()
     total_llm_calls = 0
 
@@ -584,53 +584,117 @@ def _run_llm_phase(
         console.print(f"  [dim]Processing {limit} of {len(articles)} articles (limit)[/dim]")
         console.print()
 
-    # Pipelining: keep up to 2 extraction requests in flight
-    PIPELINE_SIZE = 2
-    in_flight = []  # List of (idx, article, handle, start_time)
-    next_idx = 0
+    # Unified pipeline: keep ~5 LLM requests in flight (extraction OR tagging)
+    PIPELINE_SIZE = 5
+    in_flight = []  # List of (work_type, idx, article, handle, start_time, extra_data)
+    # work_type: "extraction" or "tagging"
+    # extra_data: for tagging, contains {"insights": [], "triples": []} from extraction
+
+    next_extraction_idx = 0
     completed_count = 0
+    processed_articles = []
 
-    def submit_next():
-        """Submit next article for extraction if available."""
-        nonlocal next_idx
-        if next_idx < total_articles:
-            article = articles_to_process[next_idx]
-            prompt = build_extraction_prompt(article)
-            if prompt:
-                handle = gateway.submit_text(prompt, temperature=0.3)
-                in_flight.append((next_idx, article, handle, time.time()))
-            else:
-                # Article too short, skip but still record it
-                in_flight.append((next_idx, article, None, time.time()))
-            next_idx += 1
+    # Track per-article state
+    article_data = {}  # idx -> {"insights": [], "triples": [], "errors": [], "start_time": ...}
 
-    def process_completed(idx: int, article: Article, response: str, article_start: float):
-        """Process a completed extraction."""
-        nonlocal total_llm_calls, completed_count
+    def build_tagging_prompt(article: Article) -> str:
+        """Build the signal tagging prompt for an article."""
+        constitution_context = get_constitution_context()
+        return f"""{constitution_context}Analyze this article and assign appropriate tags from each category.
 
-        article_errors = []
-        insights = []
-        triples = []
+Article Title: {article.title}
+Article Content: {article.content}
+
+Tag Categories:
+- Source Type: primary, secondary, aggregator, press-release, speculative, satirical
+- Evidence: well-sourced, single-source, anonymous-sources, documented, unverified
+- Reasoning: logical, non-sequitur, cherry-picked, balanced
+- Tone: factual, analytical, opinion, sensational, spicy, unhinged
+- Actionability: actionable, awareness, noise
+
+Also determine if this is advertising/promotional content:
+- is_ad: true if this is a product roundup, buying guide, sponsored content, affiliate content, or promotional material (e.g. "Best Baby Gear 2024", "Top 10 Products", buyer's guides). false if it's genuine news/analysis.
+
+Guidelines:
+- Assign 1-2 tags per category that best describe the article
+- Be concise and accurate
+- Consider the overall impression, not just individual words
+
+Return ONLY a JSON object in this exact format (no markdown, no explanation):
+{{
+  "source_type": ["tag1"],
+  "evidence": ["tag1"],
+  "reasoning": ["tag1"],
+  "tone": ["tag1"],
+  "actionability": ["tag1"],
+  "is_ad": false
+}}"""
+
+    def parse_tagging_response(response: str) -> Optional[dict]:
+        """Parse tagging LLM response into dict. Returns None on failure."""
+        try:
+            text = response.strip()
+            if text.startswith("```"):
+                lines = text.split("\n")
+                text = "\n".join(line for line in lines if not line.startswith("```"))
+            return json.loads(text)
+        except Exception:
+            return None
+
+    def submit_extraction(idx: int):
+        """Submit extraction request for article at index."""
+        article = articles_to_process[idx]
+        prompt = build_extraction_prompt(article)
+        start_time = time.time()
+        article_data[idx] = {"insights": [], "triples": [], "errors": [], "start_time": start_time}
+
+        if prompt:
+            handle = gateway.submit_text(prompt, temperature=0.3)
+            in_flight.append(("extraction", idx, article, handle, start_time, None))
+        else:
+            # Article too short - mark as needing immediate completion
+            in_flight.append(("extraction", idx, article, None, start_time, None))
+
+    def submit_tagging(idx: int, article: Article):
+        """Submit tagging request for article."""
+        if article.signal_tags:
+            # Already tagged, skip
+            return
+        prompt = build_tagging_prompt(article)
+        handle = gateway.submit_text(prompt, temperature=0.3)
+        in_flight.append(("tagging", idx, article, handle, time.time(), None))
+
+    def fill_pipeline():
+        """Submit new extractions to keep pipeline full."""
+        nonlocal next_extraction_idx
+        while len(in_flight) < PIPELINE_SIZE and next_extraction_idx < total_articles:
+            submit_extraction(next_extraction_idx)
+            next_extraction_idx += 1
+
+    def process_extraction_complete(idx: int, article: Article, response: str):
+        """Handle completed extraction - process results and submit tagging."""
+        nonlocal total_llm_calls
+
+        data = article_data[idx]
 
         # Article header
         console.print(f"[bold cyan][{idx + 1}/{total_articles}][/bold cyan] {article.title}")
         console.print("  [dim]- Extracting insights and facts...[/dim]")
 
         if response is None:
-            # Article was too short
             console.print("    [dim]Article too short, skipped[/dim]")
         else:
             total_llm_calls += 1
             try:
                 extraction = process_extraction_response(response, article, kb)
-                insights = extraction.insights
-                triples = extraction.new_triples
+                data["insights"] = extraction.insights
+                data["triples"] = extraction.new_triples
 
                 # Report insights
-                for ins in insights:
+                for ins in extraction.insights:
                     stats["insights"] += 1
                     console.print(f"    [green]+[/green] {ins.content}")
-                if not insights:
+                if not extraction.insights:
                     console.print("    [dim]No insights extracted[/dim]")
 
                 # Report triples
@@ -662,41 +726,43 @@ def _run_llm_phase(
 
             except Exception as e:
                 error_msg = f"Extraction failed: {e}"
-                article_errors.append(error_msg)
+                data["errors"].append(error_msg)
                 console.print(f"    [red]ERROR: {error_msg}[/red]")
                 stats["errors"] += 1
 
-        # --- Tagging (still synchronous for simplicity) ---
-        console.print("  [dim]- Tagging...[/dim]")
-        tag_output = []
+        # Submit tagging (non-blocking)
+        submit_tagging(idx, article)
 
-        if not article.signal_tags:
-            try:
-                signal_tags = tagger.tag_article(article)
-                total_llm_calls += 1
+    def process_tagging_complete(idx: int, article: Article, response: str):
+        """Handle completed tagging - store tags and finalize article."""
+        nonlocal total_llm_calls, completed_count
+
+        data = article_data[idx]
+
+        console.print(f"  [dim]- Tagging complete for [{idx + 1}]...[/dim]")
+
+        if response:
+            total_llm_calls += 1
+            tags_data = parse_tagging_response(response)
+            if tags_data:
+                signal_tags = SignalTags(
+                    source_type=tags_data.get("source_type", ["secondary"]),
+                    evidence=tags_data.get("evidence", ["single-source"]),
+                    reasoning=tags_data.get("reasoning", ["logical"]),
+                    tone=tags_data.get("tone", ["factual"]),
+                    actionability=tags_data.get("actionability", ["awareness"]),
+                    is_ad=tags_data.get("is_ad", False),
+                )
                 storage.update_signal_tags(article.id, signal_tags.to_json())
                 article.signal_tags = signal_tags.to_json()
                 compact = signal_tags.to_compact_string()
                 if compact:
-                    tag_output.append(f"signal: {compact}")
-            except Exception as e:
-                error_msg = f"Signal tagging failed: {e}"
-                article_errors.append(error_msg)
-                console.print(f"    [red]ERROR: {error_msg}[/red]")
-                stats["errors"] += 1
+                    console.print(f"    [magenta]signal: {compact}[/magenta]")
+            else:
+                data["errors"].append("Failed to parse tagging response")
+                console.print(f"    [yellow]Could not parse tagging response[/yellow]")
 
-        if tag_output:
-            console.print(f"    [magenta]{' | '.join(tag_output)}[/magenta]")
-        else:
-            existing = []
-            if article.trend_tags:
-                existing.append(f"trends: {article.trend_tags}")
-            if article.signal_tags:
-                existing.append("signal: set")
-            if existing:
-                console.print(f"    [dim]Already tagged ({', '.join(existing)})[/dim]")
-
-        # Mark as analyzed
+        # Mark article as analyzed and complete
         stats["processed"] += 1
         storage.mark_as_analyzed(article.id)
         completed_count += 1
@@ -704,14 +770,14 @@ def _run_llm_phase(
         # Store processed data
         processed_articles.append({
             "article": article,
-            "insights": insights,
-            "triples": triples,
+            "insights": data["insights"],
+            "triples": data["triples"],
             "connections": [],
-            "errors": article_errors,
+            "errors": data["errors"],
         })
 
         # Summary with timing and ETA
-        article_elapsed = time.time() - article_start
+        article_elapsed = time.time() - data["start_time"]
         articles_remaining = total_articles - completed_count
 
         if articles_remaining > 0 and completed_count > 0:
@@ -720,39 +786,92 @@ def _run_llm_phase(
             eta_seconds = articles_remaining * rate_per_article
             eta_str = f"~{format_duration(eta_seconds)} remaining"
 
-            if article_errors:
+            if data["errors"]:
                 console.print(f"  [yellow][!] {article_elapsed:.1f}s | {eta_str}[/yellow]")
             else:
                 console.print(f"  [bold green][OK][/bold green] [dim]{article_elapsed:.1f}s | {eta_str}[/dim]")
         else:
-            if article_errors:
+            if data["errors"]:
+                console.print(f"  [yellow][!] {article_elapsed:.1f}s[/yellow]")
+            else:
+                console.print(f"  [bold green][OK][/bold green] [dim]{article_elapsed:.1f}s[/dim]")
+        console.print()
+
+    def finalize_without_tagging(idx: int, article: Article):
+        """Finalize article that was already tagged or skipped tagging."""
+        nonlocal completed_count
+
+        data = article_data[idx]
+
+        # Check if already tagged
+        if article.signal_tags:
+            console.print(f"  [dim]- Already tagged[/dim]")
+
+        # Mark article as analyzed and complete
+        stats["processed"] += 1
+        storage.mark_as_analyzed(article.id)
+        completed_count += 1
+
+        # Store processed data
+        processed_articles.append({
+            "article": article,
+            "insights": data["insights"],
+            "triples": data["triples"],
+            "connections": [],
+            "errors": data["errors"],
+        })
+
+        # Summary with timing and ETA
+        article_elapsed = time.time() - data["start_time"]
+        articles_remaining = total_articles - completed_count
+
+        if articles_remaining > 0 and completed_count > 0:
+            step_elapsed = time.time() - step_start
+            rate_per_article = step_elapsed / completed_count
+            eta_seconds = articles_remaining * rate_per_article
+            eta_str = f"~{format_duration(eta_seconds)} remaining"
+
+            if data["errors"]:
+                console.print(f"  [yellow][!] {article_elapsed:.1f}s | {eta_str}[/yellow]")
+            else:
+                console.print(f"  [bold green][OK][/bold green] [dim]{article_elapsed:.1f}s | {eta_str}[/dim]")
+        else:
+            if data["errors"]:
                 console.print(f"  [yellow][!] {article_elapsed:.1f}s[/yellow]")
             else:
                 console.print(f"  [bold green][OK][/bold green] [dim]{article_elapsed:.1f}s[/dim]")
         console.print()
 
     # Initial submission: fill the pipeline
-    for _ in range(min(PIPELINE_SIZE, total_articles)):
-        submit_next()
+    fill_pipeline()
 
     # Process until all complete
     while in_flight:
         # Check each in-flight request
-        for i, (idx, article, handle, start_time) in enumerate(in_flight):
+        for i, (work_type, idx, article, handle, start_time, extra) in enumerate(in_flight):
             if handle is None:
-                # Article was too short, process immediately
+                # No LLM call needed (article too short)
                 in_flight.pop(i)
-                process_completed(idx, article, None, start_time)
-                submit_next()
+                if work_type == "extraction":
+                    process_extraction_complete(idx, article, None)
+                    # If already tagged, finalize immediately
+                    if article.signal_tags:
+                        finalize_without_tagging(idx, article)
+                fill_pipeline()
                 break
 
             # Try non-blocking collect
             response = gateway.try_collect_text(handle)
             if response is not None:
-                # Request completed
                 in_flight.pop(i)
-                process_completed(idx, article, response, start_time)
-                submit_next()
+                if work_type == "extraction":
+                    process_extraction_complete(idx, article, response)
+                    # If already tagged, finalize immediately
+                    if article.signal_tags:
+                        finalize_without_tagging(idx, article)
+                else:  # tagging
+                    process_tagging_complete(idx, article, response)
+                fill_pipeline()
                 break
         else:
             # None completed yet, wait a bit
