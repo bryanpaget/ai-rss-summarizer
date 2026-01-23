@@ -852,8 +852,12 @@ Return ONLY a JSON object in this exact format (no markdown, no explanation):
     # Initial submission: fill the pipeline
     fill_pipeline()
 
+    # Circuit breaker: stop if too many consecutive failures
+    consecutive_failures = 0
+    circuit_broken = False
+
     # Process until all complete
-    while in_flight:
+    while in_flight and not circuit_broken:
         # Check each in-flight request
         for i, (work_type, idx, article, handle, start_time, retry_count) in enumerate(in_flight):
             if handle is None:
@@ -871,6 +875,7 @@ Return ONLY a JSON object in this exact format (no markdown, no explanation):
                 response = gateway.try_collect_text(handle)
                 if response is not None:
                     in_flight.pop(i)
+                    consecutive_failures = 0  # Reset on success
                     if work_type == "extraction":
                         process_extraction_complete(idx, article, response)
                     else:  # tagging
@@ -903,6 +908,11 @@ Return ONLY a JSON object in this exact format (no markdown, no explanation):
                     else:
                         article_data[idx]["tagging_done"] = True
                     maybe_finalize_article(idx, article)
+                    consecutive_failures += 1
+                    if consecutive_failures >= CONSECUTIVE_FAILURE_LIMIT:
+                        console.print(f"\n  [red bold]Circuit breaker: {CONSECUTIVE_FAILURE_LIMIT} consecutive failures - stopping LLM phase[/red bold]")
+                        circuit_broken = True
+                        break
                     fill_pipeline()
                 break
         else:
