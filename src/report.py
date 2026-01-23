@@ -1044,33 +1044,21 @@ def _run_embedding_phase(
         progress.summary(f"Embedded {progress.total_processed} articles")
         stats["embeddings_generated"] = progress.total_processed
 
-    # Trend tagging (embedding-based categorization)
-    # This belongs in embedding phase because it uses embeddings
-    # Only tag articles that HAVE embeddings - skip those that don't
+    # Trend tagging - just DB lookups + cosine similarity, no batching needed
     needs_trends = [a for a in articles if not a.trend_tags and storage.get_embedding(a.id) is not None]
     if needs_trends:
-        progress = BatchProgress(len(needs_trends), batch_size=EMBEDDING_BATCH_SIZE, label="articles")
-        console.print(f"  Tagging {progress.total_items} articles with trend categories...")
-
-        for batch_num, batch in progress.iterate(needs_trends):
-            progress.start_batch()
-            batch_success = 0
-            batch_errors = 0
-
-            for article in batch:
-                try:
-                    tags = analyze_article(article, embedding_service=embedding_service, storage=storage)
-                    storage.update_trends(article.id, tags)
-                    article.trend_tags = tags
-                    batch_success += 1
-                except Exception as e:
-                    console.print(f"\n      [red]ERROR tagging {article.title[:30]}: {e}[/red]")
-                    stats["errors"] += 1
-                    batch_errors += 1
-
-            progress.end_batch(batch_success, batch_errors)
-
-        progress.summary(f"Tagged {progress.total_processed} articles with trends")
+        console.print(f"  Tagging {len(needs_trends)} articles with trend categories...")
+        tagged = 0
+        for article in needs_trends:
+            try:
+                tags = analyze_article(article, embedding_service=embedding_service, storage=storage)
+                storage.update_trends(article.id, tags)
+                article.trend_tags = tags
+                tagged += 1
+            except Exception as e:
+                console.print(f"    [red]ERROR tagging {article.title[:30]}: {e}[/red]")
+                stats["errors"] += 1
+        console.print(f"  Tagged {tagged} articles")
 
     # Any new stories created during LLM phase need embeddings
     stories = storage.get_active_stories()
