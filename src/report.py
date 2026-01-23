@@ -52,6 +52,7 @@ console = Console(force_terminal=True, legacy_windows=True)
 
 EMBEDDING_BATCH_SIZE = 100  # Number of items per embedding API call
 MAX_GATEWAY_RETRIES = 3     # Retry failed gateway requests before skipping
+CONSECUTIVE_FAILURE_LIMIT = 3  # Stop phase if this many items fail in a row
 
 
 # =============================================================================
