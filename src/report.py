@@ -854,7 +854,7 @@ Return ONLY a JSON object in this exact format (no markdown, no explanation):
     # Process until all complete
     while in_flight:
         # Check each in-flight request
-        for i, (work_type, idx, article, handle, start_time, extra) in enumerate(in_flight):
+        for i, (work_type, idx, article, handle, start_time, retry_count) in enumerate(in_flight):
             if handle is None:
                 # No LLM call needed (article too short) - shouldn't happen with new logic
                 in_flight.pop(i)
@@ -865,15 +865,44 @@ Return ONLY a JSON object in this exact format (no markdown, no explanation):
                 fill_pipeline()
                 break
 
-            # Try non-blocking collect
-            response = gateway.try_collect_text(handle)
-            if response is not None:
-                in_flight.pop(i)
-                if work_type == "extraction":
-                    process_extraction_complete(idx, article, response)
-                else:  # tagging
-                    process_tagging_complete(idx, article, response)
-                fill_pipeline()
+            # Try non-blocking collect with retry on error
+            try:
+                response = gateway.try_collect_text(handle)
+                if response is not None:
+                    in_flight.pop(i)
+                    if work_type == "extraction":
+                        process_extraction_complete(idx, article, response)
+                    else:  # tagging
+                        process_tagging_complete(idx, article, response)
+                    fill_pipeline()
+                    break
+            except Exception as e:
+                # Gateway error - retry or skip
+                current_retries = retry_count or 0
+                if current_retries < MAX_GATEWAY_RETRIES:
+                    # Retry: re-submit the request
+                    console.print(f"  [yellow]Gateway error (retry {current_retries + 1}/{MAX_GATEWAY_RETRIES}): {e}[/yellow]")
+                    try:
+                        if work_type == "extraction":
+                            new_handle = gateway.submit_text(build_extraction_prompt(article), temperature=0.3)
+                        else:
+                            new_handle = gateway.submit_text(build_tagging_prompt(article), temperature=0.3)
+                        in_flight[i] = (work_type, idx, article, new_handle, start_time, current_retries + 1)
+                    except Exception as retry_error:
+                        console.print(f"  [red]Retry submission failed: {retry_error}[/red]")
+                        in_flight[i] = (work_type, idx, article, handle, start_time, current_retries + 1)
+                else:
+                    # Max retries exceeded - skip this item
+                    console.print(f"  [red]Skipping after {MAX_GATEWAY_RETRIES} retries: {article.title[:50]}[/red]")
+                    in_flight.pop(i)
+                    stats["errors"] += 1
+                    article_data[idx]["errors"].append(f"Gateway failed after {MAX_GATEWAY_RETRIES} retries: {e}")
+                    if work_type == "extraction":
+                        article_data[idx]["extraction_done"] = True
+                    else:
+                        article_data[idx]["tagging_done"] = True
+                    maybe_finalize_article(idx, article)
+                    fill_pipeline()
                 break
         else:
             # None completed yet, wait a bit
