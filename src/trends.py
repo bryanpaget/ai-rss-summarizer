@@ -201,8 +201,10 @@ def analyze_article(
     Returns:
         Comma-separated category names
     """
-    if embedding_service is None or not embedding_service.is_available():
+    if embedding_service is None:
         return "Uncategorized"
+    # NOTE: We don't check is_available() here - that makes an HTTP request per article.
+    # Availability is checked once at phase start. Gateway handles failures with retry.
 
     # Get the article's STORED embedding from storage (articles.db)
     # NOT from embedding_service (knowledge.db) - that's a different database!
