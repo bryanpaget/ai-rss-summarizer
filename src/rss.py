@@ -36,14 +36,18 @@ def parse_published_date(entry: dict) -> Optional[datetime]:
     if hasattr(entry, "published_parsed") and entry.published_parsed:
         try:
             return datetime.fromtimestamp(mktime(entry.published_parsed))
-        except (ValueError, OverflowError):
-            pass
+        except (ValueError, OverflowError) as e:
+            import sys
+            entry_title = getattr(entry, 'title', 'unknown')[:30]
+            print(f"Date parsing failed for '{entry_title}': {e}", file=sys.stderr)
 
     if hasattr(entry, "updated_parsed") and entry.updated_parsed:
         try:
             return datetime.fromtimestamp(mktime(entry.updated_parsed))
-        except (ValueError, OverflowError):
-            pass
+        except (ValueError, OverflowError) as e:
+            import sys
+            entry_title = getattr(entry, 'title', 'unknown')[:30]
+            print(f"Date parsing failed for '{entry_title}': {e}", file=sys.stderr)
 
     return None
 
@@ -65,9 +69,9 @@ def get_entry_content(entry: dict) -> str:
 def fetch_feed(feed_url: str, storage: Storage) -> dict:
     """
     Fetch and parse a single RSS feed.
-    Returns statistics about the fetch operation.
+    Returns statistics about the fetch operation, including IDs of newly saved articles.
     """
-    stats = {"url": feed_url, "fetched": 0, "new": 0, "errors": []}
+    stats = {"url": feed_url, "fetched": 0, "new": 0, "errors": [], "new_article_ids": []}
 
     try:
         feed = feedparser.parse(feed_url)
@@ -94,6 +98,7 @@ def fetch_feed(feed_url: str, storage: Storage) -> dict:
 
             if storage.save_article(article):
                 stats["new"] += 1
+                stats["new_article_ids"].append(article.id)
 
     except Exception as e:
         stats["errors"].append(f"Fetch error: {str(e)}")

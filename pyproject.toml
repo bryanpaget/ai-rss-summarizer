@@ -32,9 +32,21 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-llm = [
-    "transformers>=4.35.0",
-    "torch>=2.0.0",
+gemini = [
+    "google-generativeai>=0.3.0",
+]
+claude-api = [
+    "anthropic>=0.18.0",
+]
+openai-agents = [
+    "openai-agents~=0.6.0",
+    "nest-asyncio~=1.6.0",
+]
+all-providers = [
+    "google-generativeai>=0.3.0",
+    "anthropic>=0.18.0",
+    "openai-agents~=0.6.0",
+    "nest-asyncio~=1.6.0",
 ]
 dev = [
     "pytest>=7.0.0",
@@ -47,6 +59,7 @@ rss = "src.cli:app"
 
 [tool.setuptools.packages.find]
 where = ["."]
+include = ["src", "src.*"]
 
 [tool.ruff]
 line-length = 100
@@ -55,3 +68,11 @@ target-version = "py39"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+asyncio_default_fixture_loop_scope = "function"
+filterwarnings = [
+    "error",
+    # FAISS SWIG internal types lack __module__ - upstream issue in SWIG, not fixable by us
+    # These types (SwigPyPacked, SwigPyObject, swigvarlink) are internal plumbing we never use
+    # Approved for suppression: 2026-01-15
+    "ignore:builtin type Swig:DeprecationWarning",
+]
